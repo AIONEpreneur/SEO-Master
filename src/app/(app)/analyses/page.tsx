@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { ScanSearch } from 'lucide-react'
+import { ScanSearch, Trash2 } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
+import { deleteAnalysisAction } from '@/lib/analysis/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +54,8 @@ export default async function AnalysesPage() {
                     <th className="px-3 py-2.5 font-medium">SEO</th>
                     <th className="px-3 py-2.5 font-medium">AEO</th>
                     <th className="px-3 py-2.5 font-medium">GEO</th>
-                    <th className="px-5 py-2.5 font-medium">Gesamt</th>
+                    <th className="px-3 py-2.5 font-medium">Gesamt</th>
+                    <th className="px-5 py-2.5" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -73,7 +75,19 @@ export default async function AnalysesPage() {
                       <td className="px-3 py-2.5"><ScoreBadge score={analysis.scoreSeo} size="sm" /></td>
                       <td className="px-3 py-2.5"><ScoreBadge score={analysis.scoreAeo} size="sm" /></td>
                       <td className="px-3 py-2.5"><ScoreBadge score={analysis.scoreGeo} size="sm" /></td>
-                      <td className="px-5 py-2.5"><ScoreBadge score={analysis.scoreOverall} size="sm" /></td>
+                      <td className="px-3 py-2.5"><ScoreBadge score={analysis.scoreOverall} size="sm" /></td>
+                      <td className="px-5 py-2.5 text-right">
+                        <form action={deleteAnalysisAction}>
+                          <input type="hidden" name="id" value={analysis.id} />
+                          <button
+                            type="submit"
+                            aria-label={`Lauf zu ${shorten(analysis.targetUrl)} löschen`}
+                            className="rounded-lg p-1.5 text-ink-subtle transition-colors hover:bg-bad-subtle hover:text-bad"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </form>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

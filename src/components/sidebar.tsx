@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, FolderKanban, ScanSearch, FileText, Users2,
-  KeyRound, Receipt, Menu, X, LogOut, Swords,
+  KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { logoutAction } from '@/lib/auth/actions'
@@ -20,6 +20,7 @@ const NAVIGATION = [
       { href: '/dashboard', label: 'Übersicht', icon: LayoutDashboard },
       { href: '/analyses/new', label: 'Neue Analyse', icon: ScanSearch },
       { href: '/analyses', label: 'Analysen', icon: FileText },
+      { href: '/keywords', label: 'Keyword-Recherche', icon: TrendingUp },
     ],
   },
   {

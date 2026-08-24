@@ -128,6 +128,141 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------------------------------------------------------------------------
+ * Aussenauftritt
+ *
+ * Die öffentliche Seite legt sich bewusst auf ein dunkles Erscheinungsbild
+ * fest, unabhängig von der Einstellung im Arbeitsbereich: Sie ist eine
+ * Visitenkarte, kein Werkzeug, und soll bei allen Besuchern gleich aussehen.
+ * Deshalb eigene Token statt der umschaltbaren – sonst würde die Seite bei
+ * hellem Systemthema in einem Zustand erscheinen, für den sie nicht
+ * gestaltet ist.
+ * ------------------------------------------------------------------------ */
+.aussenauftritt {
+  --grund: oklch(14% 0.016 295);
+  --grund-tief: oklch(11% 0.014 295);
+  --flaeche: oklch(18% 0.019 295);
+  --linie: oklch(27% 0.024 295);
+  --linie-hell: oklch(36% 0.032 295);
+  --schrift: oklch(97% 0.006 295);
+  --schrift-matt: oklch(74% 0.017 295);
+  --schrift-leise: oklch(58% 0.018 295);
+  --ton: oklch(62% 0.235 295);
+  --ton-hell: oklch(74% 0.17 295);
+
+  background: var(--grund);
+  color: var(--schrift);
+  color-scheme: dark;
+}
+
+/*
+ * Der Lichtschein hinter dem Aufmacher.
+ *
+ * Zwei weiche Farbkreise statt eines Bildes: Sie kosten keine Ladezeit,
+ * bleiben in jeder Bildschirmgrösse scharf und lassen sich am Markenton
+ * ausrichten. `pointer-events: none`, damit sie keine Klicks abfangen.
+ */
+.lichtschein {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.lichtschein::before,
+.lichtschein::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+}
+.lichtschein::before {
+  top: -22rem;
+  left: 50%;
+  width: 52rem;
+  height: 42rem;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, oklch(56% 0.244 295 / 0.42), transparent 68%);
+}
+.lichtschein::after {
+  top: -12rem;
+  right: -14rem;
+  width: 34rem;
+  height: 30rem;
+  background: radial-gradient(circle, oklch(62% 0.2 320 / 0.26), transparent 70%);
+}
+
+/* Feiner heller Rand oben auf Karten – lässt Flächen erhaben wirken. */
+.kante {
+  position: relative;
+  border: 1px solid var(--linie);
+  background:
+    linear-gradient(to bottom, oklch(100% 0 0 / 0.05), transparent 40%),
+    var(--flaeche);
+}
+.kante::before {
+  content: '';
+  position: absolute;
+  inset-inline: 15%;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(to right, transparent, oklch(70% 0.2 295 / 0.55), transparent);
+}
+
+/* Überschriftenakzent im Markenverlauf. */
+.tonverlauf {
+  background: linear-gradient(100deg, oklch(72% 0.19 295), oklch(66% 0.24 315));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/*
+ * Raster im Hintergrund. Sehr schwach gehalten – es soll Tiefe andeuten,
+ * nicht gelesen werden. Die Maske blendet es zu den Rändern hin aus, damit
+ * es nirgends hart abbricht.
+ */
+.raster {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, oklch(100% 0 0 / 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(100% 0 0 / 0.028) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black, transparent 75%);
+}
+
+/*
+ * Schwacher Lichtschein für die Abschnitte unterhalb des Aufmachers.
+ *
+ * Ohne ihn wirken die unteren Bereiche wie schwarze Kästen untereinander.
+ * Deutlich zurückhaltender als im Aufmacher: Er soll die Abschnitte
+ * voneinander abheben, nicht mit den Karten um Aufmerksamkeit ringen.
+ */
+.schimmer::before {
+  content: '';
+  position: absolute;
+  top: -6rem;
+  left: 50%;
+  width: 46rem;
+  height: 26rem;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background: radial-gradient(ellipse, oklch(56% 0.244 295 / 0.13), transparent 70%);
+  filter: blur(70px);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .steigt {
+    animation: steigt 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes steigt {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
 /* Berichte werden als Markdown gerendert und brauchen eigene Typografie. */
 .prose-report {
   line-height: 1.7;

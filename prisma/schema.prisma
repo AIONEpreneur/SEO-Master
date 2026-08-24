@@ -60,12 +60,13 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships Membership[]
-  projects    Project[]
-  credentials Credential[]
-  analyses    Analysis[]
-  auditLogs   AuditLog[]
-  usage       UsageRecord[]
+  memberships       Membership[]
+  projects          Project[]
+  credentials       Credential[]
+  analyses          Analysis[]
+  auditLogs         AuditLog[]
+  usage             UsageRecord[]
+  keywordResearches KeywordResearch[]
 
   @@map("organizations")
 }
@@ -240,6 +241,14 @@ model Analysis {
   error          String?
   jobId          String?
 
+  // Die Parameter des Laufs. Ohne sie liesse sich ein Lauf nicht originalgetreu
+  // wiederholen – sie standen bisher nur im Auftrag der Warteschlange, der
+  // nach Abschluss verfällt.
+  locationCode      Int      @default(2276)
+  languageCode      String   @default("de")
+  seedKeywords      String[]
+  competitorDomains String[]
+
   scoreSeo     Float?
   scoreAeo     Float?
   scoreGeo     Float?
@@ -325,6 +334,37 @@ model Report {
 // ---------------------------------------------------------------------------
 // Betrieb: Nachvollziehbarkeit und Kostenkontrolle
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Keyword-Recherche: Nachfrage und kaufmännischer Wert zu einem Begriff
+// ---------------------------------------------------------------------------
+
+model KeywordResearch {
+  id             String   @id @default(cuid())
+  organizationId String
+  createdById    String?
+  /**
+   * Der eingegebene Ausgangsbegriff.
+   */
+  seed           String
+  locationCode   Int      @default(2276)
+  languageCode   String   @default("de")
+  /**
+   * Aufbereitete Begriffsliste (KeywordZeile[]).
+   */
+  rows           Json
+  /**
+   * Kennzahlen über die gesamte Liste (Zusammenfassung).
+   */
+  summary        Json
+  creditsUsed    Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("keyword_researches")
+}
 
 model UsageRecord {
   id             String   @id @default(cuid())

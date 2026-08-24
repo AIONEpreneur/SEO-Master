@@ -19,6 +19,9 @@ import { analyzeAeo } from '../src/lib/analysis/aeo'
 import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
 import { extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
 import { analyzeSocial } from '../src/lib/analysis/social'
+import {
+  fuehreZusammen, fasseZusammen, leseVerlauf, lohnendeBegriffe, vergleichsform,
+} from '../src/lib/keywords/research'
 import { normalizeProfile } from '../src/lib/connectors/apify'
 import { buildDeterministicReport, sortFindings } from '../src/lib/analysis/report'
 import type { AnalysisResult, ModuleResult } from '../src/lib/analysis/types'
@@ -235,6 +238,78 @@ function main() {
   check('Interaktionsrate berechnet', profile.avgEngagement !== null, `${profile.avgEngagement?.toFixed(2)} %`)
   check('Bewertung im gültigen Bereich', social.score > 0 && social.score <= 10, `${social.score.toFixed(1)}/10`)
 
+  // --- Keyword-Recherche ----------------------------------------------------
+  //
+  // Die Rohdaten enthalten dieselbe Suchanfrage in mehreren Schreibweisen mit
+  // identischen Zahlen. Würden sie ungefiltert angezeigt, sähe eine Nachfrage
+  // doppelt so gross aus, wie sie ist – und die Summen wären schlicht falsch.
+  section('Keyword-Recherche fasst Schreibweisen zusammen')
+
+  const roh = [
+    kw('ki beratung', 2400, 18.37, 13, 'informational', 'MEDIUM'),
+    kw('ki-beratung', 2400, 18.37, 13, 'informational', 'MEDIUM'),
+    kw('beratung ki', 260, 13.08, 8, 'commercial', 'LOW'),
+    kw('beratung-ki', 260, 35.27, 8, 'commercial', 'LOW'),
+    kw('ki beratung mittelstand', 170, 19.68, null, 'informational', 'MEDIUM'),
+    kw('ki beratung ohne nachfrage', 0, 4.0, 5, 'commercial', 'LOW'),
+  ]
+
+  const zeilen = fuehreZusammen(roh)
+  check('Schreibvarianten werden zusammengefasst', zeilen.length === 3, `${zeilen.length} von 6 Rohdatensätzen`)
+  check(
+    'Die Form ohne Bindestrich gewinnt',
+    zeilen.some((z) => z.begriff === 'ki beratung') && !zeilen.some((z) => z.begriff === 'ki-beratung'),
+  )
+  check('Bindestrich und Leerzeichen gelten als gleich', vergleichsform('ki-beratung') === vergleichsform('ki beratung'))
+  check(
+    'Andere Wortstellung bleibt eine eigene Suchanfrage',
+    vergleichsform('beratung ki') !== vergleichsform('ki beratung'),
+    '2.400 gegen 260 Suchen – zusammengelegt ginge die Unterscheidung verloren',
+  )
+  check(
+    'Begriffe ohne Suchvolumen fallen weg',
+    !zeilen.some((z) => z.begriff.includes('ohne nachfrage')),
+  )
+  check('Nach Suchvolumen sortiert', zeilen[0].suchvolumen >= zeilen[zeilen.length - 1].suchvolumen)
+
+  const werbewert = zeilen.find((z) => z.begriff === 'ki beratung')?.anzeigenwert
+  check('Werbewert = Volumen × Klickpreis', werbewert === Math.round(2400 * 18.37), `${werbewert} €`)
+
+  const zusammen = fasseZusammen(zeilen)
+  check(
+    'Summen zählen jede Suchanfrage einmal',
+    zusammen.suchenGesamt === 2400 + 260 + 170,
+    `${zusammen.suchenGesamt}`,
+  )
+  check('Kaufabsicht wird getrennt ausgewiesen', zusammen.suchenMitKaufabsicht === 260)
+  check(
+    'Teuerster Begriff wird benannt',
+    zusammen.teuersterBegriff?.begriff === 'ki beratung mittelstand',
+    `${zusammen.teuersterBegriff?.begriff} (${zusammen.teuersterBegriff?.klickpreis} €)`,
+  )
+
+  // Ein Begriff ohne Schwierigkeitswert darf nicht als leicht erreichbar
+  // gelten – sonst empfiehlt die Anzeige Arbeit auf ungeprüfter Grundlage.
+  const lohnend = lohnendeBegriffe(zeilen)
+  check(
+    'Begriffe ohne Schwierigkeitswert gelten nicht als leicht',
+    !lohnend.some((z) => z.schwierigkeit === null),
+  )
+
+  section('Zwölfmonatsverlauf wird aus beiden Datenformen gelesen')
+
+  // Die REST-Schnittstelle liefert eine Liste, das MCP-Werkzeug ein Objekt.
+  // Beide müssen denselben Verlauf ergeben, sonst bliebe die Kurve leer.
+  const alsListe = leseVerlauf([
+    { year: 2026, month: 6, search_volume: 200 },
+    { year: 2026, month: 7, search_volume: 300 },
+    { year: 2026, month: 5, search_volume: 100 },
+  ])
+  const alsObjekt = leseVerlauf({ '2026-07': 300, '2026-05': 100, '2026-06': 200 })
+  check('Liste ergibt aufsteigende Monatswerte', JSON.stringify(alsListe) === '[100,200,300]', JSON.stringify(alsListe))
+  check('Objekt ergibt denselben Verlauf', JSON.stringify(alsObjekt) === JSON.stringify(alsListe))
+  check('Fehlender Verlauf bleibt leer', leseVerlauf(undefined).length === 0)
+
   section('Bericht')
   const result: AnalysisResult = {
     target: { url: 'https://beispiel.de/ki-beratung', kind: 'WEBSITE', domain: 'beispiel.de' },
@@ -275,6 +350,23 @@ function main() {
 }
 
 // Optionaler Lauf gegen eine echte Seite.
+/** Einen Rohdatensatz bauen, wie ihn DataForSEO liefert. */
+function kw(
+  keyword: string,
+  search_volume: number,
+  cpc: number,
+  keyword_difficulty: number | null,
+  main_intent: string,
+  competition_level: string,
+) {
+  return {
+    keyword,
+    keyword_info: { search_volume, cpc, competition_level },
+    keyword_properties: keyword_difficulty === null ? {} : { keyword_difficulty },
+    search_intent_info: { main_intent },
+  }
+}
+
 const liveUrl = process.argv[2]
 if (liveUrl) {
   void (async () => {

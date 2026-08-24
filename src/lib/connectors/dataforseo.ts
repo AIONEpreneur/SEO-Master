@@ -185,7 +185,18 @@ export class DataForSeoClient {
     return result[0] ?? null
   }
 
-  /** Keyword-Vorschläge zum Thema der Seite. */
+  /**
+   * Begriffe aus derselben Themenkategorie wie die Ausgangsbegriffe.
+   *
+   * Achtung bei der Sortierung: Der Dienst wählt die Begriffe über
+   * Produktkategorien aus, nicht über die Wortähnlichkeit. Sortiert man nach
+   * Suchvolumen, steht deshalb der volumenstärkste Begriff der gesamten
+   * Kategorie oben – zu "ki beratung" liefert das "regenradar berlin". Nur
+   * die Standardsortierung nach Relevanz ergibt brauchbare Ergebnisse.
+   *
+   * Für die Frage "welche Begriffe rund um mein Thema werden gesucht" ist
+   * keywordSuggestions die richtige Wahl, nicht dieser Endpunkt.
+   */
   async keywordIdeas(params: {
     keywords: string[]
     locationCode: number
@@ -200,7 +211,71 @@ export class DataForSeoClient {
           location_code: params.locationCode,
           language_code: params.languageCode,
           limit: params.limit ?? 50,
+          filters: [['keyword_info.search_volume', '>', 0]],
+        },
+      ],
+    )
+    return result[0] ?? null
+  }
+
+  /**
+   * Suchanfragen, die den Ausgangsbegriff enthalten – mit Volumen, Klickpreis,
+   * Wettbewerb, Schwierigkeit, Suchabsicht und Zwölfmonatsverlauf.
+   *
+   * Grundlage der Keyword-Recherche: Anders als bei den Themenkategorien ist
+   * hier jeder Treffer nachweislich mit dem Ausgangsbegriff verwandt, weil er
+   * ihn wörtlich enthält.
+   *
+   * Der Filter auf ein Suchvolumen über null ist wichtig: Ohne ihn besteht die
+   * Liste zu grossen Teilen aus Schreibweisen, nach denen niemand sucht.
+   */
+  async keywordSuggestions(params: {
+    keyword: string
+    locationCode: number
+    languageCode: string
+    limit?: number
+  }) {
+    const result = await this.post<KeywordIdeasResult>(
+      '/dataforseo_labs/google/keyword_suggestions/live',
+      [
+        {
+          keyword: params.keyword,
+          location_code: params.locationCode,
+          language_code: params.languageCode,
+          limit: params.limit ?? 200,
+          filters: [['keyword_info.search_volume', '>', 0]],
           order_by: ['keyword_info.search_volume,desc'],
+        },
+      ],
+    )
+    return result[0] ?? null
+  }
+
+  /**
+   * Begriffe aus dem Feld "Ähnliche Suchanfragen" der Suchergebnisseite.
+   *
+   * Ergänzt keywordSuggestions um Formulierungen, die den Ausgangsbegriff
+   * nicht enthalten, aber dieselbe Absicht tragen – dort steht oft die
+   * Nachfrage, die man selbst nicht als Wort im Kopf hat.
+   *
+   * Die Kennzahlen liegen hier eine Ebene tiefer unter `keyword_data`.
+   */
+  async relatedKeywords(params: {
+    keyword: string
+    locationCode: number
+    languageCode: string
+    limit?: number
+  }) {
+    const result = await this.post<RelatedKeywordsResult>(
+      '/dataforseo_labs/google/related_keywords/live',
+      [
+        {
+          keyword: params.keyword,
+          location_code: params.locationCode,
+          language_code: params.languageCode,
+          limit: params.limit ?? 100,
+          depth: 1,
+          filters: [['keyword_data.keyword_info.search_volume', '>', 0]],
         },
       ],
     )
@@ -342,13 +417,30 @@ export type DomainIntersectionResult = {
   }>
 }
 
+/** Ein Begriff samt Kennzahlen, wie ihn die Keyword-Endpunkte liefern. */
+export type KeywordEintrag = {
+  keyword?: string
+  keyword_info?: {
+    search_volume?: number
+    competition?: number
+    competition_level?: string
+    cpc?: number
+    low_top_of_page_bid?: number
+    high_top_of_page_bid?: number
+    monthly_searches?: Record<string, number>
+    search_volume_trend?: { monthly?: number; quarterly?: number; yearly?: number }
+  }
+  keyword_properties?: { keyword_difficulty?: number; core_keyword?: string; detected_language?: string }
+  search_intent_info?: { main_intent?: string; foreign_intent?: string[] }
+}
+
 export type KeywordIdeasResult = {
-  items?: Array<{
-    keyword?: string
-    keyword_info?: { search_volume?: number; competition?: number; cpc?: number }
-    keyword_properties?: { keyword_difficulty?: number }
-    search_intent_info?: { main_intent?: string }
-  }>
+  items?: KeywordEintrag[]
+}
+
+/** Bei "Ähnliche Suchanfragen" liegen dieselben Felder eine Ebene tiefer. */
+export type RelatedKeywordsResult = {
+  items?: Array<{ keyword_data?: KeywordEintrag }>
 }
 
 export type BacklinksSummaryResult = {

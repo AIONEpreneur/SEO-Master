@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, Download, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Download, ExternalLink, RotateCw } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
-import { ButtonLink, Card, CardHeader, ScoreBadge, ScoreBar, SeverityPill, StatusPill } from '@/components/ui'
+import { Button, ButtonLink, Card, CardHeader, ScoreBadge, ScoreBar, SeverityPill, StatusPill } from '@/components/ui'
+import { restartAnalysisAction } from '@/lib/analysis/actions'
 import type { AnalysisResult } from '@/lib/analysis/types'
 import { ProgressWatcher } from './progress'
 import { ReportView } from './report-view'
@@ -85,9 +86,29 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
         <Card className="border-bad/30 bg-bad-subtle p-4">
           <p className="text-[13px] font-medium">Der Lauf ist fehlgeschlagen</p>
           <p className="mt-1 text-[13px] text-ink-muted">{analysis.error}</p>
-          <ButtonLink href="/analyses/new" size="sm" variant="secondary" className="mt-3">
-            Erneut versuchen
-          </ButtonLink>
+          <form action={restartAnalysisAction} className="mt-3">
+            <input type="hidden" name="id" value={analysis.id} />
+            <Button type="submit" size="sm" variant="secondary">
+              <RotateCw size={15} />
+              Mit denselben Einstellungen wiederholen
+            </Button>
+          </form>
+        </Card>
+      )}
+
+      {analysis.status === 'CANCELLED' && (
+        <Card className="p-4">
+          <p className="text-[13px] font-medium">Der Lauf wurde abgebrochen</p>
+          <p className="mt-1 text-[13px] text-ink-muted">
+            Es wurde nichts ausgewertet und nichts vom Guthaben abgezogen.
+          </p>
+          <form action={restartAnalysisAction} className="mt-3">
+            <input type="hidden" name="id" value={analysis.id} />
+            <Button type="submit" size="sm" variant="secondary">
+              <RotateCw size={15} />
+              Erneut starten
+            </Button>
+          </form>
         </Card>
       )}
 

@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireSession, requireRole } from '@/lib/auth/session'
-import { enqueueAnalysis } from '@/lib/queue'
+import { enqueueAnalysis, analysisQueue } from '@/lib/queue'
 import { availableProviders } from '@/lib/connectors/credentials'
 import { detectPlatform } from '@/lib/connectors/apify'
 import type { ModuleKey } from './run'
@@ -74,6 +74,10 @@ export async function startAnalysisAction(_prev: StartState, formData: FormData)
       modules: targetKind === 'SOCIAL_PROFILE' ? ['SOCIAL'] : modules,
       status: 'QUEUED',
       currentStep: 'In Warteschlange',
+      locationCode,
+      languageCode,
+      seedKeywords: parsed.data.seedKeywords?.filter(Boolean) ?? [],
+      competitorDomains: parsed.data.competitorDomains?.filter(Boolean) ?? [],
     },
   })
 
@@ -101,6 +105,107 @@ export async function startAnalysisAction(_prev: StartState, formData: FormData)
   })
 
   redirect(`/analyses/${analysis.id}`)
+}
+
+/**
+ * Einen laufenden oder wartenden Auftrag abbrechen.
+ *
+ * Zwei Fälle: Wartet der Auftrag noch, lässt er sich aus der Warteschlange
+ * entfernen. Läuft er bereits, ist ein laufender Netzabruf nicht von aussen
+ * zu unterbrechen – dann wird der Status gesetzt, und der Worker beendet den
+ * Lauf beim nächsten Zwischenschritt von selbst.
+ *
+ * Der Status wird in beiden Fällen sofort gesetzt: Ein Lauf, der sich nicht
+ * mehr meldet, darf die Oberfläche nicht dauerhaft blockieren.
+ */
+export async function cancelAnalysisAction(formData: FormData) {
+  const session = await requireRole('MEMBER')
+  const id = String(formData.get('id'))
+
+  const analysis = await db.analysis.findFirst({
+    where: { id, organizationId: session.organizationId },
+    select: { id: true, jobId: true, status: true },
+  })
+  if (!analysis) return
+  if (analysis.status === 'COMPLETED' || analysis.status === 'CANCELLED') return
+
+  if (analysis.jobId) {
+    try {
+      const job = await analysisQueue().getJob(analysis.jobId)
+      // remove() verweigert den Dienst bei einem laufenden Auftrag; das ist
+      // kein Fehlerfall, sondern der zweite der beiden Fälle oben.
+      if (job) await job.remove()
+    } catch {
+      // Der Statuswechsel unten genügt.
+    }
+  }
+
+  await db.analysis.update({
+    where: { id },
+    data: {
+      status: 'CANCELLED',
+      currentStep: 'Abgebrochen',
+      error: 'Der Lauf wurde abgebrochen.',
+      finishedAt: new Date(),
+    },
+  })
+
+  await db.auditLog.create({
+    data: { organizationId: session.organizationId, userId: session.id, action: 'analysis.cancel', target: id },
+  })
+
+  revalidatePath(`/analyses/${id}`)
+  revalidatePath('/analyses')
+}
+
+/**
+ * Einen Lauf mit denselben Einstellungen erneut starten.
+ *
+ * Bewusst als neuer Datensatz: Das Ergebnis eines früheren Laufs zu
+ * überschreiben würde den Vergleich über die Zeit zerstören, der der
+ * eigentliche Zweck wiederholter Analysen ist.
+ */
+export async function restartAnalysisAction(formData: FormData) {
+  const session = await requireRole('MEMBER')
+  const id = String(formData.get('id'))
+
+  const alt = await db.analysis.findFirst({ where: { id, organizationId: session.organizationId } })
+  if (!alt) return
+
+  const organization = await db.organization.findUniqueOrThrow({ where: { id: session.organizationId } })
+  if (organization.plan !== 'INTERNAL' && organization.credits <= 0) return
+
+  const neu = await db.analysis.create({
+    data: {
+      organizationId: session.organizationId,
+      projectId: alt.projectId,
+      createdById: session.id,
+      targetUrl: alt.targetUrl,
+      targetKind: alt.targetKind,
+      modules: alt.modules,
+      status: 'QUEUED',
+      currentStep: 'In Warteschlange',
+      locationCode: alt.locationCode,
+      languageCode: alt.languageCode,
+      seedKeywords: alt.seedKeywords,
+      competitorDomains: alt.competitorDomains,
+    },
+  })
+
+  const job = await enqueueAnalysis({
+    analysisId: neu.id,
+    organizationId: session.organizationId,
+    targetUrl: alt.targetUrl,
+    targetKind: alt.targetKind,
+    modules: alt.modules as ModuleKey[],
+    locationCode: alt.locationCode,
+    languageCode: alt.languageCode,
+    seedKeywords: alt.seedKeywords,
+    competitorDomains: alt.competitorDomains,
+  })
+
+  await db.analysis.update({ where: { id: neu.id }, data: { jobId: String(job.id) } })
+  redirect(`/analyses/${neu.id}`)
 }
 
 export async function deleteAnalysisAction(formData: FormData) {

@@ -20,6 +20,13 @@ const worker = new Worker<AnalysisJobData>(
     const { analysisId } = job.data
     console.log(`[worker] Analyse ${analysisId} startet: ${job.data.targetUrl}`)
 
+    // Ein bereits abgebrochener Auftrag darf gar nicht erst anlaufen: Zwischen
+    // dem Abbruch und dem Anlaufen können Sekunden liegen.
+    if (await istAbgebrochen(analysisId)) {
+      console.log(`[worker] Analyse ${analysisId} war abgebrochen, wird übersprungen`)
+      return { abgebrochen: true }
+    }
+
     await db.analysis.update({
       where: { id: analysisId },
       data: { status: 'RUNNING', startedAt: new Date(), progress: 5, currentStep: 'Vorbereitung', error: null },
@@ -29,10 +36,19 @@ const worker = new Worker<AnalysisJobData>(
       const { result, report, raw } = await runAnalysis({
         ...job.data,
         onStep: async (currentStep, progress) => {
+          // Zwischen zwei Schritten ist der einzige Punkt, an dem sich ein
+          // laufender Auftrag geordnet beenden lässt – ein laufender Netzabruf
+          // ist von aussen nicht zu unterbrechen.
+          if (await istAbgebrochen(analysisId)) throw new AbbruchFehler()
           await db.analysis.update({ where: { id: analysisId }, data: { currentStep, progress } })
           await job.updateProgress(progress)
         },
       })
+
+      // Letzte Prüfung vor dem Schreiben: Der Abbruch kann während des
+      // letzten Schrittes erfolgt sein. Das Ergebnis würde den Abbruch sonst
+      // überschreiben und der Lauf sähe aus, als sei nichts geschehen.
+      if (await istAbgebrochen(analysisId)) throw new AbbruchFehler()
 
       await db.$transaction([
         db.analysis.update({
@@ -65,6 +81,13 @@ const worker = new Worker<AnalysisJobData>(
       console.log(`[worker] Analyse ${analysisId} fertig (${result.scores.overall}/10)`)
       return { overall: result.scores.overall }
     } catch (error) {
+      // Ein Abbruch ist kein Fehlschlag: Der Status steht bereits, und ein
+      // Wiederholungsversuch wäre genau das Gegenteil des Gewünschten.
+      if (error instanceof AbbruchFehler) {
+        console.log(`[worker] Analyse ${analysisId} wurde abgebrochen`)
+        return { abgebrochen: true }
+      }
+
       const messageText = error instanceof Error ? error.message : 'Unbekannter Fehler'
       console.error(`[worker] Analyse ${analysisId} fehlgeschlagen:`, messageText)
 
@@ -102,6 +125,21 @@ worker.on('completed', (job) => {
 })
 
 console.log(`[worker] Bereit. Nebenläufigkeit: ${CONCURRENCY}`)
+
+class AbbruchFehler extends Error {
+  constructor() {
+    super('Der Lauf wurde abgebrochen.')
+    this.name = 'AbbruchFehler'
+  }
+}
+
+async function istAbgebrochen(analysisId: string): Promise<boolean> {
+  const analyse = await db.analysis.findUnique({
+    where: { id: analysisId },
+    select: { status: true },
+  })
+  return analyse?.status === 'CANCELLED'
+}
 
 async function shutdown(signal: string) {
   console.log(`[worker] ${signal} empfangen, fahre herunter…`)
