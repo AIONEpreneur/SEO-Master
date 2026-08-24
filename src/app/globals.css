@@ -30,8 +30,16 @@
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
 }
 
+/*
+ * Dunkles Erscheinungsbild.
+ *
+ * Die Token werden hier über :root neu gesetzt, nicht über einen zweiten
+ * @theme-Block: @theme erzeugt die Utility-Klassen und gilt global, ein
+ * zweiter Block innerhalb einer Media Query würde die Werte deshalb
+ * unabhängig vom Erscheinungsbild überschreiben.
+ */
 @media (prefers-color-scheme: dark) {
-  @theme {
+  :root {
     --color-canvas: oklch(17% 0.012 258);
     --color-surface: oklch(21% 0.014 258);
     --color-surface-muted: oklch(25% 0.014 258);

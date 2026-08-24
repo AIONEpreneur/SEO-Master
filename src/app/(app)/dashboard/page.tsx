@@ -3,6 +3,7 @@ import { ScanSearch, KeyRound, AlertTriangle } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { availableProviders } from '@/lib/connectors/credentials'
+import { providerLabel } from '@/lib/connectors/labels'
 import { Card, CardHeader, Button, ScoreBadge, StatusPill, EmptyState } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +29,7 @@ export default async function DashboardPage() {
 
   const missingProviders = Object.entries(providers)
     .filter(([key, ready]) => !ready && key !== 'SEARCH_CONSOLE')
-    .map(([key]) => key)
+    .map(([key]) => providerLabel(key as Parameters<typeof providerLabel>[0]))
 
   return (
     <div className="space-y-6">

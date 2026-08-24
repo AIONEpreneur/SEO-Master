@@ -8,6 +8,7 @@ import { DataForSeoClient } from './dataforseo'
 import { FirecrawlClient } from './firecrawl'
 import { ApifyClient } from './apify'
 import { resolveSecret } from './credentials'
+import { providerLabel } from './labels'
 import type { Provider } from '@prisma/client'
 
 export type VaultState = { error?: string; success?: string }
@@ -148,16 +149,4 @@ export async function testCredentialAction(formData: FormData) {
   })
 
   revalidatePath('/settings/vault')
-}
-
-function providerLabel(provider: Provider): string {
-  const labels: Record<Provider, string> = {
-    DATAFORSEO: 'DataForSEO',
-    FIRECRAWL: 'Firecrawl',
-    APIFY: 'Apify',
-    ANTHROPIC: 'Anthropic',
-    PAGESPEED: 'PageSpeed Insights',
-    SEARCH_CONSOLE: 'Search Console',
-  }
-  return labels[provider]
 }

@@ -40,7 +40,10 @@ export function analyzeSerp(input: {
       positions.length === 0
         ? 0
         : clamp((top3.length * 10 + (top10.length - top3.length) * 7 + (ranked.length - top10.length) * 3) / positions.length)
-    const detail = `${ranked.length} von ${positions.length} geprüften Keywords platziert, davon ${top10.length} in den Top 10 und ${top3.length} in den Top 3.`
+    const detail =
+      positions.length === 0
+        ? 'Keine Keywords zur Prüfung angegeben – ohne Suchbegriffe lässt sich die Platzierung nicht messen.'
+        : `${ranked.length} von ${positions.length} geprüften Keywords platziert, davon ${top10.length} in den Top 10 und ${top3.length} in den Top 3.`
 
     if (ranked.length === 0 && positions.length > 0) {
       findings.push({

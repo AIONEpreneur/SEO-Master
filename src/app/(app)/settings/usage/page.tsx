@@ -2,6 +2,7 @@ import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { Card, CardHeader, EmptyState } from '@/components/ui'
 import { Receipt } from 'lucide-react'
+import { providerLabel } from '@/lib/connectors/labels'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,7 +61,7 @@ export default async function UsagePage() {
           <ul className="divide-y divide-border">
             {byProvider.map((entry) => (
               <li key={entry.provider} className="flex items-center justify-between px-5 py-3">
-                <span className="text-[13px] font-medium">{entry.provider}</span>
+                <span className="text-[13px] font-medium">{providerLabel(entry.provider)}</span>
                 <span className="text-[13px] tabular-nums text-ink-muted">
                   {entry._sum.units ?? 0} Aufrufe · {((entry._sum.costCredits ?? 0) / 100).toFixed(2)} $
                 </span>
@@ -95,7 +96,7 @@ export default async function UsagePage() {
                     <td className="px-5 py-2">
                       {record.createdAt.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td className="px-3 py-2">{record.provider}</td>
+                    <td className="px-3 py-2">{providerLabel(record.provider)}</td>
                     <td className="px-3 py-2 text-ink-muted">{record.operation}</td>
                     <td className="px-5 py-2 tabular-nums">{(record.costCredits / 100).toFixed(3)} $</td>
                   </tr>
