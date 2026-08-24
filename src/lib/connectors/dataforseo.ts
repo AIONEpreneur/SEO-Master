@@ -64,26 +64,37 @@ export class DataForSeoClient {
     return { ok: true, balance: result[0]?.money?.balance }
   }
 
-  /** Organische Google-Ergebnisse inklusive SERP-Features. */
+  /**
+   * Organische Google-Ergebnisse inklusive SERP-Features.
+   *
+   * Die zusätzlichen Felder für KI-Übersichten und Folgefragen sind nicht für
+   * jede Suchanfrage verfügbar; der Dienst antwortet dann mit einem
+   * Serverfehler statt sie zu ignorieren. Deshalb der zweite Versuch ohne sie:
+   * ein Ergebnis ohne diese Elemente ist besser als gar keines.
+   */
   async serpOrganic(params: {
     keyword: string
     locationCode: number
     languageCode: string
     depth?: number
   }) {
-    const result = await this.post<SerpResult>('/serp/google/organic/live/advanced', [
-      {
-        keyword: params.keyword,
-        location_code: params.locationCode,
-        language_code: params.languageCode,
-        depth: params.depth ?? 20,
-        // Liefert AI Overviews und weitere generative Elemente mit, sofern
-        // Google sie für diese Suchanfrage ausspielt – Grundlage der AEO-Bewertung.
-        load_async_ai_overview: true,
-        people_also_ask_click_depth: 1,
-      },
-    ])
-    return result[0] ?? null
+    const basis = {
+      keyword: params.keyword,
+      location_code: params.locationCode,
+      language_code: params.languageCode,
+      depth: params.depth ?? 20,
+    }
+
+    try {
+      const result = await this.post<SerpResult>('/serp/google/organic/live/advanced', [
+        { ...basis, load_async_ai_overview: true, people_also_ask_click_depth: 1 },
+      ])
+      return result[0] ?? null
+    } catch (error) {
+      if (!(error instanceof ConnectorError)) throw error
+      const result = await this.post<SerpResult>('/serp/google/organic/live/advanced', [basis])
+      return result[0] ?? null
+    }
   }
 
   /** Alle Keywords, für die eine Domain in den Top-100 rankt. */
@@ -210,6 +221,10 @@ export class DataForSeoClient {
    * `target` erwartet eine Liste von Objekten, nicht eine Zeichenkette – der
    * Dienst weist einen einfachen Wert mit "Field target is missing or has an
    * invalid type (expected array)" ab.
+   *
+   * Eine Obergrenze nimmt der Dienst hier nicht entgegen (er antwortet mit
+   * "Invalid Field: 'items_list_limit'"), deshalb wird die Liste erst nach
+   * dem Abruf gekürzt.
    */
   async llmMentionsTopDomains(params: {
     keyword: string
@@ -224,11 +239,13 @@ export class DataForSeoClient {
           target: [{ keyword: params.keyword }],
           location_code: params.locationCode,
           language_code: params.languageCode,
-          items_list_limit: params.limit ?? 20,
         },
       ],
     )
-    return result[0] ?? null
+
+    const eintrag = result[0]
+    if (!eintrag?.items) return eintrag ?? null
+    return { ...eintrag, items: eintrag.items.slice(0, params.limit ?? 20) }
   }
 
   /** Lighthouse-Messung über DataForSEO (Alternative zur PageSpeed-API). */

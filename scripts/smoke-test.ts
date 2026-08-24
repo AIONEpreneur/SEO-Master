@@ -137,6 +137,22 @@ function main() {
     'der Lauf lädt in diesem Fall direkt nach',
   )
 
+  // Die Ursache lag nicht in der Auswertung, sondern eine Stufe davor: beim
+  // Abruf wurde 'rawHtml' nicht angefordert. Markdown kennt keinen Kopfbereich,
+  // und 'html' liefert nur den aufbereiteten Inhalt. Diese Prüfung liest den
+  // Quelltext des Anschlusses, damit die Anforderung nicht unbemerkt wieder
+  // herausfällt – der Fehler war von aussen nicht als Messfehler erkennbar.
+  const firecrawlQuelltext = readFileSync(
+    join(dir, '..', '..', 'src', 'lib', 'connectors', 'firecrawl.ts'),
+    'utf8',
+  )
+  const abrufFormate = firecrawlQuelltext.match(/formats: \[[^\]]*'rawHtml'[^\]]*\]/)
+  check(
+    'Der Seitenabruf fordert rawHtml an',
+    abrufFormate !== null,
+    abrufFormate ? abrufFormate[0] : 'ohne rawHtml bleibt der Kopfbereich leer',
+  )
+
   section('Auswertung erkennt die Mängel der schwachen Seite')
   const w = weak.signals
   check('Fehlende Meta Description erkannt', w.metaDescription === null)

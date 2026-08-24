@@ -3,21 +3,28 @@
 /*
  * Farbsystem der Anwendung. Ein Satz Token, in beiden Erscheinungsbildern
  * definiert – die Oberfläche greift ausschliesslich auf die Token zu.
+ *
+ * Markenton: #853FEF (Velvet Dots), in OKLCH oklch(56% 0.244 295). Weiss
+ * darauf erreicht 5,31:1 und ist damit auch in kleinen Schriftgraden lesbar.
+ *
+ * Die Neutraltöne tragen einen leichten Stich in denselben Farbwinkel (295).
+ * Ein reines Grau neben einem gesättigten Violett wirkt schmutzig; mit dem
+ * gemeinsamen Winkel gehören beide sichtbar zusammen.
  */
 @theme {
-  --color-canvas: oklch(99% 0.003 250);
+  --color-canvas: oklch(99% 0.004 295);
   --color-surface: oklch(100% 0 0);
-  --color-surface-muted: oklch(97% 0.005 250);
-  --color-border: oklch(91% 0.008 250);
-  --color-border-strong: oklch(84% 0.012 250);
+  --color-surface-muted: oklch(97% 0.006 295);
+  --color-border: oklch(91% 0.009 295);
+  --color-border-strong: oklch(84% 0.014 295);
 
-  --color-ink: oklch(21% 0.02 255);
-  --color-ink-muted: oklch(48% 0.015 255);
-  --color-ink-subtle: oklch(62% 0.012 255);
+  --color-ink: oklch(21% 0.022 295);
+  --color-ink-muted: oklch(48% 0.017 295);
+  --color-ink-subtle: oklch(62% 0.014 295);
 
-  --color-brand: oklch(52% 0.17 262);
-  --color-brand-hover: oklch(46% 0.18 262);
-  --color-brand-subtle: oklch(95% 0.025 262);
+  --color-brand: oklch(56% 0.244 295);
+  --color-brand-hover: oklch(50% 0.244 295);
+  --color-brand-subtle: oklch(95% 0.035 295);
 
   --color-good: oklch(58% 0.14 152);
   --color-good-subtle: oklch(95% 0.04 152);
@@ -46,19 +53,19 @@
  * @theme-Block: @theme erzeugt die Utility-Klassen und gilt immer global.
  */
 :root {
-  --dunkel-canvas: oklch(17% 0.012 258);
-  --dunkel-surface: oklch(21% 0.014 258);
-  --dunkel-surface-muted: oklch(25% 0.014 258);
-  --dunkel-border: oklch(30% 0.016 258);
-  --dunkel-border-strong: oklch(38% 0.018 258);
+  --dunkel-canvas: oklch(17% 0.014 295);
+  --dunkel-surface: oklch(21% 0.016 295);
+  --dunkel-surface-muted: oklch(25% 0.017 295);
+  --dunkel-border: oklch(30% 0.019 295);
+  --dunkel-border-strong: oklch(38% 0.022 295);
 
-  --dunkel-ink: oklch(96% 0.005 250);
-  --dunkel-ink-muted: oklch(72% 0.012 250);
-  --dunkel-ink-subtle: oklch(58% 0.012 250);
+  --dunkel-ink: oklch(96% 0.006 295);
+  --dunkel-ink-muted: oklch(72% 0.014 295);
+  --dunkel-ink-subtle: oklch(58% 0.014 295);
 
-  --dunkel-brand: oklch(70% 0.15 262);
-  --dunkel-brand-hover: oklch(76% 0.14 262);
-  --dunkel-brand-subtle: oklch(28% 0.05 262);
+  --dunkel-brand: oklch(72% 0.155 295);
+  --dunkel-brand-hover: oklch(78% 0.145 295);
+  --dunkel-brand-subtle: oklch(30% 0.065 295);
 
   --dunkel-good: oklch(72% 0.15 152);
   --dunkel-good-subtle: oklch(27% 0.05 152);

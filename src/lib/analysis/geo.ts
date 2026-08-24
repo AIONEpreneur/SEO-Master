@@ -48,6 +48,20 @@ export function analyzeGeo(input: {
     if (mentionEntry) {
       detail += `. In LLM-Antworten zum Thema: ${mentionEntry.mentions ?? 0} Erwähnungen.`
       score = clamp(score + 1.5)
+    } else if (llmMentions && !llmMentions.items?.length) {
+      // Eine leere Liste ist kein Fehler, sondern eine Aussage: Zu diesem
+      // Thema hat sich noch keine Quelle etabliert. Wer zuerst zitierfähig
+      // wird, besetzt die Stelle – das ist eine Gelegenheit, kein Mangel.
+      detail += '. Zu diesem Thema nennen die Sprachmodelle bislang keine feste Quelle.'
+      findings.push({
+        id: 'geo-offenes-feld',
+        severity: 'longterm',
+        title: 'Zum eigenen Thema hat sich in KI-Antworten noch keine Quelle etabliert',
+        why: 'Die Sprachmodelle greifen hier auf keine wiederkehrende Domain zurück. Das Feld ist offen – wer zuerst zitierfähig wird, besetzt es, ohne sich gegen eingeführte Quellen durchsetzen zu müssen.',
+        action: 'Zum Kernthema eine Seite anlegen, die als Nachschlagewerk taugt: klare Definitionen, eigene Zahlen mit Quellenangabe, Fragen und Antworten in geschlossenen Abschnitten. Danach Erwähnungen dort aufbauen, wo KI-Systeme lesen.',
+        effort: 'hoch',
+        impact: 'hoch',
+      })
     } else if (llmMentions?.items?.length) {
       detail += `. Kommt in LLM-Antworten zum Thema nicht vor – dort dominieren: ${llmMentions.items.slice(0, 3).map((i) => i.domain).join(', ')}.`
       findings.push({
