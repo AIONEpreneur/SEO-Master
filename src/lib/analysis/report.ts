@@ -170,6 +170,13 @@ export function buildDeterministicReport(result: AnalysisResult): string {
   lines.push(`**Art:** ${result.target.kind === 'WEBSITE' ? 'Website' : 'Social-Media-Profil'}`)
   lines.push(`**Markt:** ${result.meta.market}`)
   lines.push(`**Bausteine:** ${result.meta.modules.join(', ')}`)
+  lines.push(
+    `**Datenquellen:** ${
+      result.meta.providersUsed.length
+        ? result.meta.providersUsed.join(', ')
+        : 'keine – bewertet wurde allein der abgerufene Seiteninhalt'
+    }`,
+  )
   if (result.meta.skipped.length) {
     lines.push(`**Nicht ausgeführt:** ${result.meta.skipped.map((s) => `${s.module} (${s.reason})`).join(', ')}`)
   }

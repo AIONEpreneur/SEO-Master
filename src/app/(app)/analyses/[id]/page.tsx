@@ -122,6 +122,33 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
             ))}
           </div>
 
+          <Card className="p-5">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+              Datenquellen
+            </p>
+            {result.meta.providersUsed.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {result.meta.providersUsed.map((anbieter) => (
+                  <span
+                    key={anbieter}
+                    className="inline-flex h-6 items-center rounded-full bg-good-subtle px-2.5 text-[12px] font-medium text-good"
+                  >
+                    {anbieter}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-ink-muted">
+                Keine externen Datenquellen genutzt – bewertet wurde allein der abgerufene Seiteninhalt.
+              </p>
+            )}
+            <p className="mt-2.5 text-[12px] leading-relaxed text-ink-subtle">
+              Apify wird ausschliesslich für Social-Media-Profile herangezogen und bleibt bei
+              Website-Analysen aussen vor. Firecrawl lädt die Seite mit ausgeführtem JavaScript;
+              fehlt es, wird nur das ausgelieferte HTML gemessen. Anthropic formuliert den Bericht.
+            </p>
+          </Card>
+
           {result.meta.skipped.length > 0 && (
             <Card className="border-warn/30 bg-warn-subtle p-4">
               <p className="text-[13px] font-medium">Nicht erhoben</p>
