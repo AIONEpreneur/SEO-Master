@@ -97,6 +97,41 @@ fi
 systemctl enable --now docker >/dev/null 2>&1
 docker info >/dev/null 2>&1 || abbruch "Docker läuft nicht." "Prüfen mit:  systemctl status docker"
 
+# --- Betriebsart bestimmen -------------------------------------------------
+#
+# Läuft auf dem Server bereits ein Webserver, sind Port 80 und 443 belegt.
+# Ein zweiter kann sie nicht ebenfalls belegen. Dann bringt SEO-Master keinen
+# eigenen mit, sondern lauscht auf 127.0.0.1 und wird vom vorhandenen
+# Webserver weitergereicht.
+
+schritt "Belegte Ports prüfen"
+
+port_belegt() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "sport = :$1" 2>/dev/null | grep -q LISTEN
+  else
+    netstat -ltn 2>/dev/null | grep -qE "[:.]$1 +.*LISTEN"
+  fi
+}
+
+VORHANDENER_SERVER=""
+for dienst in nginx caddy apache2 httpd; do
+  if systemctl is-active --quiet "$dienst" 2>/dev/null; then
+    VORHANDENER_SERVER="$dienst"
+    break
+  fi
+done
+
+if port_belegt 80 || port_belegt 443; then
+  COMPOSE="docker-compose.vps.yml"
+  warn "Port 80/443 sind bereits belegt${VORHANDENER_SERVER:+ (durch $VORHANDENER_SERVER)}."
+  hinweis "SEO-Master startet deshalb ohne eigenen Webserver und lauscht auf"
+  hinweis "127.0.0.1:${WEB_PORT:-3000}. Die Weiterleitung wird am Ende erklärt."
+else
+  COMPOSE="docker-compose.prod.yml"
+  ok "Port 80 und 443 sind frei – eigener Webserver mit automatischem Zertifikat"
+fi
+
 schritt "Firewall einrichten"
 ufw allow 22/tcp >/dev/null 2>&1
 ufw allow 80/tcp >/dev/null 2>&1
@@ -174,13 +209,13 @@ fi
 # --- Starten --------------------------------------------------------------
 
 schritt "Container bauen und starten (einige Minuten)"
-su - "$BENUTZER" -c "cd $ZIEL && docker compose -f docker-compose.prod.yml up -d --build" 2>&1 | tail -3
+su - "$BENUTZER" -c "cd $ZIEL && docker compose -f $COMPOSE up -d --build" 2>&1 | tail -3
 ok "Container gestartet"
 
 schritt "Auf die Anwendung warten"
 BEREIT=0
 for i in $(seq 1 90); do
-  if su - "$BENUTZER" -c "cd $ZIEL && docker compose -f docker-compose.prod.yml ps --status running" 2>/dev/null | grep -q "web"; then
+  if su - "$BENUTZER" -c "cd $ZIEL && docker compose -f $COMPOSE ps --status running" 2>/dev/null | grep -q "web"; then
     BEREIT=1; break
   fi
   printf "."
@@ -189,6 +224,7 @@ done
 printf "\n"
 [ "$BEREIT" = "1" ] && ok "Anwendung läuft" || warn "Die Anwendung ist noch nicht bereit – Protokoll prüfen (siehe unten)."
 
+if [ "$COMPOSE" = "docker-compose.prod.yml" ]; then
 schritt "TLS-Zertifikat"
 hinweis "Caddy holt das Zertifikat selbstständig; das dauert bis zu zwei Minuten."
 for i in $(seq 1 45); do
@@ -198,8 +234,18 @@ for i in $(seq 1 45); do
   printf "."
   sleep 4
   [ "$i" = "45" ] && { printf "\n"; warn "Noch kein Zertifikat. Meist fehlt der A-Record."
-    hinweis "Prüfen mit:  docker compose -f docker-compose.prod.yml logs caddy"; }
+    hinweis "Prüfen mit:  docker compose -f $COMPOSE logs caddy"; }
 done
+else
+  schritt "Weiterleitung einrichten"
+  if curl -fsS -o /dev/null --max-time 10 "http://127.0.0.1:${WEB_PORT:-3000}/login" 2>/dev/null; then
+    ok "Anwendung antwortet auf 127.0.0.1:${WEB_PORT:-3000}"
+  else
+    warn "Anwendung antwortet noch nicht auf 127.0.0.1:${WEB_PORT:-3000}"
+  fi
+  hinweis "Noch fehlt die Weiterleitung vom vorhandenen Webserver."
+  hinweis "Vorlagen und Anleitung: $ZIEL/deploy/reverse-proxy/LIESMICH.md"
+fi
 
 # --- Sicherungen ----------------------------------------------------------
 
@@ -230,9 +276,29 @@ if [ "$NEU_ANGELEGT" = "1" ]; then
 fi
 
 printf "\n%sNächste Schritte%s\n\n" "$BLAU" "$AUS"
+
+if [ "$COMPOSE" = "docker-compose.vps.yml" ]; then
+  printf "  %s0. Weiterleitung einrichten – ohne sie ist die Domain nicht erreichbar.%s\n\n" "$GELB" "$AUS"
+  case "$VORHANDENER_SERVER" in
+    nginx)
+      printf "     cp %s/deploy/reverse-proxy/nginx.conf /etc/nginx/sites-available/seo-master\n" "$ZIEL"
+      printf "     ln -s /etc/nginx/sites-available/seo-master /etc/nginx/sites-enabled/\n"
+      printf "     nginx -t && systemctl reload nginx\n"
+      printf "     certbot --nginx -d %s\n\n" "$DOMAIN"
+      ;;
+    caddy)
+      printf "     cat %s/deploy/reverse-proxy/Caddyfile-block >> /etc/caddy/Caddyfile\n" "$ZIEL"
+      printf "     systemctl reload caddy\n\n"
+      ;;
+    *)
+      printf "     Anleitung: %s/deploy/reverse-proxy/LIESMICH.md\n\n" "$ZIEL"
+      ;;
+  esac
+fi
+
 printf "  1. https://%s aufrufen und das erste Konto anlegen.\n" "$DOMAIN"
 printf "     Es erhält die Verwaltungsrechte.\n\n"
 printf "  2. Unter Einstellungen → Datentresor die API-Schlüssel eintragen\n"
 printf "     und je Anbieter auf 'Prüfen' klicken.\n\n"
 printf "  Protokolle ansehen:\n"
-printf "    cd %s && docker compose -f docker-compose.prod.yml logs -f web\n\n" "$ZIEL"
+printf "    cd %s && docker compose -f %s logs -f web\n\n" "$ZIEL" "$COMPOSE"

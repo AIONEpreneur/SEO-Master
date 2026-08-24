@@ -1,8 +1,13 @@
-# Betrieb auf dem eigenen VPS.
+# Betrieb auf einem VPS, auf dem bereits ein Webserver läuft.
 #
-# Alle Daten liegen in Volumes auf dem Server – Datenbank, Redis und
-# Analyseergebnisse verlassen die eigene Umgebung nicht. Nach aussen ist
-# ausschliesslich Caddy erreichbar, das die TLS-Zertifikate selbst verwaltet.
+# Unterschied zu docker-compose.prod.yml: kein eigener Caddy. Die Anwendung
+# lauscht nur auf 127.0.0.1:3000 – erreichbar ausschliesslich vom Server
+# selbst. Der bereits vorhandene Webserver (nginx, Caddy, Apache) nimmt die
+# Anfragen von aussen entgegen und reicht sie weiter.
+#
+# Beispielkonfigurationen dafür liegen in deploy/reverse-proxy/.
+#
+#   docker compose -f docker-compose.vps.yml up -d --build
 
 services:
   postgres:
@@ -20,7 +25,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # Kein Port nach aussen: die Datenbank ist nur im internen Netz erreichbar.
     networks: [internal]
 
   redis:
@@ -49,6 +53,10 @@ services:
   web:
     build: .
     restart: always
+    # Nur an die Loopback-Adresse gebunden: von aussen führt kein Weg direkt
+    # hierher, ausschliesslich über den vorhandenen Webserver.
+    ports:
+      - '127.0.0.1:${WEB_PORT:-3000}:3000'
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-seomaster}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-seomaster}
@@ -93,32 +101,15 @@ services:
       migrate: { condition: service_completed_successfully }
     networks: [internal, extern]
 
-  caddy:
-    image: caddy:2-alpine
-    restart: always
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    environment:
-      DOMAIN: ${DOMAIN:?DOMAIN fehlt}
-    depends_on: [web]
-    networks: [extern]
-
 volumes:
   postgres_data:
   redis_data:
-  caddy_data:
-  caddy_config:
 
 networks:
   # Datenbank und Warteschlange hängen ausschliesslich hier: dieses Netz hat
   # keine Verbindung nach draussen, in keine Richtung.
   internal:
     internal: true
-  # Anwendung, Worker und Caddy brauchen zusätzlich Zugang nach aussen. Ohne
-  # ihn erreicht der Worker die Anbieter-APIs nicht und jede Analyse scheitert.
+  # Anwendung und Worker brauchen zusätzlich Zugang nach aussen. Ohne ihn
+  # erreicht der Worker die Anbieter-APIs nicht und jede Analyse scheitert.
   extern:

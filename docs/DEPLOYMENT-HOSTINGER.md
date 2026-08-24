@@ -38,30 +38,53 @@ analysierten Seiten. Analyseergebnisse verlassen den Server nie.
 Die bestehende Website bei Hostinger bleibt davon unberührt — die Anwendung
 läuft unter einer eigenen Subdomain.
 
+Läuft auf dem VPS bereits eine andere Anwendung, entfällt der `caddy`-Container:
+SEO-Master lauscht dann auf `127.0.0.1:3000` und wird vom vorhandenen
+Webserver weitergereicht. An der Abschottung von Datenbank und Warteschlange
+ändert das nichts.
+
 ## Schritt 1: DNS umstellen
 
-Die Subdomain muss auf den VPS zeigen. Steht sie bereits im Hostinger-Panel
-als Website oder Subdomain, zeigt sie aufs Webhosting — dann wird der Eintrag
-geändert, nicht neu angelegt.
+Zeigt die Subdomain bereits woanders hin, wird der bestehende Eintrag ersetzt
+— nicht ein zweiter danebengestellt.
 
-Im Hostinger-Panel unter **Domains → DNS-Zone** für die Subdomain:
+Bei einer Subdomain, die im Hostinger-Panel als Website angelegt wurde, steht
+dort typischerweise ein **ALIAS**-Eintrag auf Hostingers CDN:
+
+```
+ALIAS   seo-master   →   seo-master.aionepreneur.com.cdn.hstgr.net
+```
+
+Ein ALIAS und ein A-Record für denselben Namen schliessen sich aus. Also im
+Panel unter **Domains → DNS-Zone**:
+
+1. Den **ALIAS**-Eintrag für `seo-master` löschen (Papierkorb-Symbol).
+2. Einen neuen Eintrag anlegen:
 
 | Typ | Name | Wert | TTL |
 |---|---|---|---|
-| A | `seo-master` | *IPv4 des VPS* | 3600 |
+| A | `seo-master` | *IPv4 des VPS* | 300 |
+
+Die kurze TTL von 300 Sekunden macht spätere Korrekturen schnell wirksam.
+Läuft alles, kann sie auf 3600 erhöht werden.
 
 Drei Dinge, an denen es sonst scheitert:
 
 - **Genau ein A-Record.** Mehrere Einträge verteilen den Zugriff auf mehrere
-  Ziele; die Hälfte der Aufrufe landet dann am falschen Ort.
-- **AAAA-Einträge löschen**, sofern der VPS nicht selbst unter IPv6 erreichbar
+  Ziele; ein Teil der Aufrufe landet dann am falschen Ort.
+- **Keine AAAA-Einträge**, sofern der VPS nicht selbst unter IPv6 erreichbar
   ist. Browser versuchen IPv6 zuerst — ein übrig gebliebener AAAA-Eintrag
   führt am VPS vorbei, obwohl der A-Record stimmt.
-- **Bestehende Website entkoppeln.** Ist die Subdomain im Panel als Website
-  angelegt, gehört sie dort entfernt, sonst setzt Hostinger den DNS-Eintrag
+- **Website im Panel entkoppeln.** Ist die Subdomain dort als Website
+  eingerichtet, gehört sie entfernt, sonst setzt Hostinger den DNS-Eintrag
   zurück.
 
-Die IPv4 des VPS steht im Hostinger-Panel unter **VPS → Übersicht**.
+Die IPv4 des VPS steht im Hostinger-Panel unter **VPS → Übersicht**. Läuft
+dort bereits etwas, verrät es auch ein Blick auf eine bestehende Domain:
+
+```bash
+getent ahosts meine-andere-domain.de | head -1
+```
 
 Prüfen, ob die Änderung angekommen ist:
 
@@ -69,9 +92,8 @@ Prüfen, ob die Änderung angekommen ist:
 bash deploy/dns-check.sh seo-master.aionepreneur.com IPV4-DES-VPS
 ```
 
-Das Skript zeigt, worauf die Domain gerade zeigt, und meldet mehrfache
-A-Records sowie übrig gebliebene AAAA-Einträge. Bis eine Änderung überall
-angekommen ist, vergehen meist 5 bis 30 Minuten.
+Das Skript meldet mehrfache A-Records und übrig gebliebene AAAA-Einträge. Bis
+eine Änderung überall angekommen ist, vergehen meist 5 bis 30 Minuten.
 
 ## Schritt 2: Einrichten
 
@@ -102,6 +124,21 @@ tägliche Sicherung einrichten.
 
 Der erste Durchlauf dauert etwa zehn Minuten. Das Skript lässt sich gefahrlos
 erneut ausführen; eine vorhandene `.env` wird nie überschrieben.
+
+### Läuft auf dem Server schon eine andere Website?
+
+Dann sind Port 80 und 443 belegt, und ein zweiter Webserver kann sie nicht
+ebenfalls belegen. Das Skript erkennt das und wählt automatisch die Variante
+ohne eigenen Webserver: SEO-Master lauscht dann nur auf `127.0.0.1:3000`, und
+der bereits vorhandene Webserver reicht die Anfragen weiter.
+
+Diese Weiterleitung ist der einzige Schritt, der dann von Hand kommt — das
+Skript gibt am Ende die passenden Befehle für nginx oder Caddy aus. Vorlagen
+und Erklärung liegen in
+[`deploy/reverse-proxy/`](../deploy/reverse-proxy/LIESMICH.md).
+
+Die bestehende Website bleibt dabei unberührt; SEO-Master bekommt einen
+eigenen Server-Block für die eigene Subdomain.
 
 > Am Ende gibt das Skript den **`ENCRYPTION_KEY`** aus. Er verschlüsselt alle
 > API-Zugangsdaten im Datentresor. Diesen Schlüssel sofort in den
