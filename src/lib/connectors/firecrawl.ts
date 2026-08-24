@@ -37,7 +37,11 @@ export class FirecrawlClient {
       headers: this.headers(),
       body: {
         url,
-        formats: ['markdown', 'html', 'links'],
+        // rawHtml ist entscheidend: 'html' liefert den aufbereiteten
+        // Seiteninhalt, bei dem der <head> fehlen kann. Genau dort stehen
+        // Title, Description und die strukturierten Daten – ohne rawHtml
+        // meldet die Analyse sie fälschlich als nicht vorhanden.
+        formats: ['markdown', 'rawHtml', 'html', 'links'],
         onlyMainContent: options?.onlyMainContent ?? false,
         waitFor: options?.waitFor ?? 2000,
         timeout: 45_000,

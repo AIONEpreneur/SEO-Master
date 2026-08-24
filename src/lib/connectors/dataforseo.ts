@@ -204,7 +204,13 @@ export class DataForSeoClient {
     return result[0] ?? null
   }
 
-  /** Wie häufig eine Domain in LLM-Antworten auftaucht (GEO-Rohsignal). */
+  /**
+   * Wie häufig eine Domain in LLM-Antworten auftaucht (GEO-Rohsignal).
+   *
+   * `target` erwartet eine Liste von Objekten, nicht eine Zeichenkette – der
+   * Dienst weist einen einfachen Wert mit "Field target is missing or has an
+   * invalid type (expected array)" ab.
+   */
   async llmMentionsTopDomains(params: {
     keyword: string
     locationCode?: number
@@ -215,10 +221,10 @@ export class DataForSeoClient {
       '/ai_optimization/llm_mentions/top_domains/live',
       [
         {
-          keyword: params.keyword,
+          target: [{ keyword: params.keyword }],
           location_code: params.locationCode,
           language_code: params.languageCode,
-          limit: params.limit ?? 20,
+          items_list_limit: params.limit ?? 20,
         },
       ],
     )

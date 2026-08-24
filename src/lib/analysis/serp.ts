@@ -176,14 +176,38 @@ function serpFeatures(items: SerpItem[]): string[] {
   return [...new Set(items.map((i) => i.type).filter((t) => interesting.includes(t)))]
 }
 
-/** "Nutzer fragen auch"-Fragen aus dem Suchergebnis ziehen. */
+/**
+ * "Nutzer fragen auch"-Fragen aus dem Suchergebnis ziehen.
+ *
+ * Gefiltert wird auf thematische Nähe zur Suchanfrage: Die Box enthält auch
+ * Fragen aus angrenzenden Interessen, die eine völlig andere Absicht haben.
+ * Wer ein Werkzeug verkauft, gewinnt nichts durch eine Frage danach, wo man
+ * dessen Ergebnisse kostenlos ansehen kann – solche Antworten holen Publikum
+ * statt Kundschaft.
+ */
 export function extractPeopleAlsoAsk(result: SerpResult | null): string[] {
   if (!result?.items) return []
   const paa = result.items.find((i) => i.type === 'people_also_ask')
   if (!paa?.items) return []
+
+  const suchbegriff = (result.keyword ?? '').toLowerCase()
+  const begriffe = suchbegriff
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+    .filter(Boolean)
+
   return paa.items
     .map((i) => i.title ?? i.seed_question ?? '')
     .filter(Boolean)
+    .filter((frage) => {
+      // Ohne verwertbare Begriffe im Suchbegriff nicht filtern.
+      if (begriffe.length === 0) return true
+      const klein = frage.toLowerCase()
+      // Auf ganze Wörter prüfen: "live" darf nicht über "Livestreams"
+      // treffen – das ist ein anderer Begriff mit anderer Absicht.
+      return begriffe.some((b) => new RegExp(`\\b${b}\\b`, 'u').test(klein))
+    })
     .slice(0, 10)
 }
 

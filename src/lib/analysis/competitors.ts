@@ -7,6 +7,15 @@ import type {
   BacklinksSummaryResult,
 } from '@/lib/connectors/dataforseo'
 
+/**
+ * Bis zum Wievielfachen des eigenen Traffics gilt eine Domain als Wettbewerber?
+ *
+ * Darüber liegt kein vergleichbarer Marktteilnehmer mehr, sondern jemand aus
+ * einer anderen Liga – der Abstand lässt sich nicht durch Massnahmen schliessen,
+ * die aus dieser Analyse folgen könnten.
+ */
+const GROESSENGRENZE = 50
+
 export type CompetitorProfile = {
   domain: string
   keywordsTop100: number | null
@@ -36,7 +45,7 @@ export function analyzeCompetitors(input: {
   const ownTraffic = Math.round(ownOrganic?.etv ?? 0)
   const ownRefDomains = input.own.backlinks?.referring_main_domains ?? input.own.backlinks?.referring_domains ?? null
 
-  const rivals: CompetitorProfile[] =
+  const alleRivalen: CompetitorProfile[] =
     input.competitorProfiles ??
     (input.competitors?.items ?? []).map((c) => ({
       domain: c.domain ?? '',
@@ -46,6 +55,15 @@ export function analyzeCompetitors(input: {
       avgPosition: c.avg_position ?? null,
       sharedKeywords: c.intersections ?? null,
     }))
+
+  // Wer um Grössenordnungen grösser ist, ist kein Wettbewerber.
+  //
+  // Die Überschneidung im Suchergebnis findet auch Konzerne, die zufällig für
+  // einzelne Begriffe ranken. Ein Vergleich mit ihnen erzeugt Zahlen wie "das
+  // 80-millionenfache an Traffic" – rechnerisch richtig und als Aussage wertlos,
+  // weil daraus keine Massnahme folgt.
+  const rivals = alleRivalen.filter((r) => (r.estimatedTraffic ?? 0) <= ownTraffic * GROESSENGRENZE)
+  const ausgeschlossen = alleRivalen.filter((r) => !rivals.includes(r))
 
   // --- Wettbewerbsposition --------------------------------------------------
   {
@@ -58,16 +76,28 @@ export function analyzeCompetitors(input: {
       const total = withTraffic.length + 1
       const score = clamp(10 - ((rank - 1) / Math.max(total - 1, 1)) * 9)
 
-      const detail = `Platz ${rank} von ${total} im Vergleich (geschätzter Traffic: eigene Domain ${ownTraffic}/Monat, stärkste Wettbewerberin ${Math.max(...withTraffic.map((r) => r.estimatedTraffic ?? 0), 0)}/Monat).`
+      let detail = `Platz ${rank} von ${total} im Vergleich (geschätzter Traffic: eigene Domain ${ownTraffic.toLocaleString('de-DE')}/Monat, stärkste Wettbewerberin ${Math.max(...withTraffic.map((r) => r.estimatedTraffic ?? 0), 0).toLocaleString('de-DE')}/Monat).`
+      if (ausgeschlossen.length) {
+        detail += ` Nicht einbezogen, weil um Grössenordnungen grösser: ${ausgeschlossen
+          .map((r) => r.domain)
+          .slice(0, 4)
+          .join(', ')}.`
+      }
 
       if (stronger.length > 0) {
         const leader = stronger.sort((a, b) => (b.estimatedTraffic ?? 0) - (a.estimatedTraffic ?? 0))[0]
-        const factor = ownTraffic > 0 ? ((leader.estimatedTraffic ?? 0) / ownTraffic).toFixed(1) : '∞'
+        const verhaeltnis = ownTraffic > 0 ? (leader.estimatedTraffic ?? 0) / ownTraffic : null
+        const factor =
+          verhaeltnis === null
+            ? 'ein Vielfaches'
+            : verhaeltnis >= 10
+              ? `das ${Math.round(verhaeltnis)}-fache`
+              : `das ${verhaeltnis.toFixed(1)}-fache`
         findings.push({
           id: 'comp-behind-leader',
           severity: stronger.length > rivals.length / 2 ? 'critical' : 'longterm',
           title: `${stronger.length} Wettbewerber vor der eigenen Domain`,
-          why: `${leader.domain} erreicht rund das ${factor}-fache an organischem Traffic bei ${leader.keywordsTop100 ?? '?'} platzierten Keywords (eigene Domain: ${ownKeywords}).`,
+          why: `${leader.domain} erreicht rund ${factor} an organischem Traffic bei ${leader.keywordsTop100?.toLocaleString('de-DE') ?? '?'} platzierten Keywords (eigene Domain: ${ownKeywords.toLocaleString('de-DE')}).`,
           action: `Inhaltsbestand von ${leader.domain} auswerten: welche Themen sind dort abgedeckt und im eigenen Bestand nicht? Die Lücken nach Suchvolumen priorisiert schliessen.`,
           effort: 'hoch',
           impact: 'hoch',
@@ -166,6 +196,7 @@ export function analyzeCompetitors(input: {
     data: {
       own: { domain: input.domain, keywordsTop100: ownKeywords, estimatedTraffic: ownTraffic, referringDomains: ownRefDomains },
       competitors: rivals.slice(0, 10),
+      ausgeschlossen: ausgeschlossen.map((r) => ({ domain: r.domain, estimatedTraffic: r.estimatedTraffic })),
       keywordGaps: topGaps,
       gapCount: gapsByKeyword.size,
     },

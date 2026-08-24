@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { availableProviders } from '@/lib/connectors/credentials'
 import { providerLabel } from '@/lib/connectors/labels'
 import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
+import { Onboarding } from '@/components/onboarding'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +45,11 @@ export default async function DashboardPage() {
         </ButtonLink>
       </header>
 
-      {missingProviders.length > 0 && (
+      <Onboarding organizationId={session.organizationId} />
+
+      {/* Nur zeigen, wenn schon analysiert wurde – sonst sagt die Einstiegshilfe
+          darüber bereits dasselbe. */}
+      {missingProviders.length > 0 && completedCount > 0 && (
         <Card className="border-warn/30 bg-warn-subtle p-4">
           <div className="flex gap-3">
             <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warn" />

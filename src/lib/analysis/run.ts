@@ -131,14 +131,22 @@ export async function runAnalysis(params: {
     let html: string | null = null
     let renderedText: string | null = null
     let statusCode: number | null = null
+    let firecrawlMeta: Record<string, unknown> | null = null
 
     if (firecrawl) {
       try {
         const scraped = await firecrawl.scrape(targetUrl)
         providersUsed.add('Firecrawl')
-        html = scraped?.rawHtml ?? scraped?.html ?? null
+        // Nur das rohe HTML enthält verlässlich den <head>. Fehlt es, ist
+        // die aufbereitete Fassung unbrauchbar für die Kopfbereich-Prüfung –
+        // dann lieber direkt abrufen als Fehlendes zu melden, das da ist.
+        html = scraped?.rawHtml ?? null
+        if (!html && scraped?.html && /<head[\s>]/i.test(scraped.html)) {
+          html = scraped.html
+        }
         renderedText = scraped?.markdown ?? null
         statusCode = scraped?.metadata?.statusCode ?? null
+        firecrawlMeta = scraped?.metadata ?? null
         raw.firecrawl = { metadata: scraped?.metadata, markdownLength: scraped?.markdown?.length }
       } catch (error) {
         skipped.push({ module: 'Firecrawl-Abruf', reason: message(error) })
@@ -173,7 +181,43 @@ export async function runAnalysis(params: {
       )
     }
 
+    // Ohne <head> im Dokument wären Title, Description und strukturierte Daten
+    // gar nicht auffindbar – die Analyse würde sie als fehlend melden, obwohl
+    // sie vorhanden sind. Dann lieber ein zweiter, direkter Abruf.
+    if (!/<head[\s>]/i.test(html)) {
+      skipped.push({
+        module: 'Seitenabruf',
+        reason: 'Die erste Fassung enthielt keinen Kopfbereich – es wurde direkt nachgeladen',
+      })
+      try {
+        const response = await fetch(targetUrl, {
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; SEO-Master/1.0; +Sichtbarkeitsanalyse)' },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(45_000),
+        })
+        const nachgeladen = await response.text()
+        if (/<head[\s>]/i.test(nachgeladen)) {
+          html = nachgeladen
+          statusCode = response.status
+          skipped.pop()
+        }
+      } catch {
+        // Bleibt es beim ersten Abruf, wird der Mangel unten benannt.
+      }
+    }
+
     signals = extractSignals({ url: targetUrl, html, renderedText, statusCode })
+
+    // Letzte Rückfallebene: Firecrawl liefert Title und Description getrennt
+    // mit. Sie zu verwenden ist allemal besser, als sie als fehlend zu melden.
+    if (!signals.title && typeof firecrawlMeta?.title === 'string') {
+      signals.title = firecrawlMeta.title
+      signals.titleLength = firecrawlMeta.title.length
+    }
+    if (!signals.metaDescription && typeof firecrawlMeta?.description === 'string') {
+      signals.metaDescription = firecrawlMeta.description
+      signals.metaDescriptionLength = firecrawlMeta.description.length
+    }
 
     if (signals.wordCount < 20 && signals.h1.length === 0 && !signals.title) {
       throw new Error(

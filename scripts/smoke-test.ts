@@ -17,6 +17,7 @@ import { extractSignals } from '../src/lib/analysis/extract'
 import { analyzeSeo } from '../src/lib/analysis/seo'
 import { analyzeAeo } from '../src/lib/analysis/aeo'
 import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
+import { extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
 import { analyzeSocial } from '../src/lib/analysis/social'
 import { normalizeProfile } from '../src/lib/connectors/apify'
 import { buildDeterministicReport, sortFindings } from '../src/lib/analysis/report'
@@ -116,6 +117,26 @@ function main() {
   check('Tabelle erkannt', s.tables === 1)
   check('HTTPS erkannt', s.isHttps)
 
+  // --- Kopfbereich ---------------------------------------------------------
+  //
+  // Der schwerwiegendste Fehler dieser Art: Wird das Dokument ohne <head>
+  // ausgewertet, meldet die Analyse Title, Description und strukturierte
+  // Daten als fehlend, obwohl sie vorhanden sind. Aus einem Messfehler werden
+  // dann falsche Sofortmassnahmen.
+  section('Fehlender Kopfbereich wird erkannt')
+  const ohneKopf = extractSignals({
+    url: 'https://beispiel.de/ki-beratung',
+    html: readFileSync(join(dir, 'ohne-kopfbereich.html'), 'utf8'),
+    statusCode: 200,
+  })
+  check('Dokument ohne <head> liefert keinen Title', ohneKopf.title === null)
+  check('Body wird trotzdem gelesen', ohneKopf.h1.length === 1 && ohneKopf.h2.length === 4)
+  check(
+    'Kopfbereich-Prüfung erkennt die unvollständige Fassung',
+    !/<head[\s>]/i.test(readFileSync(join(dir, 'ohne-kopfbereich.html'), 'utf8')),
+    'der Lauf lädt in diesem Fall direkt nach',
+  )
+
   section('Auswertung erkennt die Mängel der schwachen Seite')
   const w = weak.signals
   check('Fehlende Meta Description erkannt', w.metaDescription === null)
@@ -161,6 +182,24 @@ function main() {
     }
     return true
   })())
+
+  section('Folgefragen werden gefiltert')
+  const paa = extractPeopleAlsoAsk({
+    keyword: 'ecamm live deutsch',
+    items: [
+      {
+        type: 'people_also_ask',
+        items: [
+          { title: 'Was kostet Ecamm Live?' },
+          { title: 'Gibt es Ecamm für Windows?' },
+          { title: 'Wo kann man Livestreams kostenlos sehen?' },
+          { title: 'Welche Streaming-Dienste gibt es?' },
+        ],
+      },
+    ],
+  })
+  check('Fragen zum Thema bleiben', paa.includes('Was kostet Ecamm Live?') && paa.includes('Gibt es Ecamm für Windows?'))
+  check('Fragen mit anderer Absicht fallen weg', !paa.includes('Wo kann man Livestreams kostenlos sehen?'), `übrig: ${paa.length} von 4`)
 
   section('Social-Profil')
   const profile = normalizeProfile('instagram', {
