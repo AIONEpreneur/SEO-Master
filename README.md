@@ -59,13 +59,31 @@ Basis fehlender Daten vorzutäuschen.
 
 ## Einrichtung (lokal)
 
-Voraussetzungen: Node 22, Docker (für Datenbank und Redis).
+Ein Befehl. Das Skript prüft die Voraussetzungen, richtet beim ersten Mal
+alles ein und öffnet die Anwendung im Browser.
 
 ```bash
 git clone <repository>
 cd seo-master
-npm install
+./start.sh
+```
 
+Gebraucht wird **Node.js 22 oder neuer** ([nodejs.org](https://nodejs.org),
+Variante „LTS"). Datenbank und Warteschlange richtet das Skript selbst ein —
+über Docker, wenn Docker läuft, sonst über Homebrew. Fehlt beides, sagt das
+Skript, was zu tun ist.
+
+Beim ersten Start entstehen ein Konto und ein Beispielprojekt mit drei
+Analysen; die Zugangsdaten stehen am Ende der Ausgabe. Beenden mit `Strg+C`.
+
+> Das Projekt braucht ein eigenes Verzeichnis. Liegt es innerhalb eines
+> anderen Git-Repositorys, greift Next.js auf dessen Dateien zu und meldet
+> Warnungen.
+
+**Von Hand**, wenn das Skript nicht passt:
+
+```bash
+npm install
 cp .env.example .env
 # ENCRYPTION_KEY und SESSION_SECRET erzeugen:
 echo "ENCRYPTION_KEY=\"$(openssl rand -base64 32)\"" >> .env
@@ -78,11 +96,12 @@ npm run dev                   # Oberfläche auf http://localhost:3000
 npm run worker                # in einem zweiten Terminal
 ```
 
-Danach `http://localhost:3000` öffnen. Das erste angelegte Konto erhält die
-Verwaltungsrechte der Instanz. Die API-Zugangsdaten werden anschliessend unter
-**Einstellungen → Datentresor** hinterlegt.
+`npm run dev` startet nur den Server — es öffnet sich kein Fenster von selbst.
+Die Adresse `http://localhost:3000` muss im Browser aufgerufen werden.
 
----
+Das erste angelegte Konto erhält die Verwaltungsrechte der Instanz. Die
+API-Zugangsdaten werden anschliessend unter **Einstellungen → Datentresor**
+hinterlegt, nicht in der `.env`.
 
 ## Datentresor
 
@@ -111,6 +130,7 @@ Zwei Wege, Zugangsdaten bereitzustellen:
 
 | Befehl | Zweck |
 |---|---|
+| `./start.sh` | Alles einrichten und starten |
 | `npm run dev` | Oberfläche im Entwicklungsmodus |
 | `npm run worker` | Worker-Prozess (verarbeitet die Aufträge) |
 | `npm run build` | Produktions-Build |
