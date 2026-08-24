@@ -3,13 +3,14 @@
 Ziel: Die Anwendung läuft unter einer eigenen Subdomain, wird per Push auf
 GitHub aktualisiert, und alle Daten bleiben auf dem eigenen Server.
 
-Aufwand beim ersten Mal: etwa 45 Minuten.
+Aufwand: ein Befehl auf dem Server, danach etwa zehn Minuten Wartezeit.
 
 ---
 
-## Was wo läuft
+## Wo die Daten liegen
 
-Der VPS betreibt fünf Container:
+Alles bleibt auf dem eigenen Server. Fünf Container, davon ist genau einer von
+aussen erreichbar:
 
 | Container | Aufgabe | Von aussen erreichbar |
 |---|---|---|
@@ -19,13 +20,23 @@ Der VPS betreibt fünf Container:
 | `postgres` | Datenbank | nein |
 | `redis` | Warteschlange | nein |
 
-Datenbank und Redis hängen in einem abgeschotteten Docker-Netz ohne Verbindung
-nach aussen. Erreichbar ist ausschliesslich Caddy.
+Datenbank und Warteschlange hängen in einem Docker-Netz, das als `internal`
+markiert ist — es hat keine Verbindung nach draussen, in keine Richtung. Auch
+ein Port-Scan des Servers findet dort nichts: Nach aussen sind nur 22, 80 und
+443 offen.
 
-Die bestehende Website bei Hostinger bleibt unberührt — die Anwendung läuft
-unter einer eigenen Subdomain, etwa `seo.ihre-domain.de`.
+Die Daten selbst liegen in Docker-Volumes auf der Festplatte des VPS:
 
----
+- `postgres_data` — Projekte, Analysen, Berichte, verschlüsselte Zugangsdaten
+- `redis_data` — die Warteschlange der Analyseaufträge
+- `caddy_data` — TLS-Zertifikate
+
+Nach aussen gehen ausschliesslich die Anfragen an die Datenanbieter
+(DataForSEO, Firecrawl, Apify, PageSpeed, Anthropic) und der Abruf der
+analysierten Seiten. Analyseergebnisse verlassen den Server nie.
+
+Die bestehende Website bei Hostinger bleibt davon unberührt — die Anwendung
+läuft unter einer eigenen Subdomain.
 
 ## Schritt 1: DNS
 
@@ -40,7 +51,7 @@ vergehen. Prüfen mit `dig seo.ihre-domain.de +short`.
 
 ---
 
-## Schritt 2: Server vorbereiten
+## Schritt 2: Einrichten
 
 Per SSH auf den VPS (Zugangsdaten im Hostinger-VPS-Panel):
 
@@ -48,130 +59,45 @@ Per SSH auf den VPS (Zugangsdaten im Hostinger-VPS-Panel):
 ssh root@IP-DES-VPS
 ```
 
-Docker installieren, falls noch nicht vorhanden:
+Dann ein Befehl — die eigene Domain einsetzen:
 
 ```bash
-apt update && apt upgrade -y
-curl -fsSL https://get.docker.com | sh
-docker --version
+git clone https://github.com/AIONEpreneur/SEO-Master.git /tmp/seo-master
+bash /tmp/seo-master/deploy/setup-vps.sh seo.ihre-domain.de
 ```
 
-Einen eigenen Benutzer für die Anwendung anlegen — der Betrieb als `root` ist
-unnötig riskant:
+Das Skript erledigt alles: System aktualisieren, Docker installieren,
+Firewall einrichten (nur SSH, HTTP, HTTPS), ein eigenes Benutzerkonto für die
+Anwendung anlegen, das Repository klonen, Konfiguration und Schlüssel
+erzeugen, Container bauen und starten, TLS-Zertifikat abholen und die
+tägliche Sicherung einrichten.
 
-```bash
-adduser --disabled-password --gecos "" seomaster
-usermod -aG docker seomaster
-mkdir -p /home/seomaster/.ssh
-cp ~/.ssh/authorized_keys /home/seomaster/.ssh/
-chown -R seomaster:seomaster /home/seomaster/.ssh
-chmod 700 /home/seomaster/.ssh
-```
+Der erste Durchlauf dauert etwa zehn Minuten. Das Skript lässt sich gefahrlos
+erneut ausführen; eine vorhandene `.env` wird nie überschrieben.
 
-Firewall: nur SSH, HTTP und HTTPS zulassen.
+> Am Ende gibt das Skript den **`ENCRYPTION_KEY`** aus. Er verschlüsselt alle
+> API-Zugangsdaten im Datentresor. Diesen Schlüssel sofort in den
+> Passwortmanager übertragen — geht er verloren, müssen alle Zugangsdaten neu
+> eingetragen werden. Er gehört **nicht** neben die Datenbanksicherungen,
+> sonst schützt die Verschlüsselung nichts mehr.
 
-```bash
-ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp
-ufw --force enable
-ufw status
-```
+Zeigt der A-Record noch nicht auf den Server, sagt das Skript das und läuft
+weiter — das Zertifikat kommt dann nach, sobald der Eintrag greift.
 
----
+## Schritt 3: Erstes Konto und Zugangsdaten
 
-## Schritt 3: Anwendung ablegen
+`https://seo.ihre-domain.de` aufrufen. Beim ersten Aufruf führt die Seite
+direkt zur Einrichtung; das erste Konto erhält die Verwaltungsrechte.
 
-Als Benutzer `seomaster`:
+Danach **Einstellungen → Datentresor**: je Anbieter die Zugangsdaten eintragen
+und auf *Prüfen* klicken — so fällt ein Tippfehler sofort auf und nicht erst
+mitten im ersten Analyselauf. Reihenfolge nach Wichtigkeit: DataForSEO,
+Firecrawl, Anthropic, dann Apify und PageSpeed.
 
-```bash
-su - seomaster
-git clone https://github.com/AIONEpreneur/SEO-Master.git app
-cd app
-```
+Die Schlüssel gehören **nicht** in die `.env` auf dem Server. Über den
+Datentresor liegen sie verschlüsselt in der Datenbank.
 
-Bei einem privaten Repository wird ein Deploy Key benötigt:
-
-```bash
-ssh-keygen -t ed25519 -C "vps-deploy" -f ~/.ssh/id_ed25519 -N ""
-cat ~/.ssh/id_ed25519.pub
-# Ausgabe in GitHub eintragen unter:
-# Repository → Settings → Deploy keys → Add deploy key (Schreibrechte nicht nötig)
-```
-
----
-
-## Schritt 4: Konfiguration
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-Auszufüllen:
-
-```bash
-DOMAIN="seo.ihre-domain.de"
-APP_URL="https://seo.ihre-domain.de"
-
-# Erzeugen mit den Befehlen unten
-POSTGRES_PASSWORD="…"
-ENCRYPTION_KEY="…"
-SESSION_SECRET="…"
-
-# Solange die App nur intern genutzt wird
-ALLOWED_SIGNUP_EMAILS="ihre@email.de"
-```
-
-Die drei Geheimnisse erzeugen:
-
-```bash
-echo "POSTGRES_PASSWORD=\"$(openssl rand -base64 24)\""
-echo "ENCRYPTION_KEY=\"$(openssl rand -base64 32)\""
-echo "SESSION_SECRET=\"$(openssl rand -base64 32)\""
-```
-
-> **Den `ENCRYPTION_KEY` jetzt in den Passwortmanager übertragen.** Er
-> verschlüsselt alle API-Zugangsdaten im Tresor. Geht er verloren, müssen alle
-> Schlüssel neu eingetragen werden. Er darf nicht neben den Datenbanksicherungen
-> liegen — sonst schützt die Verschlüsselung nichts.
-
-Die API-Schlüssel der Anbieter müssen **nicht** in die `.env`. Sie werden
-später über die Oberfläche im Datentresor hinterlegt, verschlüsselt.
-
----
-
-## Schritt 5: Starten
-
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-Der erste Durchlauf dauert einige Minuten. Danach:
-
-```bash
-docker compose -f docker-compose.prod.yml ps        # alle Container "running"?
-docker compose -f docker-compose.prod.yml logs -f web
-```
-
-Caddy holt das TLS-Zertifikat selbstständig. Nach etwa einer Minute ist
-`https://seo.ihre-domain.de` erreichbar.
-
-Beim ersten Aufruf führt die Seite direkt zur Einrichtung. Das erste Konto
-erhält die Verwaltungsrechte.
-
----
-
-## Schritt 6: Zugangsdaten hinterlegen
-
-In der Anwendung: **Einstellungen → Datentresor**. Je Anbieter eintragen und
-anschliessend auf *Prüfen* klicken — so fällt ein Tippfehler sofort auf und
-nicht erst mitten im ersten Analyselauf.
-
-Reihenfolge nach Wichtigkeit: DataForSEO, Firecrawl, Anthropic, dann Apify und
-PageSpeed.
-
----
-
-## Schritt 7: Automatisches Ausrollen über GitHub
+## Schritt 4: Automatisches Ausrollen über GitHub
 
 Im Repository unter **Settings → Secrets and variables → Actions** anlegen:
 

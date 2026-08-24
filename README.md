@@ -76,6 +76,10 @@ Skript, was zu tun ist.
 Beim ersten Start entstehen ein Konto und ein Beispielprojekt mit drei
 Analysen; die Zugangsdaten stehen am Ende der Ausgabe. Beenden mit `Strg+C`.
 
+Das Erscheinungsbild lässt sich unten im Seitenmenü umschalten — hell, dunkel
+oder der Systemeinstellung folgend. Die Wahl gilt pro Gerät und bleibt
+erhalten.
+
 > Das Projekt braucht ein eigenes Verzeichnis. Liegt es innerhalb eines
 > anderen Git-Repositorys, greift Next.js auf dessen Dateien zu und meldet
 > Warnungen.
@@ -147,6 +151,7 @@ Zwei Wege, Zugangsdaten bereitzustellen:
 - [`docs/API-ANBINDUNGEN.md`](docs/API-ANBINDUNGEN.md) — welcher Anbieter wofür
   gebraucht wird, was er kostet, was ohne ihn entfällt
 - [`docs/DEPLOYMENT-HOSTINGER.md`](docs/DEPLOYMENT-HOSTINGER.md) — Einrichtung
-  auf dem eigenen VPS, Schritt für Schritt
+  auf dem eigenen VPS. Ein Befehl richtet Server, Domain und Sicherungen ein:
+  `bash deploy/setup-vps.sh seo.ihre-domain.de`
 - [`docs/ARCHITEKTUR.md`](docs/ARCHITEKTUR.md) — wie die Teile zusammenspielen
   und warum sie so geschnitten sind

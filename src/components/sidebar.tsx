@@ -9,7 +9,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { logoutAction } from '@/lib/auth/actions'
+import { ThemeToggle } from '@/components/theme-toggle'
 import type { SessionUser } from '@/lib/auth/session'
+import type { Theme } from '@/lib/theme'
 
 const NAVIGATION = [
   {
@@ -37,7 +39,7 @@ const NAVIGATION = [
   },
 ]
 
-export function Sidebar({ session }: { session: SessionUser }) {
+export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
@@ -108,6 +110,9 @@ export function Sidebar({ session }: { session: SessionUser }) {
         </nav>
 
         <div className="shrink-0 border-t border-border p-3">
+          <div className="mb-3 px-0.5">
+            <ThemeToggle initial={theme} />
+          </div>
           <div className="mb-2 px-2">
             <p className="truncate text-[13px] font-medium">{session.name ?? session.email}</p>
             <p className="truncate text-[12px] text-ink-subtle">{session.organizationName}</p>

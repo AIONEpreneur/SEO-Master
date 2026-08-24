@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { getTheme } from '@/lib/theme'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -7,9 +8,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const theme = await getTheme()
+
   return (
-    <html lang="de">
+    // Bei "system" bleibt das Attribut weg – dann entscheidet die
+    // Systemeinstellung über die Media Query.
+    <html lang="de" data-theme={theme === 'system' ? undefined : theme}>
       <body>{children}</body>
     </html>
   )

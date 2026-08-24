@@ -33,39 +33,86 @@
 /*
  * Dunkles Erscheinungsbild.
  *
- * Die Token werden hier über :root neu gesetzt, nicht über einen zweiten
- * @theme-Block: @theme erzeugt die Utility-Klassen und gilt global, ein
- * zweiter Block innerhalb einer Media Query würde die Werte deshalb
- * unabhängig vom Erscheinungsbild überschreiben.
+ * Drei Zustände sind zu bedienen:
+ *   1. keine ausdrückliche Wahl  → der Systemeinstellung folgen
+ *   2. ausdrücklich dunkel        → data-theme="dark" am <html>
+ *   3. ausdrücklich hell          → data-theme="light" am <html>
+ *
+ * Die Farbwerte stehen deshalb einmal als --dunkel-* fest und werden an zwei
+ * Stellen zugewiesen. Die Systemregel schliesst eine ausdrückliche Wahl von
+ * "hell" aus, damit die Wahl der Person das dunkle Betriebssystem schlägt.
+ *
+ * Die Token selbst werden über :root gesetzt, nicht über einen zweiten
+ * @theme-Block: @theme erzeugt die Utility-Klassen und gilt immer global.
  */
+:root {
+  --dunkel-canvas: oklch(17% 0.012 258);
+  --dunkel-surface: oklch(21% 0.014 258);
+  --dunkel-surface-muted: oklch(25% 0.014 258);
+  --dunkel-border: oklch(30% 0.016 258);
+  --dunkel-border-strong: oklch(38% 0.018 258);
+
+  --dunkel-ink: oklch(96% 0.005 250);
+  --dunkel-ink-muted: oklch(72% 0.012 250);
+  --dunkel-ink-subtle: oklch(58% 0.012 250);
+
+  --dunkel-brand: oklch(70% 0.15 262);
+  --dunkel-brand-hover: oklch(76% 0.14 262);
+  --dunkel-brand-subtle: oklch(28% 0.05 262);
+
+  --dunkel-good: oklch(72% 0.15 152);
+  --dunkel-good-subtle: oklch(27% 0.05 152);
+  --dunkel-warn: oklch(78% 0.14 80);
+  --dunkel-warn-subtle: oklch(29% 0.05 80);
+  --dunkel-bad: oklch(68% 0.17 25);
+  --dunkel-bad-subtle: oklch(28% 0.06 25);
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
-    --color-canvas: oklch(17% 0.012 258);
-    --color-surface: oklch(21% 0.014 258);
-    --color-surface-muted: oklch(25% 0.014 258);
-    --color-border: oklch(30% 0.016 258);
-    --color-border-strong: oklch(38% 0.018 258);
-
-    --color-ink: oklch(96% 0.005 250);
-    --color-ink-muted: oklch(72% 0.012 250);
-    --color-ink-subtle: oklch(58% 0.012 250);
-
-    --color-brand: oklch(70% 0.15 262);
-    --color-brand-hover: oklch(76% 0.14 262);
-    --color-brand-subtle: oklch(28% 0.05 262);
-
-    --color-good: oklch(72% 0.15 152);
-    --color-good-subtle: oklch(27% 0.05 152);
-    --color-warn: oklch(78% 0.14 80);
-    --color-warn-subtle: oklch(29% 0.05 80);
-    --color-bad: oklch(68% 0.17 25);
-    --color-bad-subtle: oklch(28% 0.06 25);
+  :root:not([data-theme="light"]) {
+    --color-canvas: var(--dunkel-canvas);
+    --color-surface: var(--dunkel-surface);
+    --color-surface-muted: var(--dunkel-surface-muted);
+    --color-border: var(--dunkel-border);
+    --color-border-strong: var(--dunkel-border-strong);
+    --color-ink: var(--dunkel-ink);
+    --color-ink-muted: var(--dunkel-ink-muted);
+    --color-ink-subtle: var(--dunkel-ink-subtle);
+    --color-brand: var(--dunkel-brand);
+    --color-brand-hover: var(--dunkel-brand-hover);
+    --color-brand-subtle: var(--dunkel-brand-subtle);
+    --color-good: var(--dunkel-good);
+    --color-good-subtle: var(--dunkel-good-subtle);
+    --color-warn: var(--dunkel-warn);
+    --color-warn-subtle: var(--dunkel-warn-subtle);
+    --color-bad: var(--dunkel-bad);
+    --color-bad-subtle: var(--dunkel-bad-subtle);
   }
 }
 
-html {
-  color-scheme: light dark;
+:root[data-theme="dark"] {
+  --color-canvas: var(--dunkel-canvas);
+  --color-surface: var(--dunkel-surface);
+  --color-surface-muted: var(--dunkel-surface-muted);
+  --color-border: var(--dunkel-border);
+  --color-border-strong: var(--dunkel-border-strong);
+  --color-ink: var(--dunkel-ink);
+  --color-ink-muted: var(--dunkel-ink-muted);
+  --color-ink-subtle: var(--dunkel-ink-subtle);
+  --color-brand: var(--dunkel-brand);
+  --color-brand-hover: var(--dunkel-brand-hover);
+  --color-brand-subtle: var(--dunkel-brand-subtle);
+  --color-good: var(--dunkel-good);
+  --color-good-subtle: var(--dunkel-good-subtle);
+  --color-warn: var(--dunkel-warn);
+  --color-warn-subtle: var(--dunkel-warn-subtle);
+  --color-bad: var(--dunkel-bad);
+  --color-bad-subtle: var(--dunkel-bad-subtle);
 }
+
+html { color-scheme: light dark; }
+html[data-theme="dark"] { color-scheme: dark; }
+html[data-theme="light"] { color-scheme: light; }
 
 body {
   background: var(--color-canvas);

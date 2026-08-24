@@ -1,4 +1,5 @@
 import { cookies, headers } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import { db } from '@/lib/db'
 import { hashToken, randomToken } from '@/lib/crypto/vault'
@@ -94,9 +95,16 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
   }
 })
 
+/**
+ * Angemeldete Sitzung verlangen.
+ *
+ * Führt zur Anmeldung statt einen Fehler zu werfen: Eine abgelaufene Sitzung
+ * ist ein Normalfall, keine Störung – eine Fehlerseite wäre hier die falsche
+ * Antwort, und im Protokoll entstünde bei jedem Aufruf Rauschen.
+ */
 export async function requireSession(): Promise<SessionUser> {
   const session = await getSession()
-  if (!session) throw new Error('UNAUTHORIZED')
+  if (!session) redirect('/login')
   return session
 }
 
