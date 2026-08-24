@@ -571,5 +571,9 @@ function safeDomain(url: string): string | null {
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message.slice(0, 200) : 'Unbekannter Fehler'
+  if (!(error instanceof Error)) return 'Unbekannter Fehler'
+  // Den Anbieternamen in eckigen Klammern entfernen: er steht bereits in der
+  // Zeile davor, und der Text soll lesbar bleiben, nicht technisch.
+  const text = error.message.replace(/^\[[^\]]+\]\s*/, '')
+  return text.length > 220 ? `${text.slice(0, 217)}…` : text
 }

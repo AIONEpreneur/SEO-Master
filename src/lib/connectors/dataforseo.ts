@@ -1,4 +1,4 @@
-import { request, ConnectorError } from './http'
+import { request, ConnectorError, erklaereFehler } from './http'
 import type { DataForSeoSecret } from './credentials'
 
 const BASE = 'https://api.dataforseo.com/v3'
@@ -39,7 +39,14 @@ export class DataForSeoClient {
     })
 
     if (data.status_code !== 20000) {
-      throw new ConnectorError('DataForSEO', data.status_message, data.status_code)
+      // DataForSEO meldet Fehler auch mit HTTP 200 im Rumpf; die eigenen
+      // Codes folgen dem Muster 401xx für Zugangsprobleme.
+      const alsHttp = Math.floor(data.status_code / 100)
+      throw new ConnectorError(
+        'DataForSEO',
+        erklaereFehler('DataForSEO', alsHttp) ?? data.status_message,
+        data.status_code,
+      )
     }
     this.totalCost += data.cost ?? 0
 

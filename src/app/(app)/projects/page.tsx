@@ -1,8 +1,7 @@
-import Link from 'next/link'
 import { FolderKanban, ScanSearch } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
-import { Card, CardHeader, Button, ScoreBadge, EmptyState } from '@/components/ui'
+import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge } from '@/components/ui'
 import { ProjectForm } from './form'
 
 export const dynamic = 'force-dynamic'
@@ -62,12 +61,10 @@ export default async function ProjectsPage() {
                   {project._count.analyses} Analysen · {project._count.competitors} Wettbewerber
                   {project.analyses[0] && ` · zuletzt ${project.analyses[0].createdAt.toLocaleDateString('de-DE')}`}
                 </p>
-                <Link href="/analyses/new">
-                  <Button size="sm" variant="ghost">
-                    <ScanSearch size={14} />
-                    Analysieren
-                  </Button>
-                </Link>
+                <ButtonLink href="/analyses/new" size="sm" variant="ghost">
+                  <ScanSearch size={14} />
+                  Analysieren
+                </ButtonLink>
               </div>
             </Card>
           ))}

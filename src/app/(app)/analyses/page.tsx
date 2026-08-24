@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ScanSearch } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
-import { Card, CardHeader, Button, ScoreBadge, StatusPill, EmptyState } from '@/components/ui'
+import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,12 +22,10 @@ export default async function AnalysesPage() {
           <h1 className="text-xl font-semibold tracking-tight">Analysen</h1>
           <p className="mt-0.5 text-[13px] text-ink-muted">{analyses.length} Läufe</p>
         </div>
-        <Link href="/analyses/new">
-          <Button>
-            <ScanSearch size={16} />
-            Neue Analyse
-          </Button>
-        </Link>
+        <ButtonLink href="/analyses/new">
+          <ScanSearch size={16} />
+          Neue Analyse
+        </ButtonLink>
       </header>
 
       <Card>
@@ -37,9 +35,9 @@ export default async function AnalysesPage() {
             title="Noch keine Analyse"
             description="Der erste Lauf legt zugleich den Vergleichswert für alle späteren fest."
             action={
-              <Link href="/analyses/new">
-                <Button size="sm">Analyse starten</Button>
-              </Link>
+              <ButtonLink href="/analyses/new" size="sm">
+                Analyse starten
+              </ButtonLink>
             }
           />
         ) : (

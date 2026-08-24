@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, Download, ExternalLink } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
-import { Card, CardHeader, ScoreBadge, StatusPill, ScoreBar, SeverityPill, Button } from '@/components/ui'
+import { ButtonLink, Card, CardHeader, ScoreBadge, ScoreBar, SeverityPill, StatusPill } from '@/components/ui'
 import type { AnalysisResult } from '@/lib/analysis/types'
 import { ProgressWatcher } from './progress'
 import { ReportView } from './report-view'
@@ -85,11 +85,9 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
         <Card className="border-bad/30 bg-bad-subtle p-4">
           <p className="text-[13px] font-medium">Der Lauf ist fehlgeschlagen</p>
           <p className="mt-1 text-[13px] text-ink-muted">{analysis.error}</p>
-          <Link href="/analyses/new" className="mt-3 inline-block">
-            <Button size="sm" variant="secondary">
-              Erneut versuchen
-            </Button>
-          </Link>
+          <ButtonLink href="/analyses/new" size="sm" variant="secondary" className="mt-3">
+            Erneut versuchen
+          </ButtonLink>
         </Card>
       )}
 
@@ -171,11 +169,16 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
               <CardHeader
                 title="Vollständiger Bericht"
                 action={
-                  <a href={`/api/reports/${report.id}/download`} download>
-                    <Button size="sm" variant="secondary">
-                      <Download size={14} />
-                      Markdown
-                    </Button>
+                  // Ein <button> innerhalb eines <a> ist ungültiges HTML; der
+                  // Klick landet dann beim Knopf statt beim Link, und der
+                  // Download startet nie. Deshalb ein gestalteter Link.
+                  <a
+                    href={`/api/reports/${report.id}/download`}
+                    download
+                    className="inline-flex h-8 items-center gap-2 rounded-lg border border-border-strong bg-surface px-3 text-[13px] font-medium transition-colors hover:bg-surface-muted"
+                  >
+                    <Download size={14} />
+                    Markdown
                   </a>
                 }
               />

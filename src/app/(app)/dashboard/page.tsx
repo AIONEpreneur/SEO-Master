@@ -4,7 +4,7 @@ import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { availableProviders } from '@/lib/connectors/credentials'
 import { providerLabel } from '@/lib/connectors/labels'
-import { Card, CardHeader, Button, ScoreBadge, StatusPill, EmptyState } from '@/components/ui'
+import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,12 +38,10 @@ export default async function DashboardPage() {
           <h1 className="text-xl font-semibold tracking-tight">Übersicht</h1>
           <p className="mt-0.5 text-[13px] text-ink-muted">{session.organizationName}</p>
         </div>
-        <Link href="/analyses/new">
-          <Button>
-            <ScanSearch size={16} />
-            Neue Analyse
-          </Button>
-        </Link>
+        <ButtonLink href="/analyses/new">
+          <ScanSearch size={16} />
+          Neue Analyse
+        </ButtonLink>
       </header>
 
       {missingProviders.length > 0 && (
@@ -103,9 +101,9 @@ export default async function DashboardPage() {
             title="Noch keine Analyse"
             description="Website-URL oder Social-Profil eingeben und den ersten Lauf starten."
             action={
-              <Link href="/analyses/new">
-                <Button size="sm">Erste Analyse starten</Button>
-              </Link>
+              <ButtonLink href="/analyses/new" size="sm">
+                Erste Analyse starten
+              </ButtonLink>
             }
           />
         ) : (

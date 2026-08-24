@@ -10,6 +10,30 @@ export class ConnectorError extends Error {
   }
 }
 
+/**
+ * Verständliche Meldung für einen Anbieterfehler.
+ *
+ * Die Antworten der Anbieter sind für Programme gedacht, nicht für Menschen.
+ * Roh in den Bericht übernommen, steht dort abgeschnittenes JSON statt eines
+ * Hinweises, was zu tun ist.
+ */
+export function erklaereFehler(provider: string, status: number | undefined): string | null {
+  switch (status) {
+    case 401:
+    case 403:
+      return `${provider} hat die Zugangsdaten abgelehnt. Im Datentresor prüfen und auf „Prüfen" klicken.`
+    case 402:
+      return `Das Guthaben bei ${provider} ist aufgebraucht.`
+    case 404:
+      return `${provider} kennt diese Abfrage nicht – möglicherweise ist der Endpunkt im gebuchten Tarif nicht enthalten.`
+    case 429:
+      return `${provider} hat zu viele Anfragen erhalten. Später erneut versuchen.`
+    default:
+      if (status && status >= 500) return `${provider} ist derzeit nicht erreichbar.`
+      return null
+  }
+}
+
 type RequestOptions = {
   method?: 'GET' | 'POST'
   headers?: Record<string, string>
@@ -53,10 +77,12 @@ export async function request<T>(url: string, options: RequestOptions): Promise<
           await sleep(2 ** attempt * 1000)
           continue
         }
+        const erklaerung = erklaereFehler(provider, response.status)
         throw new ConnectorError(
           provider,
-          `HTTP ${response.status}: ${text.slice(0, 300)}`,
+          erklaerung ?? `HTTP ${response.status}: ${text.slice(0, 200)}`,
           response.status,
+          text.slice(0, 500),
         )
       }
 
