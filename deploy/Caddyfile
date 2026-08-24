@@ -1,0 +1,31 @@
+# Caddy holt und erneuert die TLS-Zertifikate selbstständig über Let's Encrypt.
+# Voraussetzung: Der A-Record der Domain zeigt auf die IP des VPS.
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Sicherheits-Header. Die Anwendung setzt zusätzlich eigene Header;
+	# hier stehen die, die auch bei einem Fehler der Anwendung greifen sollen.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy web:3000 {
+		# Ein Analyselauf kann mehrere Minuten dauern.
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10MB
+			roll_keep 5
+		}
+	}
+}

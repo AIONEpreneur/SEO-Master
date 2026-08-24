@@ -1,0 +1,99 @@
+import Link from 'next/link'
+import { ScanSearch } from 'lucide-react'
+import { requireSession } from '@/lib/auth/session'
+import { db } from '@/lib/db'
+import { Card, CardHeader, Button, ScoreBadge, StatusPill, EmptyState } from '@/components/ui'
+
+export const dynamic = 'force-dynamic'
+
+export default async function AnalysesPage() {
+  const session = await requireSession()
+  const analyses = await db.analysis.findMany({
+    where: { organizationId: session.organizationId },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+    include: { project: { select: { name: true } } },
+  })
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Analysen</h1>
+          <p className="mt-0.5 text-[13px] text-ink-muted">{analyses.length} Läufe</p>
+        </div>
+        <Link href="/analyses/new">
+          <Button>
+            <ScanSearch size={16} />
+            Neue Analyse
+          </Button>
+        </Link>
+      </header>
+
+      <Card>
+        {analyses.length === 0 ? (
+          <EmptyState
+            icon={<ScanSearch size={28} />}
+            title="Noch keine Analyse"
+            description="Der erste Lauf legt zugleich den Vergleichswert für alle späteren fest."
+            action={
+              <Link href="/analyses/new">
+                <Button size="sm">Analyse starten</Button>
+              </Link>
+            }
+          />
+        ) : (
+          <>
+            <CardHeader title="Alle Läufe" />
+            <div className="scroll-x">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-ink-muted">
+                    <th className="px-5 py-2.5 font-medium">Ziel</th>
+                    <th className="px-3 py-2.5 font-medium">Bausteine</th>
+                    <th className="px-3 py-2.5 font-medium">Status</th>
+                    <th className="px-3 py-2.5 font-medium">SEO</th>
+                    <th className="px-3 py-2.5 font-medium">AEO</th>
+                    <th className="px-3 py-2.5 font-medium">GEO</th>
+                    <th className="px-5 py-2.5 font-medium">Gesamt</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {analyses.map((analysis) => (
+                    <tr key={analysis.id} className="transition-colors hover:bg-surface-muted">
+                      <td className="px-5 py-2.5">
+                        <Link href={`/analyses/${analysis.id}`} className="block">
+                          <span className="font-medium">{shorten(analysis.targetUrl)}</span>
+                          <span className="mt-0.5 block text-[12px] text-ink-subtle">
+                            {analysis.project?.name ? `${analysis.project.name} · ` : ''}
+                            {analysis.createdAt.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5 text-[12px] text-ink-muted">{analysis.modules.join(', ')}</td>
+                      <td className="px-3 py-2.5"><StatusPill status={analysis.status} /></td>
+                      <td className="px-3 py-2.5"><ScoreBadge score={analysis.scoreSeo} size="sm" /></td>
+                      <td className="px-3 py-2.5"><ScoreBadge score={analysis.scoreAeo} size="sm" /></td>
+                      <td className="px-3 py-2.5"><ScoreBadge score={analysis.scoreGeo} size="sm" /></td>
+                      <td className="px-5 py-2.5"><ScoreBadge score={analysis.scoreOverall} size="sm" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+function shorten(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const path = parsed.pathname === '/' ? '' : parsed.pathname
+    return `${parsed.hostname.replace(/^www\./, '')}${path}`.slice(0, 60)
+  } catch {
+    return url.slice(0, 60)
+  }
+}

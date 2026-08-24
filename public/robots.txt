@@ -1,0 +1,3 @@
+# Interne Anwendung – nicht für die Suche bestimmt.
+User-agent: *
+Disallow: /

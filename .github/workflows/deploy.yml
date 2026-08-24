@@ -1,0 +1,57 @@
+name: Deploy
+
+# Baut bei jedem Push auf den Hauptzweig und rollt auf den VPS aus.
+# Voraussetzungen als Repository-Secrets:
+#   VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_PATH
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Prüfen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Typen prüfen
+        run: npx tsc --noEmit
+      - name: Build
+        run: npx next build
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/build
+          ENCRYPTION_KEY: ZHVtbXkta2V5LWZvci1idWlsZC1vbmx5LTMyYnl0ZQ==
+          SESSION_SECRET: ZHVtbXktc2VjcmV0LWZvci1idWlsZC1vbmx5LTMyYnl0
+
+  deploy:
+    name: Ausrollen
+    needs: check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Auf dem VPS aktualisieren
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.VPS_PATH }}
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose -f docker-compose.prod.yml build
+            docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f
+            echo "Ausgerollt: $(git rev-parse --short HEAD)"

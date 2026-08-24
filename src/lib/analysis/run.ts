@@ -153,7 +153,26 @@ export async function runAnalysis(params: {
       }
     }
 
+    // Ein Fehlerstatus oder eine praktisch leere Antwort darf nicht als
+    // Analyseergebnis durchgehen: eine 403-Seite bekäme sonst eine schlechte
+    // Bewertung, obwohl über die eigentliche Seite nichts ausgesagt wurde.
+    if (statusCode !== null && statusCode >= 400) {
+      throw new Error(
+        `Die Seite antwortete mit HTTP ${statusCode}. Analysiert werden kann nur, was auch erreichbar ist – ` +
+          'URL prüfen, und ob der Zugriff durch Zugangsschutz, Geoblocking oder eine Firewall unterbunden wird.',
+      )
+    }
+
     signals = extractSignals({ url: targetUrl, html, renderedText, statusCode })
+
+    if (signals.wordCount < 20 && signals.h1.length === 0 && !signals.title) {
+      throw new Error(
+        'Die Seite lieferte praktisch keinen auswertbaren Inhalt. Das deutet auf eine Weiterleitung, eine ' +
+          'Zustimmungsabfrage oder eine Bot-Sperre hin. Mit hinterlegten Firecrawl-Zugangsdaten gelingt der Abruf ' +
+          'in solchen Fällen meist.',
+      )
+    }
+
     raw.signals = { ...signals, text: signals.text.slice(0, 2000) }
   }
 

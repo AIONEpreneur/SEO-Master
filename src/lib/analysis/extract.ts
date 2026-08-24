@@ -375,7 +375,14 @@ function extractAuthors($: cheerio.CheerioAPI, schemaRaw: unknown[]): string[] {
 
   $('[rel="author"], .author, .author-name, [itemprop="author"]').each((_, el) => {
     const value = $(el).text().replace(/\s+/g, ' ').trim()
-    if (value && value.length < 80) names.add(value)
+    // Häufig steht im selben Element noch "Von …" und ein Datum. Nur den
+    // Namensteil übernehmen, sonst landet die halbe Zeile als Autorenname
+    // im Bericht.
+    const name = value
+      .split(/[·|•]|\s+[–—]\s+/)[0]
+      .replace(/^(von|by|geschrieben von|autor(in)?:?)\s+/i, '')
+      .trim()
+    if (name && name.length >= 3 && name.length < 60) names.add(name)
   })
 
   return [...names].slice(0, 5)
