@@ -17,6 +17,16 @@ import type { Provider } from '@prisma/client'
 
 export type ModuleKey = 'SEO' | 'AEO' | 'GEO' | 'SERP' | 'COMPETITORS'
 
+/**
+ * Grundgebühr je Lauf, in Credits (1 Credit = 1 US-Cent).
+ *
+ * Deckt die Anbieter ab, die keine Kosten je Aufruf zurückmelden: der
+ * Seitenabruf über Firecrawl läuft im Monatstarif, die Berichtserstellung
+ * kostet je nach Umfang wenige Cent.
+ */
+const GRUNDGEBUEHR = 3
+const GRUNDGEBUEHR_MIT_BERICHT = 8
+
 type StepUpdate = (step: string, progress: number) => Promise<void>
 
 /**
@@ -416,21 +426,58 @@ export async function runAnalysis(params: {
   result.executiveSummary = report.summary
   result.meta.providersUsed = [...providersUsed]
 
-  // Verbrauch je Anbieter festhalten – Grundlage für Kostenkontrolle und
-  // spätere Abrechnung gegenüber zahlenden Kundinnen.
-  if (dfs && dfs.totalCost > 0) {
+  // Verbrauch festhalten und vom Guthaben abziehen.
+  //
+  // Ein Credit entspricht einem US-Cent. Neben den tatsächlichen
+  // DataForSEO-Kosten fällt eine Grundgebühr an; sie deckt die Anbieter ab,
+  // die keine Kosten je Aufruf ausweisen (Berichtstext, Seitenabruf).
+  const dfsCent = dfs && dfs.totalCost > 0 ? Math.ceil(dfs.totalCost * 100) : 0
+  const grundgebuehr = anthropicSecret ? GRUNDGEBUEHR_MIT_BERICHT : GRUNDGEBUEHR
+  const gesamtCent = dfsCent + grundgebuehr
+
+  if (dfsCent > 0) {
     await db.usageRecord.create({
       data: {
         organizationId,
         provider: 'DATAFORSEO' as Provider,
         operation: 'analysis',
         units: 1,
-        // Kosten in Cent, kaufmännisch aufgerundet.
-        costCredits: Math.ceil(dfs.totalCost * 100),
+        costCredits: dfsCent,
         analysisId,
       },
     })
   }
+  if (grundgebuehr > 0) {
+    await db.usageRecord.create({
+      data: {
+        organizationId,
+        provider: 'ANTHROPIC' as Provider,
+        operation: 'report',
+        units: 1,
+        costCredits: grundgebuehr,
+        analysisId,
+      },
+    })
+  }
+
+  // Vom Guthaben abziehen, ausser im internen Betrieb. Ohne diesen Schritt
+  // bliebe die Prüfung beim Starten wirkungslos: Das Guthaben sänke nie,
+  // und die Kostenbremse griffe nie.
+  const organisation = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: { plan: true },
+  })
+  if (organisation && organisation.plan !== 'INTERNAL' && gesamtCent > 0) {
+    await db.organization.update({
+      where: { id: organizationId },
+      data: { credits: { decrement: gesamtCent } },
+    })
+  }
+
+  await db.analysis.update({
+    where: { id: analysisId },
+    data: { creditsUsed: gesamtCent },
+  })
 
   return { result, report, raw }
 }
