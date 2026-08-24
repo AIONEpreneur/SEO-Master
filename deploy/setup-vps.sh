@@ -24,7 +24,12 @@ abbruch() { printf "\n%s✗ %s%s\n\n" "$ROT" "$1" "$AUS"; [ $# -gt 1 ] && printf
 DOMAIN="${1:-}"
 BENUTZER="seomaster"
 ZIEL="/home/$BENUTZER/app"
-REPO="${REPO_URL:-https://github.com/AIONEpreneur/SEO-Master.git}"
+# Adresse und Zweig stammen aus dem Klon, aus dem dieses Skript gestartet
+# wurde. Wurde er per SSH geholt (nötig bei einem privaten Repository), wird
+# auch für die Anwendung SSH verwendet – sonst fragt git nach einem Passwort,
+# das es hier nicht gibt.
+EIGENE_HERKUNFT="$(git -C "$(dirname "$0")/.." remote get-url origin 2>/dev/null)"
+REPO="${REPO_URL:-${EIGENE_HERKUNFT:-https://github.com/AIONEpreneur/SEO-Master.git}}"
 
 # Standard ist der Zweig, aus dem dieses Skript stammt. Das vermeidet den
 # häufigsten Fehlgriff: von 'main' zu holen, während die Arbeit auf einem
@@ -151,15 +156,30 @@ else
 fi
 usermod -aG docker "$BENUTZER"
 
+mkdir -p "/home/$BENUTZER/.ssh"
+
 # SSH-Zugang des Root-Kontos übernehmen, damit der Zugriff erhalten bleibt.
 if [ -f /root/.ssh/authorized_keys ]; then
-  mkdir -p "/home/$BENUTZER/.ssh"
   cp /root/.ssh/authorized_keys "/home/$BENUTZER/.ssh/"
-  chown -R "$BENUTZER:$BENUTZER" "/home/$BENUTZER/.ssh"
-  chmod 700 "/home/$BENUTZER/.ssh"
-  chmod 600 "/home/$BENUTZER/.ssh/authorized_keys"
-  ok "SSH-Schlüssel übernommen"
+  ok "SSH-Zugang übernommen"
 fi
+
+# Wird das Repository per SSH geholt, braucht auch dieser Benutzer den
+# Schlüssel – sonst scheitert jedes spätere Aktualisieren.
+if [ "${REPO#git@}" != "$REPO" ] || [ "${REPO#ssh://}" != "$REPO" ]; then
+  for schluessel in id_ed25519 id_rsa; do
+    if [ -f "/root/.ssh/$schluessel" ]; then
+      cp "/root/.ssh/$schluessel" "/root/.ssh/$schluessel.pub" "/home/$BENUTZER/.ssh/" 2>/dev/null || true
+      ok "Zugangsschlüssel für GitHub weitergereicht"
+      break
+    fi
+  done
+  [ -f /root/.ssh/known_hosts ] && cp /root/.ssh/known_hosts "/home/$BENUTZER/.ssh/"
+fi
+
+chown -R "$BENUTZER:$BENUTZER" "/home/$BENUTZER/.ssh"
+chmod 700 "/home/$BENUTZER/.ssh"
+chmod 600 "/home/$BENUTZER/.ssh/"* 2>/dev/null || true
 
 # --- Anwendung ------------------------------------------------------------
 
@@ -169,15 +189,18 @@ if [ -d "$ZIEL/.git" ]; then
   ok "Auf aktuellen Stand gebracht"
 else
   su - "$BENUTZER" -c "git clone -b $BRANCH $REPO $ZIEL" >/dev/null 2>&1 \
-    || abbruch "Das Repository liess sich nicht klonen." \
-"Bei einem privaten Repository wird ein Deploy Key gebraucht. Anlegen mit:
+    || abbruch "Das Repository liess sich nicht holen ($REPO)." \
+"Bei einem privaten Repository wird ein Zugangsschlüssel gebraucht.
 
-  su - $BENUTZER
-  ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ''
+Als root anlegen und anzeigen:
+
+  [ -f ~/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N '' -q
   cat ~/.ssh/id_ed25519.pub
 
-Den ausgegebenen Schlüssel auf GitHub eintragen unter:
-  Repository → Settings → Deploy keys → Add deploy key"
+Die ausgegebene Zeile auf GitHub eintragen unter:
+  Repository → Settings → Deploy keys → Add deploy key
+
+Danach dieses Skript erneut ausführen."
   ok "Repository geklont nach $ZIEL"
 fi
 

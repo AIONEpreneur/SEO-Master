@@ -111,12 +111,32 @@ ssh root@IP-DES-VPS
 
 Dann ein Befehl — die eigene Domain einsetzen:
 
+### Zugang zu einem privaten Repository
+
+Ist das Repository privat, braucht der Server einen Schlüssel. Als root:
+
+```bash
+[ -f ~/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N '' -q
+cat ~/.ssh/id_ed25519.pub
+```
+
+Die ausgegebene Zeile (beginnt mit `ssh-ed25519`) auf GitHub eintragen unter
+**Repository → Settings → Deploy keys → Add deploy key**. Schreibrechte sind
+nicht nötig.
+
+### Einrichten
+
 ```bash
 git clone -b claude/seo-analysis-app-backend-hbufiw \
-  https://github.com/AIONEpreneur/SEO-Master.git /tmp/seo-master
+  git@github.com:AIONEpreneur/SEO-Master.git /tmp/seo-master
 
 bash /tmp/seo-master/deploy/setup-vps.sh seo-master.aionepreneur.com
 ```
+
+Bei einem öffentlichen Repository geht statt `git@github.com:` auch
+`https://github.com/`. Das Skript übernimmt für die Anwendung dieselbe
+Adresse und denselben Zweig, aus dem es gestartet wurde — und reicht einen
+vorhandenen Zugangsschlüssel an das Benutzerkonto der Anwendung weiter.
 
 Der Zweig muss beim Klonen angegeben werden, solange die Arbeit nicht auf
 `main` liegt — sonst wird ein leeres Verzeichnis geholt. Das Skript übernimmt
