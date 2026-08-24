@@ -195,6 +195,14 @@ chmod 600 "/home/$BENUTZER/.ssh/"* 2>/dev/null || true
 # --- Anwendung ------------------------------------------------------------
 
 schritt "Anwendung holen"
+
+# Ein abgebrochener früherer Lauf hinterlässt ein unvollständiges
+# Verzeichnis ohne .git – das würde jedes Klonen blockieren.
+if [ -d "$ZIEL" ] && [ ! -d "$ZIEL/.git" ]; then
+  rm -rf "$ZIEL"
+  hinweis "Reste eines früheren Versuchs entfernt"
+fi
+
 if [ -d "$ZIEL/.git" ]; then
   su - "$BENUTZER" -c "cd $ZIEL && git fetch origin $BRANCH && git reset --hard origin/$BRANCH" >/dev/null 2>&1
   ok "Auf aktuellen Stand gebracht"
@@ -290,13 +298,100 @@ for i in $(seq 1 45); do
 done
 else
   schritt "Weiterleitung einrichten"
+
   if curl -fsS -o /dev/null --max-time 10 "http://127.0.0.1:${WEB_PORT:-3000}/login" 2>/dev/null; then
     ok "Anwendung antwortet auf 127.0.0.1:${WEB_PORT:-3000}"
   else
     warn "Anwendung antwortet noch nicht auf 127.0.0.1:${WEB_PORT:-3000}"
   fi
-  hinweis "Noch fehlt die Weiterleitung vom vorhandenen Webserver."
-  hinweis "Vorlagen und Anleitung: $ZIEL/deploy/reverse-proxy/LIESMICH.md"
+
+  # Vorlage mit der tatsächlichen Domain und dem gewählten Port füllen.
+  vorlage_fuellen() {
+    sed -e "s|seo-master\.aionepreneur\.com|$DOMAIN|g" \
+        -e "s|127\.0\.0\.1:3000|127.0.0.1:${WEB_PORT:-3000}|g" "$1"
+  }
+
+  WEITERLEITUNG_STEHT=0
+
+  case "$VORHANDENER_SERVER" in
+    nginx)
+      ZIEL_CONF="/etc/nginx/sites-available/seo-master"
+      vorlage_fuellen "$ZIEL/deploy/reverse-proxy/nginx.conf" > "$ZIEL_CONF"
+      ln -sf "$ZIEL_CONF" /etc/nginx/sites-enabled/seo-master
+
+      # Erst prüfen, dann neu laden: eine fehlerhafte Konfiguration würde
+      # sonst beim Neuladen auch die bereits laufenden Seiten mitreissen.
+      if nginx -t >/dev/null 2>&1; then
+        systemctl reload nginx
+        ok "nginx-Weiterleitung eingerichtet und geladen"
+        WEITERLEITUNG_STEHT=1
+      else
+        rm -f /etc/nginx/sites-enabled/seo-master
+        warn "nginx hat die Konfiguration abgelehnt – nichts geändert."
+        hinweis "Ursache ansehen mit:  nginx -t"
+      fi
+      ;;
+
+    caddy)
+      if grep -q "$DOMAIN" /etc/caddy/Caddyfile 2>/dev/null; then
+        ok "Eintrag im Caddyfile besteht bereits"
+        WEITERLEITUNG_STEHT=1
+      else
+        cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.vor-seo-master" 2>/dev/null || true
+        vorlage_fuellen "$ZIEL/deploy/reverse-proxy/Caddyfile-block" >> /etc/caddy/Caddyfile
+        if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+          systemctl reload caddy
+          ok "Caddy-Weiterleitung eingerichtet und geladen"
+          WEITERLEITUNG_STEHT=1
+        else
+          mv "/etc/caddy/Caddyfile.vor-seo-master" /etc/caddy/Caddyfile 2>/dev/null || true
+          warn "Caddy hat die Konfiguration abgelehnt – die alte wurde wiederhergestellt."
+        fi
+      fi
+      ;;
+
+    *)
+      warn "Kein bekannter Webserver gefunden – die Weiterleitung bleibt zu tun."
+      hinweis "Anleitung: $ZIEL/deploy/reverse-proxy/LIESMICH.md"
+      ;;
+  esac
+
+  # --- Zertifikat, nur bei nginx nötig; Caddy holt es selbst ---------------
+  if [ "$WEITERLEITUNG_STEHT" = "1" ] && [ "$VORHANDENER_SERVER" = "nginx" ]; then
+    schritt "TLS-Zertifikat holen"
+    if ! command -v certbot >/dev/null 2>&1; then
+      hinweis "certbot wird installiert."
+      apt-get install -y -qq certbot python3-certbot-nginx >/dev/null 2>&1 || true
+    fi
+    if command -v certbot >/dev/null 2>&1; then
+      if certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos \
+           --register-unsafely-without-email --redirect >/dev/null 2>&1; then
+        ok "Zertifikat eingerichtet, HTTP leitet auf HTTPS um"
+      else
+        warn "Das Zertifikat kam nicht zustande."
+        hinweis "Von Hand versuchen:  certbot --nginx -d $DOMAIN"
+      fi
+    else
+      warn "certbot liess sich nicht installieren."
+      hinweis "Von Hand:  apt install certbot python3-certbot-nginx && certbot --nginx -d $DOMAIN"
+    fi
+  fi
+
+  # --- Erreichbarkeit prüfen ----------------------------------------------
+  if [ "$WEITERLEITUNG_STEHT" = "1" ]; then
+    schritt "Erreichbarkeit prüfen"
+    for i in $(seq 1 20); do
+      if curl -fsS -o /dev/null --max-time 8 "https://$DOMAIN" 2>/dev/null; then
+        ok "https://$DOMAIN antwortet"; break
+      fi
+      if curl -fsS -o /dev/null --max-time 8 "http://$DOMAIN" 2>/dev/null; then
+        ok "http://$DOMAIN antwortet (noch ohne Zertifikat)"; break
+      fi
+      printf "."
+      sleep 3
+      [ "$i" = "20" ] && { printf "\n"; warn "Die Domain antwortet noch nicht."; }
+    done
+  fi
 fi
 
 # --- Sicherungen ----------------------------------------------------------
@@ -329,7 +424,7 @@ fi
 
 printf "\n%sNächste Schritte%s\n\n" "$BLAU" "$AUS"
 
-if [ "$COMPOSE" = "docker-compose.vps.yml" ]; then
+if [ "$COMPOSE" = "docker-compose.vps.yml" ] && [ "${WEITERLEITUNG_STEHT:-0}" != "1" ]; then
   printf "  %s0. Weiterleitung einrichten – ohne sie ist die Domain nicht erreichbar.%s\n\n" "$GELB" "$AUS"
   case "$VORHANDENER_SERVER" in
     nginx)
