@@ -10,7 +10,7 @@ import { availableProviders } from '@/lib/connectors/credentials'
 import { detectPlatform } from '@/lib/connectors/apify'
 import type { ModuleKey } from './run'
 
-const MODULE_KEYS = ['SEO', 'AEO', 'GEO', 'SERP', 'COMPETITORS'] as const
+const MODULE_KEYS = ['SEO', 'AEO', 'GEO', 'SERP', 'COMPETITORS', 'SEARCH_CONSOLE'] as const
 
 const schema = z.object({
   url: z.string().url('Bitte eine vollständige URL inklusive https:// angeben.'),

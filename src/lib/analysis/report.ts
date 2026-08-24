@@ -314,6 +314,8 @@ function moduleName(module: ModuleResult['module']): string {
       return 'SERP & Rankings'
     case 'COMPETITORS':
       return 'Wettbewerb'
+    case 'SEARCH_CONSOLE':
+      return 'Search Console — gezählte Suchdaten'
     case 'SOCIAL':
       return 'Social-Profil'
   }

@@ -12,11 +12,13 @@ import { analyzeSerp, extractPeopleAlsoAsk } from './serp'
 import { analyzeCompetitors, type CompetitorProfile } from './competitors'
 import { analyzeSocial } from './social'
 import { tragenderBegriff } from './begriffe'
+import { analyzeSearchConsole, normalisiereZeilen, type SucheDaten } from './search-console'
+import { SearchConsoleClient, findeProperty, zeitraum, type ServiceAccountSecret } from '@/lib/connectors/search-console'
 import { generateReport, sortFindings } from './report'
 import type { AnalysisResult, ModuleResult } from './types'
 import type { Provider } from '@prisma/client'
 
-export type ModuleKey = 'SEO' | 'AEO' | 'GEO' | 'SERP' | 'COMPETITORS'
+export type ModuleKey = 'SEO' | 'AEO' | 'GEO' | 'SERP' | 'COMPETITORS' | 'SEARCH_CONSOLE'
 
 /**
  * Grundgebühr je Lauf, in Credits (1 Credit = 1 US-Cent).
@@ -246,15 +248,92 @@ export async function runAnalysis(params: {
     robots = parseRobots(null)
   }
 
-  // Hauptkeyword bestimmen: bevorzugt vorgegeben, sonst aus der Seite abgeleitet.
-  const primaryKeyword = params.seedKeywords?.[0] ?? deriveKeyword(signals)
+  // --- Search Console -------------------------------------------------------
+  //
+  // Sie läuft vor der Keyword-Bestimmung, weil sie diese beantwortet: Wonach
+  // Menschen tatsächlich suchen, um auf diese Seite zu kommen, steht dort
+  // gezählt. Jede Ableitung aus dem Seitentext ist dagegen eine Vermutung.
+  let sucheDaten: SucheDaten | null = null
+  const gscSecret = await resolveSecret<ServiceAccountSecret>(organizationId, 'SEARCH_CONSOLE')
+
+  if (gscSecret && targetKind === 'WEBSITE') {
+    await step('Search Console wird abgefragt', 22)
+    try {
+      const gsc = new SearchConsoleClient(gscSecret)
+      const property = findeProperty(await gsc.sites(), targetUrl)
+
+      if (!property) {
+        skipped.push({
+          module: 'Search Console',
+          reason:
+            'Das Dienstkonto hat auf keine Property Zugriff, die zu dieser Adresse passt. In der Search Console unter Einstellungen › Nutzer und Berechtigungen prüfen.',
+        })
+      } else {
+        const spanne = zeitraum(90)
+        const [begriffe, seiteRoh] = await Promise.all([
+          gsc.searchAnalytics({
+            siteUrl: property,
+            ...spanne,
+            dimensions: ['query'],
+            rowLimit: 250,
+            pageFilter: targetUrl,
+          }),
+          gsc.searchAnalytics({
+            siteUrl: property,
+            ...spanne,
+            dimensions: ['page'],
+            rowLimit: 1,
+            pageFilter: targetUrl,
+          }),
+        ])
+
+        const seite = seiteRoh[0]
+        sucheDaten = {
+          property,
+          zeitraum: { von: spanne.startDate, bis: spanne.endDate },
+          seite: seite
+            ? {
+                klicks: seite.clicks ?? 0,
+                einblendungen: seite.impressions ?? 0,
+                ctr: Math.round((seite.ctr ?? 0) * 1000) / 10,
+                position: Math.round((seite.position ?? 0) * 10) / 10,
+              }
+            : null,
+          begriffe: normalisiereZeilen(begriffe),
+        }
+        raw.searchConsole = { property, zeitraum: spanne, begriffe: sucheDaten.begriffe.slice(0, 30) }
+        providersUsed.add('Search Console')
+
+        if (sucheDaten.begriffe.length === 0) {
+          skipped.push({
+            module: 'Search Console',
+            reason: `Für diese Seite liegen im Zeitraum ${spanne.startDate} bis ${spanne.endDate} keine Suchdaten vor. Bei neuen Seiten ist das normal.`,
+          })
+        }
+      }
+    } catch (error) {
+      skipped.push({ module: 'Search Console', reason: message(error) })
+    }
+  }
+
+  // Hauptkeyword bestimmen.
+  //
+  // Reihenfolge nach Belastbarkeit: eigene Vorgabe, dann die tatsächlich
+  // stärkste Suchanfrage aus der Search Console, erst zuletzt eine Ableitung
+  // aus dem Seitentext.
+  const staerksterBegriff = sucheDaten?.begriffe[0]?.begriff ?? null
+  const primaryKeyword = params.seedKeywords?.[0] ?? staerksterBegriff ?? deriveKeyword(signals)
   const keywordsToCheck = (params.seedKeywords?.length ? params.seedKeywords : [primaryKeyword])
     .filter((k): k is string => Boolean(k))
     .slice(0, 5)
 
   // Ein selbst abgeleitetes Keyword ist eine Vermutung, kein Auftrag. Wo es
   // fehlt, wird das ausgewiesen statt ersatzweise etwas Beliebiges gemessen.
-  const keywordAbgeleitet = !params.seedKeywords?.length && Boolean(primaryKeyword)
+  const keywordQuelle: 'vorgegeben' | 'gemessen' | 'abgeleitet' | 'keines' =
+    params.seedKeywords?.length ? 'vorgegeben'
+    : staerksterBegriff ? 'gemessen'
+    : primaryKeyword ? 'abgeleitet'
+    : 'keines'
   if (!primaryKeyword) {
     skipped.push({
       module: 'Hauptkeyword',
@@ -384,8 +463,36 @@ export async function runAnalysis(params: {
     if (!dfs || !domain) {
       skipped.push({ module: 'SERP', reason: 'Ohne DataForSEO-Zugangsdaten nicht möglich' })
     } else {
-      moduleResults.push(analyzeSerp({ domain, serps, rankedKeywords, domainRank }))
+      moduleResults.push(
+        analyzeSerp({ domain, serps, rankedKeywords, domainRank, gemesseneKlicks: sucheDaten?.seite?.klicks ?? null }),
+      )
     }
+  }
+
+  // Search Console steht bewusst hinter SERP: Wo beide etwas zur selben Frage
+  // sagen, ist das Gezählte das letzte Wort.
+  //
+  // Abgefragt wird sie unabhängig von der Auswahl, weil sie das Hauptkeyword
+  // bestimmt und damit jeden anderen Baustein verbessert. Ein eigener
+  // Abschnitt im Bericht entsteht aber nur, wenn der Baustein gewählt wurde.
+  if (modules.includes('SEARCH_CONSOLE') && sucheDaten && sucheDaten.begriffe.length > 0) {
+    moduleResults.push(
+      analyzeSearchConsole({
+        daten: sucheDaten,
+        // Überschriften, Title und Fliesstext: Daran wird geprüft, ob eine
+        // Suchanfrage auf der Seite überhaupt vorkommt.
+        seitentext: [
+          signals.title,
+          signals.metaDescription,
+          ...signals.h1,
+          ...signals.h2,
+          ...signals.h3,
+          signals.text,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      }),
+    )
   }
 
   // --- Wettbewerb -----------------------------------------------------------
@@ -479,10 +586,7 @@ export async function runAnalysis(params: {
     locationCode,
     pageType: guessPageType(signals),
     pageLanguage: signals.lang,
-    keyword: {
-      value: primaryKeyword,
-      source: primaryKeyword ? (keywordAbgeleitet ? 'abgeleitet' : 'vorgegeben') : 'keines',
-    },
+    keyword: { value: primaryKeyword, source: keywordQuelle },
   })
 
   const report = await generateReport(result, anthropicSecret?.apiKey ?? null)
@@ -560,7 +664,7 @@ function assemble(input: {
   locationCode: number
   pageType?: string | null
   pageLanguage?: string | null
-  keyword?: { value: string | null; source: 'vorgegeben' | 'abgeleitet' | 'keines' }
+  keyword?: { value: string | null; source: 'vorgegeben' | 'gemessen' | 'abgeleitet' | 'keines' }
 }): AnalysisResult {
   const find = (m: string) => input.moduleResults.find((r) => r.module === m)?.score ?? null
 

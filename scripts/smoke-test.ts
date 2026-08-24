@@ -22,8 +22,13 @@ import { analyzeSocial } from '../src/lib/analysis/social'
 import {
   fuehreZusammen, fasseZusammen, leseVerlauf, lohnendeBegriffe, vergleichsform,
 } from '../src/lib/keywords/research'
-import { enthaeltBegriff, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
+import { deckungsgrad, enthaeltBegriff, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
 import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
+import {
+  analyzeSearchConsole, knappVorbei, normalisiereZeilen, ungenutzteEinblendungen,
+  unbehandelteBegriffe, type SucheZeile,
+} from '../src/lib/analysis/search-console'
+import { findeProperty, zeitraum } from '../src/lib/connectors/search-console'
 import { normalizeProfile } from '../src/lib/connectors/apify'
 import { buildDeterministicReport, sortFindings } from '../src/lib/analysis/report'
 import type { AnalysisResult, ModuleResult } from '../src/lib/analysis/types'
@@ -345,6 +350,12 @@ function main() {
     tragenderBegriff('KI-Beratung für Solopreneure | Kirsten Biema') ?? 'null',
   )
   check('Nur Füllwörter ergeben nichts', tragenderBegriff('Das ist alles') === null)
+
+  // Für Themenlücken zählt der Deckungsgrad, nicht die exakte Wortfolge.
+  const seite = 'KI-Beratung für Solopreneure. Was kostet KI-Beratung?'
+  check('Andere Wortform zählt als abgedeckt', deckungsgrad(seite, 'ki beratung kosten') === 1)
+  check('Fremdes Thema nicht', deckungsgrad(seite, 'ki tools für steuerberater') < 0.5)
+  check('Füllwörter zählen nicht mit', deckungsgrad(seite, 'die kosten der beratung') === 1)
   check(
     'Kurze Fachwörter überleben',
     tragenderBegriff('KI-Beratung für Solopreneure') === 'ki beratung solopreneure',
@@ -422,6 +433,117 @@ function main() {
         backlinks: { backlinks: 18, referring_main_domains: 16, backlinks_spam_score: 2 },
       }),
     ),
+  )
+
+  // --- Search Console -------------------------------------------------------
+  //
+  // Der Grund für diesen Anschluss: Alle anderen Quellen schätzen. Auf einer
+  // realen Seite standen 35 geschätzten Besuchen 277 gezählte gegenüber.
+  section('Search Console: Property und Zeitraum')
+
+  const properties = ['https://beispiel.de/blog/', 'sc-domain:beispiel.de', 'https://andere.de/']
+  check(
+    'Domain-Property hat Vorrang',
+    findeProperty(properties, 'https://www.beispiel.de/blog/artikel') === 'sc-domain:beispiel.de',
+  )
+  check(
+    'Sonst gewinnt das längste passende Präfix',
+    findeProperty(
+      ['https://beispiel.de/', 'https://beispiel.de/blog/'],
+      'https://beispiel.de/blog/artikel',
+    ) === 'https://beispiel.de/blog/',
+  )
+  check('Fremde Domain findet nichts', findeProperty(properties, 'https://fremd.de/x') === null)
+  check('Unbrauchbare Adresse findet nichts', findeProperty(properties, 'kein-url') === null)
+
+  // Search Console hinkt zwei bis drei Tage hinterher. Wer bis heute abfragt,
+  // liest für die letzten Tage einen Einbruch, den es nicht gibt.
+  const spanne = zeitraum(90, new Date('2026-08-24T00:00:00Z'))
+  check('Ende liegt drei Tage zurück', spanne.endDate === '2026-08-21', spanne.endDate)
+  check('Start liegt 90 Tage davor', spanne.startDate === '2026-05-23', spanne.startDate)
+
+  section('Search Console: Befunde entstehen aus gezählten Werten')
+
+  const sucheZeilen: SucheZeile[] = normalisiereZeilen([
+    // Seite eins, viele Einblendungen, kaum Klicks: ein Snippet-Problem.
+    { keys: ['ki beratung solopreneure'], clicks: 4, impressions: 900, ctr: 0.0044, position: 3.2 },
+    // Knapp hinter Seite eins.
+    { keys: ['ki beratung kosten'], clicks: 1, impressions: 420, ctr: 0.0024, position: 13.4 },
+    // Nachfrage, die die Seite gar nicht behandelt.
+    { keys: ['ki tools für steuerberater'], clicks: 0, impressions: 260, ctr: 0, position: 18.1 },
+    // Gesunde Zeile: darf keinen Befund auslösen.
+    { keys: ['kirsten biema'], clicks: 140, impressions: 300, ctr: 0.4667, position: 1.1 },
+    // Zu wenig Einblendungen für eine Aussage.
+    { keys: ['zufall'], clicks: 0, impressions: 12, ctr: 0, position: 2.0 },
+  ])
+
+  check('Klickrate wird als Prozentwert geführt', sucheZeilen[0].ctr === 46.7, `${sucheZeilen[0].ctr}`)
+  check('Nach Klicks sortiert', sucheZeilen[0].begriff === 'kirsten biema')
+
+  const verschenkt = ungenutzteEinblendungen(sucheZeilen)
+  check('Auffällig niedrige Klickrate wird erkannt', verschenkt.some((z) => z.begriff === 'ki beratung solopreneure'))
+  check('Gute Zeile bleibt unbehelligt', !verschenkt.some((z) => z.begriff === 'kirsten biema'))
+  check(
+    'Wenige Einblendungen gelten nicht als Befund',
+    !verschenkt.some((z) => z.begriff === 'zufall'),
+    'unter 100 Einblendungen ist die Klickrate Zufall',
+  )
+  check(
+    'Schlecht platzierte Anfragen sind kein Snippet-Problem',
+    !verschenkt.some((z) => z.position > 10),
+    'auf Platz 18 ist eine niedrige Klickrate normal',
+  )
+
+  const knapp = knappVorbei(sucheZeilen)
+  check('Position 11 bis 20 wird erkannt', knapp.some((z) => z.begriff === 'ki beratung kosten'))
+  check('Seite eins gehört nicht dazu', !knapp.some((z) => z.position <= 10))
+
+  const luecken = unbehandelteBegriffe(sucheZeilen, 'KI-Beratung für Solopreneure. Was kostet KI-Beratung?')
+  check('Unbehandelte Nachfrage wird erkannt', luecken.some((z) => z.begriff === 'ki tools für steuerberater'))
+  check(
+    'Was auf der Seite steht, gilt nicht als Lücke',
+    !luecken.some((z) => z.begriff === 'ki beratung kosten'),
+    'trotz Bindestrichschreibweise auf der Seite gefunden',
+  )
+
+  const gsc = analyzeSearchConsole({
+    daten: {
+      property: 'sc-domain:beispiel.de',
+      zeitraum: { von: '2026-05-23', bis: '2026-08-21' },
+      seite: { klicks: 145, einblendungen: 1892, ctr: 7.7, position: 6.4 },
+      begriffe: sucheZeilen,
+    },
+    seitentext: 'KI-Beratung für Solopreneure. Was kostet KI-Beratung?',
+  })
+  check('Modul liefert eine Bewertung', gsc.score > 0 && gsc.score <= 10, `${gsc.score.toFixed(1)}/10`)
+  check('Drei Befunde entstehen', gsc.findings.length === 3, `${gsc.findings.length}`)
+  check(
+    'Jeder Befund nennt eine konkrete Suchanfrage',
+    gsc.findings.every((f) => /„/.test(f.why)),
+  )
+  check(
+    'Der Klick-Befund nennt gezählte Werte',
+    /145 Klicks bei 1892 Einblendungen/.test(
+      gsc.criteria.find((c) => c.key === 'klicks')?.detail ?? '',
+    ),
+    gsc.criteria.find((c) => c.key === 'klicks')?.detail?.slice(0, 46),
+  )
+
+  // Der wichtigste Fall überhaupt: viel gesehen, nie geklickt.
+  const nieGeklickt = analyzeSearchConsole({
+    daten: {
+      property: 'sc-domain:beispiel.de',
+      zeitraum: { von: '2026-05-23', bis: '2026-08-21' },
+      seite: { klicks: 0, einblendungen: 640, ctr: 0, position: 8.2 },
+      begriffe: normalisiereZeilen([
+        { keys: ['ki beratung'], clicks: 0, impressions: 640, ctr: 0, position: 8.2 },
+      ]),
+    },
+    seitentext: 'KI-Beratung für Solopreneure',
+  })
+  check(
+    'Einblendungen ohne Klicks sind ein Sofortbefund',
+    nieGeklickt.findings.find((f) => f.id === 'gsc-keine-klicks')?.severity === 'critical',
   )
 
   section('Bericht')

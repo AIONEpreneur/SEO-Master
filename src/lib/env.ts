@@ -30,6 +30,8 @@ const schema = z.object({
   APIFY_TOKEN: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   PAGESPEED_API_KEY: z.string().optional(),
+  /** Die JSON-Datei eines Google-Dienstkontos, in einer Zeile. */
+  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(),
 })
 
 let cached: z.infer<typeof schema> | null = null

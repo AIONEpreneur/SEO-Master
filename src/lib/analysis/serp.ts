@@ -11,8 +11,10 @@ export function analyzeSerp(input: {
   serps: Array<{ keyword: string; result: SerpResult | null }>
   rankedKeywords?: RankedKeywordsResult | null
   domainRank?: DomainRankResult | null
+  /** Tatsächliche Klicks aus der Search Console, sofern verbunden. */
+  gemesseneKlicks?: number | null
 }): ModuleResult {
-  const { domain, serps, rankedKeywords, domainRank } = input
+  const { domain, serps, rankedKeywords, domainRank, gemesseneKlicks } = input
   const findings: Finding[] = []
   const criteria: Criterion[] = []
 
@@ -104,12 +106,30 @@ export function analyzeSerp(input: {
       const totalTop10 = (organic.pos_1 ?? 0) + (organic.pos_2_3 ?? 0) + (organic.pos_4_10 ?? 0)
       const etv = Math.round(organic.etv ?? 0)
       const score = totalTop10 === 0 ? 1 : totalTop10 < 10 ? 3 : totalTop10 < 50 ? 5 : totalTop10 < 200 ? 7 : 9
+
+      // Die Schätzung darf nie allein stehen, wenn gezählte Werte vorliegen.
+      //
+      // Auf einer realen Seite standen 35 geschätzten Besuchen 277 gezählte
+      // gegenüber – Faktor acht. Wer die Schätzung ohne diesen Vergleich liest,
+      // hält die eigene Seite für unsichtbar und leitet daraus falsche
+      // Massnahmen ab. Deshalb steht die gezählte Zahl zuerst und die
+      // Schätzung dahinter, ausdrücklich als Schätzung benannt.
+      let detail = `${organic.count ?? 0} Keywords in den Top 100, ${totalTop10} in den Top 10.`
+      if (gemesseneKlicks !== null && gemesseneKlicks !== undefined) {
+        detail += ` Gezählte Klicks laut Search Console: ${gemesseneKlicks} in 90 Tagen. Die Hochrechnung dieses Anbieters läge bei ${etv}/Monat`
+        detail += hochrechnungWeichtAb(gemesseneKlicks, etv)
+          ? ' und weicht deutlich ab – gezählt schlägt geschätzt.'
+          : '.'
+      } else {
+        detail += ` Geschätzter organischer Traffic: ${etv}/Monat (Hochrechnung, keine gezählten Werte).`
+      }
+
       criteria.push({
         key: 'visibility',
         label: 'Gesamtsichtbarkeit',
         score,
         weight: 35,
-        detail: `${organic.count ?? 0} Keywords in den Top 100, ${totalTop10} in den Top 10. Geschätzter organischer Traffic: ${etv}/Monat.`,
+        detail,
         status: statusFor(score),
       })
     }
@@ -185,6 +205,21 @@ function serpFeatures(items: SerpItem[]): string[] {
  * dessen Ergebnisse kostenlos ansehen kann – solche Antworten holen Publikum
  * statt Kundschaft.
  */
+/**
+ * Weicht die Hochrechnung erheblich von den gezählten Klicks ab?
+ *
+ * Verglichen wird auf Monatsbasis: Die Search-Console-Zahl umfasst 90 Tage.
+ * Ab Faktor zwei in eine der beiden Richtungen ist der Unterschied kein
+ * Rundungsfehler mehr, sondern eine andere Aussage.
+ */
+function hochrechnungWeichtAb(klicks90Tage: number, etvProMonat: number): boolean {
+  const gezaehltProMonat = klicks90Tage / 3
+  if (gezaehltProMonat < 5 && etvProMonat < 5) return false
+  const groesser = Math.max(gezaehltProMonat, etvProMonat)
+  const kleiner = Math.min(gezaehltProMonat, etvProMonat)
+  return kleiner === 0 ? groesser >= 5 : groesser / kleiner >= 2
+}
+
 export function extractPeopleAlsoAsk(result: SerpResult | null): string[] {
   if (!result?.items) return []
   const paa = result.items.find((i) => i.type === 'people_also_ask')

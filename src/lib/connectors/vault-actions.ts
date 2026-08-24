@@ -7,10 +7,11 @@ import { seal, hintOf } from '@/lib/crypto/vault'
 import { DataForSeoClient } from './dataforseo'
 import { FirecrawlClient } from './firecrawl'
 import { ApifyClient } from './apify'
+import { SearchConsoleClient } from './search-console'
 import { resolveSecret } from './credentials'
 import { providerLabel } from './labels'
 import type { Provider } from '@prisma/client'
-import type { DataForSeoSecret } from './credentials'
+import type { DataForSeoSecret, ServiceAccountSecret } from './credentials'
 
 export type VaultState = { error?: string; success?: string }
 
@@ -67,6 +68,38 @@ export async function saveCredentialAction(_prev: VaultState, formData: FormData
     const entpackt = entpackeBase64Zugang(password)
     secret = entpackt ?? { login, password }
     hint = entpackt?.login ?? login
+  } else if (provider === 'SEARCH_CONSOLE') {
+    // Hier wird der gesamte Inhalt der JSON-Datei eingetragen. Sie sofort zu
+    // zerlegen ist wichtig: Ein unbrauchbarer Schlüssel fiele sonst erst
+    // mitten im ersten Analyselauf auf, und dort ist er schwer zuzuordnen.
+    const roh = String(formData.get('serviceAccount') ?? '').trim()
+    if (!roh) return { error: 'Bitte den Inhalt der JSON-Datei eintragen.' }
+
+    let konto: { client_email?: string; private_key?: string; project_id?: string; type?: string }
+    try {
+      konto = JSON.parse(roh)
+    } catch {
+      return {
+        error:
+          'Das ist kein gültiges JSON. Bitte die heruntergeladene Datei vollständig öffnen und den gesamten Inhalt einfügen – von der ersten geschweiften Klammer bis zur letzten.',
+      }
+    }
+
+    if (!konto.client_email || !konto.private_key) {
+      return {
+        error:
+          'In der Datei fehlen "client_email" oder "private_key". Das sieht nach der falschen Datei aus – gebraucht wird der Schlüssel eines Dienstkontos, nicht die OAuth-Client-Datei.',
+      }
+    }
+
+    secret = {
+      client_email: konto.client_email,
+      private_key: konto.private_key,
+      ...(konto.project_id ? { project_id: konto.project_id } : {}),
+    }
+    // Als Merkhilfe die E-Mail-Adresse: Genau sie muss in der Search Console
+    // als Nutzerin eingetragen werden.
+    hint = konto.client_email
   } else {
     const apiKey = String(formData.get('apiKey') ?? '').trim()
     if (!apiKey) return { error: 'Bitte den Schlüssel eintragen.' }
@@ -155,6 +188,15 @@ export async function testCredentialAction(formData: FormData) {
           signal: AbortSignal.timeout(20_000),
         })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        ok = true
+        break
+      }
+      case 'SEARCH_CONSOLE': {
+        const secret = await resolveSecret<ServiceAccountSecret>(session.organizationId, provider)
+        if (!secret) throw new Error('Kein Dienstkonto hinterlegt')
+        // verify() meldet ausdrücklich, wenn das Konto gültig ist, aber auf
+        // keine Property Zugriff hat – der häufigste Stolperstein.
+        await new SearchConsoleClient(secret).verify()
         ok = true
         break
       }

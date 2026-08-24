@@ -5,8 +5,10 @@ import type { Provider } from '@prisma/client'
 
 export type DataForSeoSecret = { login: string; password: string }
 export type ApiKeySecret = { apiKey: string }
+/** Der Inhalt der JSON-Datei eines Google-Dienstkontos. */
+export type ServiceAccountSecret = { client_email: string; private_key: string; project_id?: string }
 
-type SecretShape = DataForSeoSecret | ApiKeySecret
+type SecretShape = DataForSeoSecret | ApiKeySecret | ServiceAccountSecret
 
 /**
  * Zugangsdaten für einen Anbieter auflösen.
@@ -51,6 +53,15 @@ function fallbackFromEnv<T extends SecretShape>(provider: Provider): T | null {
       return e.ANTHROPIC_API_KEY ? ({ apiKey: e.ANTHROPIC_API_KEY } as T) : null
     case 'PAGESPEED':
       return e.PAGESPEED_API_KEY ? ({ apiKey: e.PAGESPEED_API_KEY } as T) : null
+    case 'SEARCH_CONSOLE': {
+      // Als Umgebungsvariable steht die JSON-Datei in einer Zeile.
+      if (!e.GOOGLE_SERVICE_ACCOUNT_JSON) return null
+      try {
+        return JSON.parse(e.GOOGLE_SERVICE_ACCOUNT_JSON) as T
+      } catch {
+        return null
+      }
+    }
     default:
       return null
   }

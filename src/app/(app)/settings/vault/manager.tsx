@@ -25,7 +25,7 @@ const PROVIDERS: Array<{
   role: string
   purpose: string
   required: boolean
-  fields: 'login' | 'apiKey'
+  fields: 'login' | 'apiKey' | 'serviceAccount'
   docs: string
   hint: string
 }> = [
@@ -61,6 +61,17 @@ const PROVIDERS: Array<{
     fields: 'apiKey',
     docs: 'https://console.anthropic.com/settings/keys',
     hint: 'Schlüssel beginnt mit sk-ant-.',
+  },
+  {
+    key: 'SEARCH_CONSOLE',
+    name: 'Google Search Console',
+    role: 'Gezählte Suchdaten',
+    purpose:
+      'Die einzige Quelle, die zählt statt zu schätzen: tatsächliche Klicks, Einblendungen und Positionen je Suchanfrage. Alle anderen Anbieter rechnen hoch — auf einer echten Seite standen 35 geschätzten Besuchen 277 gezählte gegenüber.',
+    required: false,
+    fields: 'serviceAccount',
+    docs: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
+    hint: 'Den vollständigen Inhalt der JSON-Datei des Dienstkontos einfügen. Danach in der Search Console unter Einstellungen › Nutzer und Berechtigungen die E-Mail-Adresse des Dienstkontos als Nutzerin hinzufügen — sonst ist das Konto gültig, sieht aber nichts. Schritt-für-Schritt-Anleitung: deploy/search-console.md im Projekt.',
   },
   {
     key: 'APIFY',
@@ -186,6 +197,26 @@ export function VaultManager({
                       <Label htmlFor={`${provider.key}-password`}>API-Passwort</Label>
                       <Input id={`${provider.key}-password`} name="password" type="password" required autoComplete="off" />
                     </div>
+                  </div>
+                ) : provider.fields === 'serviceAccount' ? (
+                  <div>
+                    <Label htmlFor={`${provider.key}-json`}>Inhalt der JSON-Datei</Label>
+                    {/*
+                      Mehrzeiliges Feld statt Passwortfeld: Der Schlüssel ist
+                      rund zweitausend Zeichen lang und enthält Zeilenumbrüche.
+                      In einem einzeiligen Feld liesse sich nicht erkennen, ob
+                      der Inhalt vollständig angekommen ist.
+                    */}
+                    <textarea
+                      id={`${provider.key}-json`}
+                      name="serviceAccount"
+                      required
+                      rows={6}
+                      spellCheck={false}
+                      autoComplete="off"
+                      placeholder={'{\n  "type": "service_account",\n  "project_id": "…",\n  "private_key": "-----BEGIN PRIVATE KEY-----\\n…",\n  "client_email": "…@….iam.gserviceaccount.com"\n}'}
+                      className="mt-1.5 w-full rounded-lg border border-border bg-canvas px-3 py-2.5 font-mono text-[12px] leading-relaxed outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    />
                   </div>
                 ) : (
                   <div>

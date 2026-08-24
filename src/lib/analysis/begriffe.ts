@@ -82,6 +82,45 @@ const FUELLWOERTER = new Set([
   'of', 'to', 'in', 'on', 'at', 'is', 'it', 'as', 'by', 'or',
 ])
 
+/**
+ * Wie viel einer Suchanfrage steht auf der Seite? Ein Wert zwischen 0 und 1.
+ *
+ * Für die Frage "behandelt die Seite dieses Thema" ist der Vergleich auf die
+ * exakte Wortfolge zu streng: Wer nach "ki beratung kosten" sucht und auf der
+ * Seite "Was kostet KI-Beratung?" liest, hat die Antwort gefunden – die
+ * Wortfolge stimmt trotzdem nicht überein.
+ *
+ * Deshalb wird je Inhaltswort geprüft, ob die Seite ein Wort mit demselben
+ * Anfang enthält. Fünf Zeichen sind der Kompromiss: Sie führen "kosten" und
+ * "kostet" zusammen, ohne "beratung" und "berühren" zu verwechseln. Eine
+ * richtige Grundformreduktion wäre genauer, bräuchte aber ein Wörterbuch für
+ * jede Sprache, in der die Anwendung eingesetzt wird.
+ *
+ * Füllwörter zählen nicht mit – sie stehen auf jeder Seite und würden jede
+ * Anfrage als abgedeckt erscheinen lassen.
+ */
+export function deckungsgrad(text: string | null | undefined, begriff: string): number {
+  if (!text) return 0
+
+  const inhaltswoerter = wortfolge(begriff)
+    .split(' ')
+    .filter((w) => w.length >= 2 && !istFuellwort(w))
+  if (inhaltswoerter.length === 0) return 0
+
+  const seitenwoerter = new Set(wortfolge(text).split(' '))
+  const stammLaenge = 5
+
+  const gefunden = inhaltswoerter.filter((wort) => {
+    const stamm = wort.slice(0, stammLaenge)
+    for (const seitenwort of seitenwoerter) {
+      if (seitenwort.startsWith(stamm)) return true
+    }
+    return false
+  })
+
+  return gefunden.length / inhaltswoerter.length
+}
+
 export function istFuellwort(wort: string): boolean {
   return FUELLWOERTER.has(wort)
 }

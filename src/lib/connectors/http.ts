@@ -38,6 +38,14 @@ type RequestOptions = {
   method?: 'GET' | 'POST'
   headers?: Record<string, string>
   body?: unknown
+  /**
+   * Rumpf, der unverändert gesendet wird.
+   *
+   * Für Endpunkte, die kein JSON annehmen – Googles Token-Endpunkt etwa
+   * verlangt formkodierte Felder. Hat Vorrang vor `body`; der Inhaltstyp muss
+   * dann über `headers` mitgegeben werden.
+   */
+  rawBody?: string
   timeoutMs?: number
   retries?: number
   provider: string
@@ -51,7 +59,7 @@ type RequestOptions = {
  * verbrennt nur Kontingent.
  */
 export async function request<T>(url: string, options: RequestOptions): Promise<T> {
-  const { method = 'GET', headers = {}, body, timeoutMs = 60_000, retries = 2, provider } = options
+  const { method = 'GET', headers = {}, body, rawBody, timeoutMs = 60_000, retries = 2, provider } = options
 
   let lastError: unknown
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -65,7 +73,7 @@ export async function request<T>(url: string, options: RequestOptions): Promise<
           accept: 'application/json',
           ...headers,
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
         signal: controller.signal,
       })
 

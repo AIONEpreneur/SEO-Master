@@ -33,7 +33,7 @@ export default async function VaultPage() {
     APIFY: Boolean(e.APIFY_TOKEN),
     ANTHROPIC: Boolean(e.ANTHROPIC_API_KEY),
     PAGESPEED: Boolean(e.PAGESPEED_API_KEY),
-    SEARCH_CONSOLE: false,
+    SEARCH_CONSOLE: Boolean(e.GOOGLE_SERVICE_ACCOUNT_JSON),
   }
 
   return (
