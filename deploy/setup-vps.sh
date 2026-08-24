@@ -111,12 +111,26 @@ docker info >/dev/null 2>&1 || abbruch "Docker läuft nicht." "Prüfen mit:  sys
 
 schritt "Belegte Ports prüfen"
 
+# Ist der Port auf der öffentlichen Adresse belegt?
+#
+# Entscheidend ist die Adresse, nicht nur die Portnummer: Ein Dienst, der
+# ausschliesslich auf 127.0.0.1 oder einer VPN-Adresse lauscht (etwa
+# Tailscale auf 443), lässt die öffentliche Adresse frei. Wer nur die
+# Portnummer prüft, hält sie fälschlich für belegt und weicht ohne Not aus.
 port_belegt() {
-  if command -v ss >/dev/null 2>&1; then
-    ss -ltn "sport = :$1" 2>/dev/null | grep -q LISTEN
-  else
-    netstat -ltn 2>/dev/null | grep -qE "[:.]$1 +.*LISTEN"
-  fi
+  local port="$1" zeilen
+  command -v ss >/dev/null 2>&1 || return 1
+  zeilen="$(ss -ltnH "sport = :$port" 2>/dev/null | awk '{print $4}')"
+  [ -n "$zeilen" ] || return 1
+
+  printf '%s\n' "$zeilen" | grep -qE "^(0\.0\.0\.0|\*|\[?::\]?):$port$" && return 0
+  [ -n "${SERVER_IP:-}" ] && printf '%s\n' "$zeilen" | grep -qx "$SERVER_IP:$port" && return 0
+  return 1
+}
+
+# Welcher Dienst hält den Port? Nur zur Erklärung in der Ausgabe.
+port_inhaber() {
+  ss -ltnpH "sport = :$1" 2>/dev/null | grep -oE 'users:\(\("[^"]+' | head -1 | tr -d '"' | sed 's/users:((//'
 }
 
 VORHANDENER_SERVER=""
@@ -140,7 +154,9 @@ if port_belegt 80 || port_belegt 443; then
     [ "$WEB_PORT" != "3000" ] && warn "Port 3000 ist belegt – die Anwendung nutzt $WEB_PORT."
   fi
   export WEB_PORT
-  warn "Port 80/443 sind bereits belegt${VORHANDENER_SERVER:+ (durch $VORHANDENER_SERVER)}."
+  INHABER="${VORHANDENER_SERVER:-$(port_inhaber 80)}"
+  INHABER="${INHABER:-$(port_inhaber 443)}"
+  warn "Port 80/443 sind auf der öffentlichen Adresse belegt${INHABER:+ (durch $INHABER)}."
   hinweis "SEO-Master startet deshalb ohne eigenen Webserver und lauscht auf"
   hinweis "127.0.0.1:${WEB_PORT:-3000}. Die Weiterleitung wird am Ende erklärt."
 else
@@ -231,6 +247,12 @@ ENV_DATEI="$ZIEL/.env"
 if [ -f "$ENV_DATEI" ]; then
   ok "Vorhandene .env bleibt unverändert"
   NEU_ANGELEGT=0
+  # Ergänzen, was in einer älteren Fassung noch nicht angelegt wurde.
+  if [ "$COMPOSE" = "docker-compose.prod.yml" ] && [ -n "${SERVER_IP:-}" ] \
+     && ! grep -q '^BIND_IP=' "$ENV_DATEI"; then
+    printf '\nBIND_IP="%s"\n' "$SERVER_IP" >> "$ENV_DATEI"
+    ok "BIND_IP ergänzt"
+  fi
 else
   cp "$ZIEL/.env.example" "$ENV_DATEI"
 
@@ -240,6 +262,12 @@ else
   SM_SES="$(openssl rand -base64 32)" perl -pi -e 's|^SESSION_SECRET=.*|SESSION_SECRET="$ENV{SM_SES}"|' "$ENV_DATEI"
   SM_PWD="$(openssl rand -base64 24 | tr -d '/+=')" perl -pi -e 's|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD="$ENV{SM_PWD}"|' "$ENV_DATEI"
   SM_DOM="$DOMAIN"          perl -pi -e 's|^DOMAIN=.*|DOMAIN="$ENV{SM_DOM}"|' "$ENV_DATEI"
+
+  # Caddy bindet gezielt an die öffentliche Adresse, damit ein VPN auf
+  # derselben Portnummer nicht dazwischenfunkt.
+  if [ "$COMPOSE" = "docker-compose.prod.yml" ] && [ -n "${SERVER_IP:-}" ]; then
+    printf '\nBIND_IP="%s"\n' "$SERVER_IP" >> "$ENV_DATEI"
+  fi
   SM_URL="https://$DOMAIN"  perl -pi -e 's|^APP_URL=.*|APP_URL="$ENV{SM_URL}"|' "$ENV_DATEI"
 
   if [ -n "${WEB_PORT:-}" ] && [ "$WEB_PORT" != "3000" ]; then
@@ -255,6 +283,15 @@ fi
 # --- Starten --------------------------------------------------------------
 
 schritt "Container bauen und starten (einige Minuten)"
+
+# Wurde beim letzten Lauf die andere Fassung verwendet, laufen deren
+# Container noch und belegen Namen und Ports.
+ANDERE="docker-compose.prod.yml"
+[ "$COMPOSE" = "docker-compose.prod.yml" ] && ANDERE="docker-compose.vps.yml"
+if [ -f "$ZIEL/$ANDERE" ] && su - "$BENUTZER" -c "cd $ZIEL && docker compose -f $ANDERE ps -q" 2>/dev/null | grep -q .; then
+  su - "$BENUTZER" -c "cd $ZIEL && docker compose -f $ANDERE down" >/dev/null 2>&1
+  ok "Container der vorherigen Betriebsart gestoppt"
+fi
 
 # Ausgabe mitschreiben und den Rückgabewert des Bauens prüfen. Ohne das
 # verschluckt die Weiterleitung an tail den Fehlschlag, und die Einrichtung

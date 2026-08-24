@@ -96,9 +96,12 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: always
+    # An die öffentliche Adresse gebunden statt an alle. Lauscht auf dem
+    # Server noch etwas auf einer internen Adresse – ein VPN etwa –, gäbe es
+    # sonst je nach Kernel-Einstellung einen Konflikt um denselben Port.
     ports:
-      - '80:80'
-      - '443:443'
+      - '${BIND_IP:-0.0.0.0}:80:80'
+      - '${BIND_IP:-0.0.0.0}:443:443'
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
