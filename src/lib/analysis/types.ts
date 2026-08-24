@@ -50,6 +50,16 @@ export type AnalysisResult = {
     providersUsed: string[]
     /** Bausteine, die mangels Zugangsdaten oder wegen Fehlern entfielen. */
     skipped: Array<{ module: string; reason: string }>
+    /**
+     * Wie viele Seiten der Lauf gelesen hat.
+     *
+     * Steht im Ergebnis, weil die Befunde sonst wie ein Urteil über die
+     * gesamte Website gelesen werden. Ein Lauf über die Startseite kann
+     * nicht wissen, was in fünfundzwanzig Blogartikeln steht.
+     */
+    scope: { pages: number; note: string }
+    /** Das geprüfte Hauptkeyword und woher es stammt. */
+    keyword: { value: string | null; source: 'vorgegeben' | 'abgeleitet' | 'keines' }
   }
   scores: {
     seo: number | null

@@ -54,6 +54,8 @@ function runEngine(url: string, fixture: string, opts: { keyword: string; serpFi
       skipped: opts.serpFile
         ? [{ module: 'Wettbewerbsvergleich', reason: 'In diesem Durchlauf nicht angefordert' }]
         : [{ module: 'DataForSEO-Daten', reason: 'Keine Zugangsdaten hinterlegt' }],
+      scope: { pages: 1, note: 'Eine Seite. Andere Seiten der Domain wurden nicht gelesen.' },
+      keyword: { value: 'ki beratung', source: 'abgeleitet' },
     },
     scores: {
       seo: scores.seo ?? null,

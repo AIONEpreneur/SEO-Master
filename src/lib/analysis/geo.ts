@@ -20,6 +20,17 @@ export function analyzeGeo(input: {
   const findings: Finding[] = []
   const criteria: Criterion[] = []
 
+  // Allgemeine Plattformen aus der Quellenliste nehmen.
+  //
+  // Die Rohliste führte zu einem Thema aus dem Online-Business instagram.com,
+  // youtube.com und ein Promi-Magazin als "dominierende Quellen" auf. Solche
+  // Domains stehen bei fast jedem Thema oben, weil dort über alles etwas
+  // steht – als Wettbewerber um Zitierfähigkeit sind sie ohne Aussage, und
+  // die Empfehlung "dort Erwähnungen aufbauen" führt in die Irre.
+  const fachlicheQuellen = (llmMentions?.items ?? []).filter(
+    (i) => i.domain && !istAllgemeinePlattform(i.domain),
+  )
+
   // --- Autorität & Trust (25 %) --------------------------------------------
   {
     const domain = safeDomain(s.url)
@@ -48,11 +59,11 @@ export function analyzeGeo(input: {
     if (mentionEntry) {
       detail += `. In LLM-Antworten zum Thema: ${mentionEntry.mentions ?? 0} Erwähnungen.`
       score = clamp(score + 1.5)
-    } else if (llmMentions && !llmMentions.items?.length) {
+    } else if (llmMentions && fachlicheQuellen.length === 0) {
       // Eine leere Liste ist kein Fehler, sondern eine Aussage: Zu diesem
       // Thema hat sich noch keine Quelle etabliert. Wer zuerst zitierfähig
       // wird, besetzt die Stelle – das ist eine Gelegenheit, kein Mangel.
-      detail += '. Zu diesem Thema nennen die Sprachmodelle bislang keine feste Quelle.'
+      detail += '. Zu diesem Thema nennen die Sprachmodelle bislang keine fachliche Quelle.'
       findings.push({
         id: 'geo-offenes-feld',
         severity: 'longterm',
@@ -62,13 +73,14 @@ export function analyzeGeo(input: {
         effort: 'hoch',
         impact: 'hoch',
       })
-    } else if (llmMentions?.items?.length) {
-      detail += `. Kommt in LLM-Antworten zum Thema nicht vor – dort dominieren: ${llmMentions.items.slice(0, 3).map((i) => i.domain).join(', ')}.`
+    } else if (fachlicheQuellen.length > 0) {
+      const genannt = fachlicheQuellen.slice(0, 3).map((i) => i.domain).join(', ')
+      detail += `. Kommt in LLM-Antworten zum Thema nicht vor – dort dominieren: ${genannt}.`
       findings.push({
         id: 'geo-no-llm-mentions',
         severity: 'longterm',
         title: 'Domain wird von KI-Systemen zum eigenen Thema nicht genannt',
-        why: `Bei den relevanten Fragen nennen die Sprachmodelle andere Quellen (${llmMentions.items.slice(0, 3).map((i) => i.domain).join(', ')}). Wer dort nicht auftaucht, ist für KI-gestützte Recherche unsichtbar.`,
+        why: `Bei den relevanten Fragen nennen die Sprachmodelle andere Quellen (${genannt}). Wer dort nicht auftaucht, ist für KI-gestützte Recherche unsichtbar.`,
         action: 'Erwähnungen dort aufbauen, wo KI-Systeme lesen: Fachportale, Branchenverzeichnisse, Gastbeiträge, Podcasts, Wikipedia-fähige Belege. Parallel eigene Daten veröffentlichen, die zitierfähig sind.',
         effort: 'hoch',
         impact: 'hoch',
@@ -282,6 +294,30 @@ export function parseRobots(content: string | null): { content: string | null; b
   }
 
   return { content, blocksAiCrawlers: [...new Set(blocked)] }
+}
+
+/**
+ * Domains, die für die Frage "wer besetzt dieses Thema" nichts aussagen.
+ *
+ * Soziale Netzwerke, Videoplattformen, Verzeichnisse, Enzyklopädien und
+ * allgemeine Nachrichtenportale. Sie tauchen themenunabhängig auf; wer gegen
+ * sie "gewinnen" will, hat die Frage falsch gestellt.
+ */
+const ALLGEMEINE_PLATTFORMEN = [
+  'instagram.com', 'facebook.com', 'tiktok.com', 'youtube.com', 'youtu.be',
+  'linkedin.com', 'x.com', 'twitter.com', 'pinterest.com', 'reddit.com',
+  'threads.net', 'wikipedia.org', 'wikiwand.com', 'quora.com', 'medium.com',
+  'amazon.de', 'amazon.com', 'ebay.de', 'etsy.com',
+  'google.com', 'bing.com', 'apple.com', 'microsoft.com',
+  'gutefrage.net', 'chefkoch.de', 'bunte.de', 'spiegel.de', 'focus.de',
+  'stern.de', 'welt.de', 'bild.de', 't-online.de', 'n-tv.de', 'zeit.de',
+  'sueddeutsche.de', 'faz.net', 'handelsblatt.com',
+  'indeed.com', 'stepstone.de', 'xing.com', 'kununu.com',
+]
+
+export function istAllgemeinePlattform(domain: string): boolean {
+  const sauber = domain.toLowerCase().replace(/^www\./, '')
+  return ALLGEMEINE_PLATTFORMEN.some((p) => sauber === p || sauber.endsWith(`.${p}`))
 }
 
 function safeDomain(url: string): string | null {

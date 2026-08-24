@@ -22,6 +22,8 @@ import { analyzeSocial } from '../src/lib/analysis/social'
 import {
   fuehreZusammen, fasseZusammen, leseVerlauf, lohnendeBegriffe, vergleichsform,
 } from '../src/lib/keywords/research'
+import { enthaeltBegriff, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
+import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
 import { normalizeProfile } from '../src/lib/connectors/apify'
 import { buildDeterministicReport, sortFindings } from '../src/lib/analysis/report'
 import type { AnalysisResult, ModuleResult } from '../src/lib/analysis/types'
@@ -310,6 +312,118 @@ function main() {
   check('Objekt ergibt denselben Verlauf', JSON.stringify(alsObjekt) === JSON.stringify(alsListe))
   check('Fehlender Verlauf bleibt leer', leseVerlauf(undefined).length === 0)
 
+  // --- Begriffsvergleich ----------------------------------------------------
+  //
+  // Die teuerste Fehlerklasse dieses Werkzeugs: Ein Messfehler wird zur
+  // Sofortmassnahme. Auf einer echten Seite meldete die Analyse, das
+  // Hauptkeyword fehle in Title, H1 und Meta Description – es stand an allen
+  // drei Stellen, nur mit Bindestrich geschrieben.
+  section('Bindestrich und Wortgrenze')
+
+  const title = 'Online-Business für Frauen aufbauen — ShEO Club | 47 €/Monat'
+  check('Bindestrich zählt als Worttrenner', enthaeltBegriff(title, 'online business'))
+  check('Auch umgekehrt geschrieben', enthaeltBegriff('online business aufbauen', 'Online-Business'))
+  check('Satzzeichen stören nicht', enthaeltBegriff('Was ist Online-Business? Gute Frage.', 'online business'))
+  check(
+    'Kein Treffer mitten im Wort',
+    !enthaeltBegriff('Zurück zur Startseite', 'art'),
+    '"art" steckt in "Startseite"',
+  )
+  check('Leerer Begriff trifft nie', !enthaeltBegriff(title, '   '))
+  check('Umlaute bleiben erhalten', wortfolge('Für Anfänger') === 'für anfänger')
+
+  section('Hauptkeyword aus der Überschrift')
+
+  check(
+    'Füllwörter fallen weg',
+    tragenderBegriff('Dein Online-Business — ohne alles allein rauszufinden') === 'online business',
+    tragenderBegriff('Dein Online-Business — ohne alles allein rauszufinden') ?? 'null',
+  )
+  check(
+    'Markenzusatz wird abgeschnitten',
+    tragenderBegriff('KI-Beratung für Solopreneure | Kirsten Biema') === 'ki beratung solopreneure',
+    tragenderBegriff('KI-Beratung für Solopreneure | Kirsten Biema') ?? 'null',
+  )
+  check('Nur Füllwörter ergeben nichts', tragenderBegriff('Das ist alles') === null)
+  check(
+    'Kurze Fachwörter überleben',
+    tragenderBegriff('KI-Beratung für Solopreneure') === 'ki beratung solopreneure',
+    tragenderBegriff('KI-Beratung für Solopreneure') ?? 'null',
+  )
+  check(
+    'Kurze Füllwörter nicht',
+    tragenderBegriff('Sichtbarkeit im Netz') === 'sichtbarkeit netz',
+    tragenderBegriff('Sichtbarkeit im Netz') ?? 'null',
+  )
+
+  section('Allgemeine Plattformen sind keine Wettbewerber um Zitierfähigkeit')
+
+  check('Instagram fällt raus', istAllgemeinePlattform('www.instagram.com'))
+  check('Promi-Magazin fällt raus', istAllgemeinePlattform('bunte.de'))
+  check('Subdomain fällt mit raus', istAllgemeinePlattform('de.wikipedia.org'))
+  check('Fachdomain bleibt', !istAllgemeinePlattform('kirstenbiema.com'))
+
+  // --- Widersprüche im Bericht ----------------------------------------------
+  //
+  // Der Bericht darf nicht empfehlen, was er zwei Abschnitte vorher als
+  // vorhanden ausgewiesen hat.
+  section('Bericht widerspricht sich nicht')
+
+  const mitPersonSchema = analyzeSeo({
+    signals: { ...weak.signals, schemaTypes: ['WebSite', 'Person', 'FAQPage'], hasAuthorInfo: false },
+  })
+  const autorBefund = mitPersonSchema.findings.find((f) => f.id === 'seo-author-missing')
+  check('Autorenbefund erscheint', Boolean(autorBefund))
+  check(
+    'Bei vorhandenem Person-Schema wird es nicht erneut gefordert',
+    !/`Person`-Schema auszeichnen/.test(autorBefund?.action ?? ''),
+    autorBefund?.title,
+  )
+
+  const ohnePersonSchema = analyzeSeo({
+    signals: { ...weak.signals, schemaTypes: ['WebSite'], hasAuthorInfo: false },
+  })
+  check(
+    'Ohne Person-Schema wird es sehr wohl gefordert',
+    /`Person`-Schema auszeichnen/.test(
+      ohnePersonSchema.findings.find((f) => f.id === 'seo-author-missing')?.action ?? '',
+    ),
+  )
+
+  // --- Spam-Score -----------------------------------------------------------
+  //
+  // Ein Mittelwert über 16 Domains ist kein Befund. Wer ihn als solchen
+  // ausweist, schickt Leute in stundenlange Disavow-Arbeit ohne Effekt.
+  section('Spam-Score wird eingeordnet, nicht alarmiert')
+
+  const wenigDomains = analyzeSeo({
+    signals: weak.signals,
+    backlinks: { backlinks: 18, referring_main_domains: 16, backlinks_spam_score: 44 },
+  })
+  const spamKlein = wenigDomains.findings.find((f) => f.id === 'seo-spam-score')
+  check('Befund erscheint', Boolean(spamKlein))
+  check('Er rät ausdrücklich zum Nichtstun', /Nichts unternehmen/.test(spamKlein?.action ?? ''), spamKlein?.action?.slice(0, 40))
+  check('Er ist nicht dringlich', spamKlein?.severity === 'longterm')
+
+  const vieleDomains = analyzeSeo({
+    signals: weak.signals,
+    backlinks: { backlinks: 900, referring_main_domains: 140, backlinks_spam_score: 44 },
+  })
+  const spamGross = vieleDomains.findings.find((f) => f.id === 'seo-spam-score')
+  check('Bei vielen Domains wird geprüft statt beruhigt', /durchsehen/.test(spamGross?.action ?? ''))
+
+  const backlinkWert = (r: typeof wenigDomains) =>
+    r.criteria.find((c) => c.key === 'backlinks')?.score ?? -1
+  check(
+    'Bei wenigen Domains kostet der Spam-Score keine Punkte',
+    backlinkWert(wenigDomains) === backlinkWert(
+      analyzeSeo({
+        signals: weak.signals,
+        backlinks: { backlinks: 18, referring_main_domains: 16, backlinks_spam_score: 2 },
+      }),
+    ),
+  )
+
   section('Bericht')
   const result: AnalysisResult = {
     target: { url: 'https://beispiel.de/ki-beratung', kind: 'WEBSITE', domain: 'beispiel.de' },
@@ -321,6 +435,8 @@ function main() {
       modules: ['SEO', 'AEO', 'GEO'],
       providersUsed: [],
       skipped: [{ module: 'DataForSEO-Daten', reason: 'Im Test keine Zugangsdaten hinterlegt' }],
+      scope: { pages: 1, note: 'Eine Seite. Andere Seiten der Domain wurden nicht gelesen.' },
+      keyword: { value: 'ki beratung solopreneure', source: 'vorgegeben' },
     },
     scores: {
       seo: strong.modules[0].score,
@@ -337,6 +453,15 @@ function main() {
   const markdown = buildDeterministicReport(result)
   check('Bericht erzeugt', markdown.length > 800, `${markdown.length} Zeichen`)
   check('Bewertungstabelle enthalten', markdown.includes('## Gesamtbewertung'))
+  check(
+    'Analyse-Umfang steht im Kopf des Berichts',
+    /\*\*Analyse-Umfang:\*\* 1 Seite/.test(markdown),
+    'sonst liest sich ein Befund über eine Seite wie ein Urteil über die Website',
+  )
+  check(
+    'Herkunft des Hauptkeywords steht dabei',
+    /\*\*Geprüftes Hauptkeyword:\*\*/.test(markdown),
+  )
   check('Fehlende Daten werden ausgewiesen', markdown.includes('Nicht ausgeführt'))
   check('Kritische Befunde stehen vor langfristigen', (() => {
     const order = result.priorities.map((f) => f.severity)

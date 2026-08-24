@@ -3,6 +3,7 @@ import type { Criterion, Finding, ModuleResult } from './types'
 import { weightedScore, scoreLabel, statusFor } from './types'
 import type { PageSpeedResult } from '@/lib/connectors/pagespeed'
 import type { BacklinksSummaryResult, DomainRankResult } from '@/lib/connectors/dataforseo'
+import { enthaeltBegriff } from './begriffe'
 
 /**
  * SEO-Bewertung nach dem Framework:
@@ -17,7 +18,7 @@ export function analyzeSeo(input: {
 }): ModuleResult {
   const { signals: s, pagespeed, backlinks, domainRank } = input
   const findings: Finding[] = []
-  const keyword = input.primaryKeyword?.toLowerCase() ?? null
+  const keyword = input.primaryKeyword?.trim() || null
 
   // --- Technisches SEO ------------------------------------------------------
   const technical: Criterion[] = []
@@ -66,7 +67,7 @@ export function analyzeSeo(input: {
         evidence: s.title,
       })
     } else {
-      score = keyword && s.title.toLowerCase().includes(keyword) ? 9 : 7
+      score = keyword && enthaeltBegriff(s.title, keyword) ? 9 : 7
       detail = `${len} Zeichen, im optimalen Bereich.`
     }
     technical.push({ key: 'title', label: 'Title-Tag', score, weight: 3, detail, status: statusFor(score) })
@@ -139,7 +140,7 @@ export function analyzeSeo(input: {
       })
     } else {
       const sameAsTitle = s.title && s.h1[0].toLowerCase().trim() === s.title.toLowerCase().trim()
-      score = sameAsTitle ? 6 : keyword && s.h1[0].toLowerCase().includes(keyword) ? 9 : 7
+      score = sameAsTitle ? 6 : keyword && enthaeltBegriff(s.h1[0], keyword) ? 9 : 7
       detail = sameAsTitle
         ? 'Genau ein H1, aber wortgleich mit dem Title – ungenutztes Potenzial.'
         : `Genau ein H1: "${s.h1[0].slice(0, 80)}"`
@@ -171,7 +172,9 @@ export function analyzeSeo(input: {
     let score = s.isHttps ? 7 : 3
     if (s.urlDepth > 4) score -= 2
     if (slugWords > 6) score -= 1
-    if (keyword && s.urlSlug.toLowerCase().includes(keyword.replace(/\s+/g, '-'))) score += 2
+    // Der Slug trennt mit Bindestrichen; die Wortfolge ebnet das ein, sodass
+    // "online-business" und "online business" hier zusammenfinden.
+    if (keyword && enthaeltBegriff(s.urlSlug, keyword)) score += 2
     score = clamp(score)
     const detail = `${s.isHttps ? 'HTTPS' : 'KEIN HTTPS'}, Tiefe ${s.urlDepth}, Slug "${s.urlSlug || '/'}".`
     if (!s.isHttps) {
@@ -315,11 +318,15 @@ export function analyzeSeo(input: {
         status: 'unknown',
       })
     } else {
+      // Vergleich über die Wortfolge, nicht über den Rohtext: "Online-Business"
+      // und "online business" sind dieselbe Suchanfrage. Der Vergleich auf
+      // Zeichenebene meldete hier ein fehlendes Keyword an drei Stellen, an
+      // denen es tatsächlich stand – und daraus wurde eine Sofortmassnahme.
       const spots = {
-        Title: s.title?.toLowerCase().includes(keyword) ?? false,
-        H1: s.h1[0]?.toLowerCase().includes(keyword) ?? false,
-        'erste 100 Wörter': s.first100Words.toLowerCase().includes(keyword),
-        'Meta Description': s.metaDescription?.toLowerCase().includes(keyword) ?? false,
+        Title: enthaeltBegriff(s.title, keyword),
+        H1: enthaeltBegriff(s.h1[0], keyword),
+        'erste 100 Wörter': enthaeltBegriff(s.first100Words, keyword),
+        'Meta Description': enthaeltBegriff(s.metaDescription, keyword),
       }
       const hits = Object.values(spots).filter(Boolean).length
       const score = clamp(hits * 2.5)
@@ -419,12 +426,24 @@ export function analyzeSeo(input: {
       })
     }
     if (!s.hasAuthorInfo) {
+      // Der Bericht darf sich nicht selbst widersprechen: Steht das
+      // Person-Schema bereits im Quelltext, wäre "Person-Schema ergänzen"
+      // eine Massnahme gegen einen Zustand, den die Analyse zwei Abschnitte
+      // vorher als erfüllt ausgewiesen hat. Fehlt dann nur noch der sichtbare
+      // Teil – und genau das steht dann da.
+      const personSchemaVorhanden = s.schemaTypes.some((t) => /Person/i.test(t))
       findings.push({
         id: 'seo-author-missing',
         severity: 'quickwin',
-        title: 'Keine Autorenangabe',
-        why: 'Ohne erkennbare Autorin fehlt das "Experience"- und "Expertise"-Signal aus E-E-A-T vollständig.',
-        action: 'Autorenbox mit Name, Foto, Kurzbiografie und Verweis auf die Über-mich-Seite ergänzen – zusätzlich als `Person`-Schema auszeichnen.',
+        title: personSchemaVorhanden
+          ? 'Autorenangabe nur im Quelltext, nicht auf der Seite'
+          : 'Keine Autorenangabe',
+        why: personSchemaVorhanden
+          ? 'Das Person-Schema ist ausgezeichnet, für Leserinnen aber unsichtbar. Das "Experience"-Signal aus E-E-A-T entsteht erst, wenn erkennbar ist, wer hinter dem Text steht.'
+          : 'Ohne erkennbare Autorin fehlt das "Experience"- und "Expertise"-Signal aus E-E-A-T vollständig.',
+        action: personSchemaVorhanden
+          ? 'Sichtbare Autorenbox ergänzen: Name, Foto, zwei Sätze zur Erfahrung, Verweis auf die Über-mich-Seite. Das bestehende `Person`-Schema bleibt unverändert.'
+          : 'Autorenbox mit Name, Foto, Kurzbiografie und Verweis auf die Über-mich-Seite ergänzen – zusätzlich als `Person`-Schema auszeichnen.',
         effort: 'gering',
         impact: 'hoch',
       })
@@ -481,8 +500,41 @@ export function analyzeSeo(input: {
       const domains = backlinks.referring_main_domains ?? backlinks.referring_domains ?? 0
       const spam = backlinks.backlinks_spam_score ?? 0
       let score = domains === 0 ? 1 : domains < 10 ? 3 : domains < 50 ? 5 : domains < 200 ? 7 : 9
-      if (spam > 40) score = clamp(score - 3)
-      const detail = `${backlinks.backlinks ?? 0} Backlinks von ${domains} Domains, Spam-Score ${spam}.`
+
+      // Der Spam-Score ist ein Mittelwert über alle verweisenden Domains.
+      // Bei wenigen Verweisen genügen drei Scraper-Seiten, um ihn über 40 zu
+      // treiben – ohne dass irgendetwas zu tun wäre. Solche Netzwerke greifen
+      // jede aktive Domain automatisch ab, und Google entwertet sie seit
+      // Jahren, statt dafür abzustrafen.
+      //
+      // Deshalb: Punktabzug erst, wenn genug Domains für einen belastbaren
+      // Mittelwert vorliegen. Sonst schickt die Bewertung Leute in stundenlange
+      // Disavow-Arbeit ohne jeden Effekt.
+      const spamBelastbar = domains >= 30
+      if (spam > 40 && spamBelastbar) score = clamp(score - 3)
+
+      let detail = `${backlinks.backlinks ?? 0} Backlinks von ${domains} Domains, Spam-Score ${spam}.`
+      if (spam > 40 && !spamBelastbar) {
+        detail += ` Bei nur ${domains} Domains ist dieser Wert nicht belastbar und bleibt ohne Einfluss auf die Bewertung.`
+      }
+
+      if (spam > 40) {
+        findings.push({
+          id: 'seo-spam-score',
+          severity: 'longterm',
+          title: spamBelastbar
+            ? `Erhöhter Spam-Anteil im Verweisprofil (${spam})`
+            : `Spam-Score ${spam} – bei ${domains} Domains ohne Aussagekraft`,
+          why: spamBelastbar
+            ? 'Über eine grössere Zahl verweisender Domains gemittelt deutet ein Wert über 40 auf einen nennenswerten Anteil minderwertiger Quellen hin.'
+            : 'Der Wert ist ein Mittelwert. Bei so wenigen verweisenden Domains genügen einzelne automatisch erzeugte Verlinkungen, um ihn nach oben zu ziehen. Solche Netzwerke greifen jede aktive Domain von selbst ab; Google entwertet sie, statt dafür abzustrafen.',
+          action: spamBelastbar
+            ? 'Verweisende Domains einzeln durchsehen. Nur was erkennbar aus einem Linknetzwerk stammt und in Masse auftritt, gehört in eine Disavow-Datei – im Zweifel nichts tun.'
+            : 'Nichts unternehmen. Kein Disavow, keine Meldung. Der Wert sinkt von selbst, sobald echte Verweise dazukommen.',
+          effort: 'gering',
+          impact: spamBelastbar ? 'mittel' : 'gering',
+        })
+      }
       if (domains < 20) {
         findings.push({
           id: 'seo-backlinks-weak',

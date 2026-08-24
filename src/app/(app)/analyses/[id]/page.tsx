@@ -114,6 +114,27 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
 
       {result && (
         <>
+          {/*
+            Der Umfang steht ganz oben, gleichberechtigt neben dem Ziel.
+            Eine Analyse über eine Seite darf nicht wie ein Urteil über die
+            ganze Website gelesen werden – genau das ist passiert.
+          */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-lg bg-surface-muted px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-ink-muted">
+              Umfang · {result.meta.scope.pages === 1 ? '1 Seite' : `${result.meta.scope.pages} Seiten`}
+            </span>
+            <span className="rounded-lg bg-surface-muted px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-ink-muted">
+              {result.meta.market}
+            </span>
+            {result.meta.keyword.value && (
+              <span className="rounded-lg bg-surface-muted px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-ink-muted">
+                Keyword · {result.meta.keyword.value}
+                {result.meta.keyword.source === 'abgeleitet' && ' (abgeleitet)'}
+              </span>
+            )}
+            <span className="text-[12px] text-ink-subtle">{result.meta.scope.note}</span>
+          </div>
+
           {result.executiveSummary && (
             <Card className="p-5">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">Kurzfazit</p>

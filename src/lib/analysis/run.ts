@@ -11,6 +11,7 @@ import { analyzeGeo, parseRobots } from './geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from './serp'
 import { analyzeCompetitors, type CompetitorProfile } from './competitors'
 import { analyzeSocial } from './social'
+import { tragenderBegriff } from './begriffe'
 import { generateReport, sortFindings } from './report'
 import type { AnalysisResult, ModuleResult } from './types'
 import type { Provider } from '@prisma/client'
@@ -107,7 +108,11 @@ export async function runAnalysis(params: {
     const profile = normalizeProfile(platform, items[0])
     moduleResults.push(analyzeSocial({ profile }))
 
-    const result = assemble({ targetUrl, targetKind, domain, modules: ['SOCIAL'], moduleResults, skipped, providersUsed, languageCode, locationCode })
+    const result = assemble({
+      targetUrl, targetKind, domain, modules: ['SOCIAL'], moduleResults, skipped,
+      providersUsed, languageCode, locationCode,
+      keyword: { value: null, source: 'keines' },
+    })
 
     await step('Bericht wird erstellt', 85)
     const report = await generateReport(result, anthropicSecret?.apiKey ?? null)
@@ -246,6 +251,17 @@ export async function runAnalysis(params: {
   const keywordsToCheck = (params.seedKeywords?.length ? params.seedKeywords : [primaryKeyword])
     .filter((k): k is string => Boolean(k))
     .slice(0, 5)
+
+  // Ein selbst abgeleitetes Keyword ist eine Vermutung, kein Auftrag. Wo es
+  // fehlt, wird das ausgewiesen statt ersatzweise etwas Beliebiges gemessen.
+  const keywordAbgeleitet = !params.seedKeywords?.length && Boolean(primaryKeyword)
+  if (!primaryKeyword) {
+    skipped.push({
+      module: 'Hauptkeyword',
+      reason:
+        'Aus der Seite liess sich kein aussagekräftiger Suchbegriff ableiten. Für Platzierungen und LLM-Sichtbarkeit bitte beim Start eigene Keywords angeben.',
+    })
+  }
 
   // --- Phase 2: Daten erheben ----------------------------------------------
   await step('Messdaten werden erhoben', 30)
@@ -463,6 +479,10 @@ export async function runAnalysis(params: {
     locationCode,
     pageType: guessPageType(signals),
     pageLanguage: signals.lang,
+    keyword: {
+      value: primaryKeyword,
+      source: primaryKeyword ? (keywordAbgeleitet ? 'abgeleitet' : 'vorgegeben') : 'keines',
+    },
   })
 
   const report = await generateReport(result, anthropicSecret?.apiKey ?? null)
@@ -540,6 +560,7 @@ function assemble(input: {
   locationCode: number
   pageType?: string | null
   pageLanguage?: string | null
+  keyword?: { value: string | null; source: 'vorgegeben' | 'abgeleitet' | 'keines' }
 }): AnalysisResult {
   const find = (m: string) => input.moduleResults.find((r) => r.module === m)?.score ?? null
 
@@ -561,6 +582,17 @@ function assemble(input: {
       modules: input.modules,
       providersUsed: [...input.providersUsed],
       skipped: input.skipped,
+      // Der Lauf liest genau die angegebene Adresse. Das gehört in den Kopf
+      // des Ergebnisses, damit ein Befund über eine Verkaufsseite nicht als
+      // Urteil über die ganze Website gelesen wird.
+      scope: {
+        pages: 1,
+        note:
+          input.targetKind === 'SOCIAL_PROFILE'
+            ? 'Ein Profil. Einzelne Beiträge wurden nicht bewertet.'
+            : 'Eine Seite. Andere Seiten der Domain wurden nicht gelesen und sind in keinem Befund berücksichtigt.',
+      },
+      keyword: input.keyword ?? { value: null, source: 'keines' },
     },
     scores: { seo, aeo, geo, serp, overall },
     modules: input.moduleResults,
@@ -571,15 +603,28 @@ function assemble(input: {
 
 /**
  * Hauptkeyword aus der Seite ableiten, wenn keines vorgegeben ist.
- * Der H1 ist dafür das verlässlichste Signal, danach der Title.
+ *
+ * Der H1 ist das verlässlichste Signal, danach der Title. Entscheidend ist,
+ * was danach passiert: Füllwörter fallen weg und die Kette wird auf drei
+ * Wörter begrenzt.
+ *
+ * Ohne diesen Schritt entstanden aus Überschriften wie "Dein Online-Business —
+ * ohne alles allein rauszufinden" Suchbegriffe wie "dein online business ohne"
+ * oder – nach Kürzung – Einzelwörter wie "Business". Nach solchen Begriffen
+ * sucht niemand; die Platzierungsprüfung mass damit an der Sache vorbei und
+ * vergab eine schlechte Note für ein Ergebnis, das nichts bedeutet.
  */
 function deriveKeyword(signals: PageSignals): string | null {
-  const source = signals.h1[0] ?? signals.title
-  if (!source) return null
-  // Markenzusätze nach Trennzeichen abschneiden.
-  const cleaned = source.split(/[|–—•·]/)[0].trim()
-  const words = cleaned.split(/\s+/).filter((w) => w.length > 2)
-  return words.slice(0, 5).join(' ') || null
+  const ausUeberschrift = tragenderBegriff(signals.h1[0])
+  if (ausUeberschrift && ausUeberschrift.includes(' ')) return ausUeberschrift
+
+  const ausTitle = tragenderBegriff(signals.title)
+  if (ausTitle && ausTitle.includes(' ')) return ausTitle
+
+  // Ein einzelnes Wort ist als Suchanfrage fast immer zu allgemein
+  // ("Business", "Beratung"). Dann lieber kein abgeleitetes Keyword als eine
+  // Messung, die an der Sache vorbeigeht.
+  return null
 }
 
 function guessPageType(signals: PageSignals): string {

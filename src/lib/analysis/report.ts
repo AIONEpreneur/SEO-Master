@@ -21,7 +21,27 @@ Deine Haltung:
 - Empfehlungen sind immer konkret: nicht "Meta Description verbessern", sondern der fertige Vorschlagstext.
 - Du schreibst auf Deutsch, in der Sie-Form der Leserin gegenüber neutral gehalten (direkte Ansprache vermeiden, sachlich formulieren).
 
-Wichtig: Die Messwerte sind bereits erhoben und stehen fest. Du bewertest sie und ordnest sie ein — du erfindest keine Zahlen, keine Rankings und keine Befunde hinzu. Wenn Daten fehlen, benennst du die Lücke.`
+Wichtig: Die Messwerte sind bereits erhoben und stehen fest. Du bewertest sie und ordnest sie ein — du erfindest keine Zahlen, keine Rankings und keine Befunde hinzu. Wenn Daten fehlen, benennst du die Lücke.
+
+Fachliche Festlegungen, die du nicht überschreiben darfst:
+- AEO und GEO setzen KEINE Top-10-Platzierung voraus. KI-Übersichten und Sprachmodelle zitieren regelmässig Quellen, die organisch nicht auf Seite eins stehen. Für eine junge oder schwach verlinkte Domain sind AEO und GEO deshalb der schnellere Weg als klassisches Ranking — schreibe nie, das eine lohne sich erst nach dem anderen.
+- Der Lauf hat genau die Seiten gelesen, die unter meta.scope stehen. Formuliere Befunde entsprechend: "auf dieser Seite", nicht "auf der Website". Was auf anderen Seiten der Domain steht, ist unbekannt und darf weder gelobt noch bemängelt werden.
+- Steht unter meta.keyword die Quelle "abgeleitet", war kein Keyword vorgegeben und die Analyse hat es aus der Seite geraten. Weise im Bericht einmal darauf hin, dass Platzierungswerte zu diesem Begriff entsprechend zu lesen sind.
+- Ein Spam-Score im Verweisprofil ist ein Mittelwert. Bei wenigen verweisenden Domains ist er nicht belastbar. Empfiehl in diesem Fall ausdrücklich, nichts zu tun — kein Disavow.`
+
+/**
+ * Wie das Hauptkeyword im Berichtskopf erscheint.
+ *
+ * Die Herkunft steht dabei: Ein abgeleiteter Begriff ist eine Vermutung der
+ * Analyse, kein Auftrag der Nutzerin — und Platzierungswerte dazu sind
+ * entsprechend zu lesen.
+ */
+function keywordZeile(result: AnalysisResult): string {
+  const { value, source } = result.meta.keyword
+  if (!value) return 'keines bestimmbar — bitte beim nächsten Lauf eigene Keywords angeben'
+  if (source === 'abgeleitet') return `"${value}" (aus der Seite abgeleitet, nicht vorgegeben)`
+  return `"${value}"`
+}
 
 export async function generateReport(
   result: AnalysisResult,
@@ -60,6 +80,8 @@ Schreibe den Bericht in Markdown, mit genau dieser Gliederung:
 **Analysiert am:** ${new Date(result.meta.analyzedAt).toLocaleDateString('de-DE')}
 **Seitentyp:** (aus den Daten ableiten)
 **Markt:** ${result.meta.market}
+**Analyse-Umfang:** ${result.meta.scope.pages === 1 ? '1 Seite' : `${result.meta.scope.pages} Seiten`} — ${result.meta.scope.note}
+**Geprüftes Hauptkeyword:** ${keywordZeile(result)}
 
 ## Kurzfazit
 2–4 Sätze: aktueller Stand, die ein bis zwei grössten Hebel. Direkt, ohne Weichspüler.
@@ -170,6 +192,12 @@ export function buildDeterministicReport(result: AnalysisResult): string {
   lines.push(`**Art:** ${result.target.kind === 'WEBSITE' ? 'Website' : 'Social-Media-Profil'}`)
   lines.push(`**Markt:** ${result.meta.market}`)
   lines.push(`**Bausteine:** ${result.meta.modules.join(', ')}`)
+  // Der Umfang steht vor den Befunden, nicht in einer Fussnote: Wer die
+  // Bewertung liest, muss wissen, worüber sie überhaupt eine Aussage macht.
+  lines.push(
+    `**Analyse-Umfang:** ${result.meta.scope.pages === 1 ? '1 Seite' : `${result.meta.scope.pages} Seiten`} — ${result.meta.scope.note}`,
+  )
+  lines.push(`**Geprüftes Hauptkeyword:** ${keywordZeile(result)}`)
   lines.push(
     `**Datenquellen:** ${
       result.meta.providersUsed.length
