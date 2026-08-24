@@ -21,6 +21,11 @@ warn()    { printf "  %s!%s %s\n" "$GELB" "$AUS" "$1"; }
 hinweis() { printf "  %s%s%s\n" "$GRAU" "$1" "$AUS"; }
 abbruch() { printf "\n%s✗ %s%s\n\n" "$ROT" "$1" "$AUS"; [ $# -gt 1 ] && printf "%s\n\n" "$2"; exit 1; }
 
+# In ein Verzeichnis wechseln, das dieses Skript nicht selbst anfasst. Wird
+# es aus einem Ordner gestartet, den es später ersetzt, verliert die Shell
+# ihr Arbeitsverzeichnis und jeder weitere Befehl scheitert.
+cd /root 2>/dev/null || cd /
+
 DOMAIN="${1:-}"
 BENUTZER="seomaster"
 ZIEL="/home/$BENUTZER/app"
