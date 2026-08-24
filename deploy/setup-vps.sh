@@ -129,6 +129,17 @@ done
 
 if port_belegt 80 || port_belegt 443; then
   COMPOSE="docker-compose.vps.yml"
+
+  # Ohne freien Port bindet der Container nicht – und ein Prüfaufruf träfe
+  # die fremde Anwendung, was wie ein Erfolg aussähe.
+  if [ -z "${WEB_PORT:-}" ]; then
+    WEB_PORT=3000
+    while port_belegt "$WEB_PORT"; do
+      WEB_PORT=$((WEB_PORT + 1))
+    done
+    [ "$WEB_PORT" != "3000" ] && warn "Port 3000 ist belegt – die Anwendung nutzt $WEB_PORT."
+  fi
+  export WEB_PORT
   warn "Port 80/443 sind bereits belegt${VORHANDENER_SERVER:+ (durch $VORHANDENER_SERVER)}."
   hinweis "SEO-Master startet deshalb ohne eigenen Webserver und lauscht auf"
   hinweis "127.0.0.1:${WEB_PORT:-3000}. Die Weiterleitung wird am Ende erklärt."
@@ -223,6 +234,10 @@ else
   SM_DOM="$DOMAIN"          perl -pi -e 's|^DOMAIN=.*|DOMAIN="$ENV{SM_DOM}"|' "$ENV_DATEI"
   SM_URL="https://$DOMAIN"  perl -pi -e 's|^APP_URL=.*|APP_URL="$ENV{SM_URL}"|' "$ENV_DATEI"
 
+  if [ -n "${WEB_PORT:-}" ] && [ "$WEB_PORT" != "3000" ]; then
+    printf '\nWEB_PORT="%s"\n' "$WEB_PORT" >> "$ENV_DATEI"
+  fi
+
   chown "$BENUTZER:$BENUTZER" "$ENV_DATEI"
   chmod 600 "$ENV_DATEI"
   ok ".env angelegt, Schlüssel erzeugt"
@@ -232,8 +247,22 @@ fi
 # --- Starten --------------------------------------------------------------
 
 schritt "Container bauen und starten (einige Minuten)"
-su - "$BENUTZER" -c "cd $ZIEL && docker compose -f $COMPOSE up -d --build" 2>&1 | tail -3
-ok "Container gestartet"
+
+# Ausgabe mitschreiben und den Rückgabewert des Bauens prüfen. Ohne das
+# verschluckt die Weiterleitung an tail den Fehlschlag, und die Einrichtung
+# meldet Erfolg, obwohl kein Abbild entstanden ist.
+BAULOG="/tmp/seomaster-build.log"
+if su - "$BENUTZER" -c "cd $ZIEL && docker compose -f $COMPOSE up -d --build" >"$BAULOG" 2>&1; then
+  ok "Container gebaut und gestartet"
+else
+  printf "\n"
+  tail -20 "$BAULOG"
+  abbruch "Das Bauen der Container ist fehlgeschlagen." \
+"Vollständige Ausgabe:  cat $BAULOG
+
+Danach erneut versuchen mit:
+  cd $ZIEL && docker compose -f $COMPOSE up -d --build"
+fi
 
 schritt "Auf die Anwendung warten"
 BEREIT=0
@@ -304,13 +333,19 @@ if [ "$COMPOSE" = "docker-compose.vps.yml" ]; then
   printf "  %s0. Weiterleitung einrichten – ohne sie ist die Domain nicht erreichbar.%s\n\n" "$GELB" "$AUS"
   case "$VORHANDENER_SERVER" in
     nginx)
-      printf "     cp %s/deploy/reverse-proxy/nginx.conf /etc/nginx/sites-available/seo-master\n" "$ZIEL"
-      printf "     ln -s /etc/nginx/sites-available/seo-master /etc/nginx/sites-enabled/\n"
+      # Vorlage mit der tatsächlichen Domain und dem gewählten Port ablegen,
+      # damit nichts von Hand ersetzt werden muss.
+      sed -e "s|seo-master.aionepreneur.com|$DOMAIN|g" \
+          -e "s|127.0.0.1:3000|127.0.0.1:${WEB_PORT:-3000}|g" \
+          "$ZIEL/deploy/reverse-proxy/nginx.conf" > /etc/nginx/sites-available/seo-master 2>/dev/null \
+        && ok "Vorlage abgelegt unter /etc/nginx/sites-available/seo-master"
+      printf "\n     ln -s /etc/nginx/sites-available/seo-master /etc/nginx/sites-enabled/\n"
       printf "     nginx -t && systemctl reload nginx\n"
       printf "     certbot --nginx -d %s\n\n" "$DOMAIN"
       ;;
     caddy)
-      printf "     cat %s/deploy/reverse-proxy/Caddyfile-block >> /etc/caddy/Caddyfile\n" "$ZIEL"
+      printf "     sed -e 's|seo-master.aionepreneur.com|%s|' -e 's|127.0.0.1:3000|127.0.0.1:%s|' \\\n" "$DOMAIN" "${WEB_PORT:-3000}"
+      printf "       %s/deploy/reverse-proxy/Caddyfile-block >> /etc/caddy/Caddyfile\n" "$ZIEL"
       printf "     systemctl reload caddy\n\n"
       ;;
     *)
