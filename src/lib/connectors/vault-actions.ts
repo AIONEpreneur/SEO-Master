@@ -10,8 +10,36 @@ import { ApifyClient } from './apify'
 import { resolveSecret } from './credentials'
 import { providerLabel } from './labels'
 import type { Provider } from '@prisma/client'
+import type { DataForSeoSecret } from './credentials'
 
 export type VaultState = { error?: string; success?: string }
+
+/**
+ * Erkennt den Base64-Zugang aus dem DataForSEO-Dashboard.
+ *
+ * Dort steht neben dem API-Passwort auch "login:passwort" in Base64 – für
+ * Werkzeuge gedacht, die den Kopf selbst setzen. Wird diese Zeichenfolge
+ * eingetragen, wird sie hier zerlegt statt als Passwort verwendet.
+ */
+function entpackeBase64Zugang(wert: string): DataForSeoSecret | null {
+  // Base64 hat ein festes Alphabet und ist deutlich länger als ein Passwort.
+  if (wert.length < 24 || !/^[A-Za-z0-9+/]+=*$/.test(wert)) return null
+
+  try {
+    const klartext = Buffer.from(wert, 'base64').toString('utf8')
+    const trenner = klartext.indexOf(':')
+    if (trenner < 1) return null
+
+    const login = klartext.slice(0, trenner)
+    const password = klartext.slice(trenner + 1)
+    // Der Login-Teil muss wie eine E-Mail aussehen, sonst war es Zufall.
+    if (!login.includes('@') || !password) return null
+
+    return { login, password }
+  } catch {
+    return null
+  }
+}
 
 /**
  * Zugangsdaten im Tresor ablegen.
@@ -32,8 +60,13 @@ export async function saveCredentialAction(_prev: VaultState, formData: FormData
     const login = String(formData.get('login') ?? '').trim()
     const password = String(formData.get('password') ?? '').trim()
     if (!login || !password) return { error: 'Login und Passwort werden beide benötigt.' }
-    secret = { login, password }
-    hint = login
+
+    // DataForSEO zeigt im Dashboard zwei Zeichenfolgen: das API-Passwort und
+    // darunter "login:passwort" in Base64. Wer die zweite erwischt, bekäme
+    // sonst einen 401 und keinen Hinweis, woran es liegt.
+    const entpackt = entpackeBase64Zugang(password)
+    secret = entpackt ?? { login, password }
+    hint = entpackt?.login ?? login
   } else {
     const apiKey = String(formData.get('apiKey') ?? '').trim()
     if (!apiKey) return { error: 'Bitte den Schlüssel eintragen.' }

@@ -38,7 +38,7 @@ const PROVIDERS: Array<{
     required: true,
     fields: 'login',
     docs: 'https://app.dataforseo.com/api-access',
-    hint: 'Login ist die E-Mail-Adresse des Kontos, das Passwort der API-Schlüssel aus dem Dashboard (nicht das Anmeldepasswort).',
+    hint: 'Login ist die E-Mail-Adresse des Kontos. Als Passwort das API-Passwort aus dem Dashboard eintragen – nicht das Anmeldepasswort. Im Dashboard stehen zwei Zeichenfolgen: die kürzere ist das API-Passwort, die längere darunter enthält beides in kodierter Form (funktioniert hier ebenfalls).',
   },
   {
     key: 'FIRECRAWL',
