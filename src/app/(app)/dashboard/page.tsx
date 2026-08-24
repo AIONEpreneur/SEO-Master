@@ -1,10 +1,10 @@
 import Link from 'next/link'
-import { ScanSearch, KeyRound, AlertTriangle } from 'lucide-react'
+import { ScanSearch, KeyRound, AlertTriangle, FileText, FolderKanban, Gauge, Coins } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { availableProviders } from '@/lib/connectors/credentials'
 import { providerLabel } from '@/lib/connectors/labels'
-import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
+import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, ScoreRing, StatusPill } from '@/components/ui'
 import { Onboarding } from '@/components/onboarding'
 
 export const dynamic = 'force-dynamic'
@@ -50,45 +50,49 @@ export default async function DashboardPage() {
       {/* Nur zeigen, wenn schon analysiert wurde – sonst sagt die Einstiegshilfe
           darüber bereits dasselbe. */}
       {missingProviders.length > 0 && completedCount > 0 && (
-        <Card className="border-warn/30 bg-warn-subtle p-4">
-          <div className="flex gap-3">
-            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warn" />
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium">
-                {missingProviders.length} Anbieter noch nicht eingerichtet
-              </p>
-              <p className="mt-0.5 text-[13px] text-ink-muted">
-                Ohne {missingProviders.join(', ')} entfallen die zugehörigen Bausteine. Die Analyse läuft
-                trotzdem und weist die Lücken im Bericht aus.
-              </p>
-              <Link href="/settings/vault" className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-brand hover:underline">
-                <KeyRound size={14} />
-                Zum Datentresor
-              </Link>
-            </div>
-          </div>
+        // Einzeilig: Die ausführliche Begründung steht bereits in der
+        // Einstiegshilfe darüber. Zweimal dasselbe in voller Länge macht die
+        // Übersicht zu einer Textseite.
+        <Card className="flex flex-wrap items-center gap-x-3 gap-y-2 border-warn/30 bg-warn-subtle px-4 py-3">
+          <AlertTriangle size={16} className="shrink-0 text-warn" />
+          <p className="min-w-0 flex-1 text-[13px]">
+            <span className="font-medium">{missingProviders.length} Anbieter fehlen</span>
+            <span className="text-ink-muted"> — {missingProviders.join(', ')}. Die Analyse läuft trotzdem und weist die Lücken aus.</span>
+          </p>
+          <Link href="/settings/vault" className="inline-flex shrink-0 items-center gap-1.5 text-[13px] font-medium text-brand hover:underline">
+            <KeyRound size={14} />
+            Datentresor
+          </Link>
         </Card>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric label="Analysen" value={String(completedCount)} />
-        <Metric label="Projekte" value={String(projectCount)} />
+        <Metric icon={<FileText size={15} />} label="Analysen" value={String(completedCount)} />
+        <Metric icon={<FolderKanban size={15} />} label="Projekte" value={String(projectCount)} />
         <Metric
+          icon={<Gauge size={15} />}
           label="Ø Gesamtbewertung"
-          value={avgScores._avg.scoreOverall ? `${avgScores._avg.scoreOverall.toFixed(1)}/10` : '–'}
+          value={avgScores._avg.scoreOverall ? `${avgScores._avg.scoreOverall.toFixed(1).replace('.', ',')}` : '–'}
+          zusatz={avgScores._avg.scoreOverall ? 'von 10' : undefined}
         />
         <Metric
+          icon={<Coins size={15} />}
           label="Guthaben"
           value={session.credits >= 100000 ? 'Unbegrenzt' : session.credits.toLocaleString('de-DE')}
         />
       </div>
 
       {completedCount > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          <DisciplineCard label="SEO" score={avgScores._avg.scoreSeo} />
-          <DisciplineCard label="AEO" score={avgScores._avg.scoreAeo} />
-          <DisciplineCard label="GEO" score={avgScores._avg.scoreGeo} />
-        </div>
+        <Card className="p-5">
+          <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+            Durchschnitt über alle Läufe
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <ScoreRing score={avgScores._avg.scoreSeo} label="SEO" />
+            <ScoreRing score={avgScores._avg.scoreAeo} label="AEO" />
+            <ScoreRing score={avgScores._avg.scoreGeo} label="GEO" />
+          </div>
+        </Card>
       )}
 
       <Card>
@@ -144,23 +148,21 @@ export default async function DashboardPage() {
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  icon, label, value, zusatz,
+}: { icon: React.ReactNode; label: string; value: string; zusatz?: string }) {
   return (
     <Card className="p-4">
-      <p className="text-[12px] text-ink-muted">{label}</p>
-      <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{value}</p>
-    </Card>
-  )
-}
-
-function DisciplineCard({ label, score }: { label: string; score: number | null }) {
-  return (
-    <Card className="flex items-center justify-between p-4">
-      <div>
-        <p className="text-[13px] font-medium">{label}</p>
-        <p className="text-[12px] text-ink-subtle">Durchschnitt</p>
-      </div>
-      <ScoreBadge score={score} />
+      <p className="flex items-center gap-1.5 text-[12px] text-ink-muted">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-subtle text-brand">
+          {icon}
+        </span>
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+        {value}
+        {zusatz && <span className="ml-1 text-[13px] font-normal text-ink-subtle">{zusatz}</span>}
+      </p>
     </Card>
   )
 }

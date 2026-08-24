@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, Download, ExternalLink, RotateCw } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
-import { Button, ButtonLink, Card, CardHeader, ScoreBadge, ScoreBar, SeverityPill, StatusPill } from '@/components/ui'
+import { Button, ButtonLink, Card, CardHeader, ScoreBadge, ScoreBar, ScoreRing, SeverityPill, StatusPill } from '@/components/ui'
 import { restartAnalysisAction } from '@/lib/analysis/actions'
 import type { AnalysisResult } from '@/lib/analysis/types'
 import { ProgressWatcher } from './progress'
@@ -124,12 +124,12 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {result.modules.map((module) => (
               <Card key={module.module} className="p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <div>
+                <div className="mb-4 flex items-center gap-4">
+                  <ScoreRing score={module.score} size={58} />
+                  <div className="min-w-0">
                     <p className="text-[13px] font-semibold">{module.module}</p>
                     <p className="text-[12px] text-ink-subtle">{module.label}</p>
                   </div>
-                  <ScoreBadge score={module.score} />
                 </div>
                 <div className="space-y-2">
                   {module.criteria

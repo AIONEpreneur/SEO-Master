@@ -263,6 +263,60 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Flächen im Arbeitsbereich
+ *
+ * Eine Karte, die sich nur durch eine Linie vom Hintergrund abhebt, wirkt im
+ * dunklen Erscheinungsbild flach – alles liegt auf derselben Ebene. Der feine
+ * Lichtsaum an der Oberkante und der leichte Verlauf geben Tiefe, ohne mit
+ * Schatten zu arbeiten, die auf dunklem Grund ohnehin nicht sichtbar wären.
+ *
+ * Im hellen Erscheinungsbild kehrt sich das um: Dort trägt ein weicher
+ * Schatten, und der Lichtsaum entfällt.
+ * ------------------------------------------------------------------------ */
+.flaeche {
+  position: relative;
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px oklch(20% 0.02 295 / 0.05), 0 4px 12px -4px oklch(20% 0.02 295 / 0.06);
+}
+
+:root[data-theme="dark"] .flaeche,
+.flaeche:where(:root:not([data-theme="light"]) *) {
+  background: linear-gradient(to bottom, oklch(100% 0 0 / 0.028), transparent 45%), var(--color-surface);
+  box-shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .flaeche {
+    background: linear-gradient(to bottom, oklch(100% 0 0 / 0.028), transparent 45%), var(--color-surface);
+    box-shadow: none;
+  }
+}
+
+/* Der Lichtsaum nur im dunklen Erscheinungsbild – auf Weiss wäre er unsichtbar. */
+:root[data-theme="dark"] .flaeche::after {
+  content: '';
+  position: absolute;
+  inset-inline: 12%;
+  top: -1px;
+  height: 1px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, transparent, oklch(70% 0.2 295 / 0.4), transparent);
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .flaeche::after {
+    content: '';
+    position: absolute;
+    inset-inline: 12%;
+    top: -1px;
+    height: 1px;
+    border-radius: 9999px;
+    background: linear-gradient(to right, transparent, oklch(70% 0.2 295 / 0.4), transparent);
+    pointer-events: none;
+  }
+}
+
 /* Berichte werden als Markdown gerendert und brauchen eigene Typografie. */
 .prose-report {
   line-height: 1.7;

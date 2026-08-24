@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, FolderKanban, ScanSearch, FileText, Users2,
-  KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp,
+  KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp, Coins,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { logoutAction } from '@/lib/auth/actions'
@@ -70,7 +70,7 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
         )}
       >
         <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-[13px] font-bold text-white">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[oklch(64%_0.24_295)] to-[oklch(54%_0.24_310)] text-[13px] font-bold text-white shadow-[0_3px_12px_-2px_oklch(56%_0.244_295_/_0.55)]">
             S
           </div>
           <span className="text-sm font-semibold tracking-tight">SEO-Master</span>
@@ -97,7 +97,9 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
                       onClick={() => setOpen(false)}
                       className={cn(
                         'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors',
-                        active ? 'bg-brand-subtle text-brand' : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
+                        active
+                          ? 'bg-brand-subtle text-brand shadow-[inset_2px_0_0_var(--color-brand)]'
+                          : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
                       )}
                     >
                       <item.icon size={16} className="shrink-0" />
@@ -111,6 +113,24 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
         </nav>
 
         <div className="shrink-0 border-t border-border p-3">
+          {/*
+            Der Fuss der Leiste stand bisher weitgehend leer. Das Guthaben
+            gehört an eine Stelle, die immer sichtbar ist: Es entscheidet
+            darüber, ob der nächste Lauf überhaupt startet.
+          */}
+          <Link
+            href="/settings/usage"
+            className="mb-3 flex items-center justify-between rounded-lg border border-border px-2.5 py-2 transition-colors hover:bg-surface-muted"
+          >
+            <span className="flex items-center gap-2 text-[12px] text-ink-muted">
+              <Coins size={14} className="text-brand" />
+              Guthaben
+            </span>
+            <span className="text-[12px] font-semibold tabular-nums">
+              {session.credits >= 100000 ? '∞' : session.credits.toLocaleString('de-DE')}
+            </span>
+          </Link>
+
           <div className="mb-3 px-0.5">
             <ThemeToggle initial={theme} />
           </div>

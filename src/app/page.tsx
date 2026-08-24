@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { getSession } from '@/lib/auth/session'
 import { Produktvorschau } from '@/components/produktvorschau'
+import { Wirkungskette } from '@/components/wirkungskette'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,75 +17,18 @@ export const metadata: Metadata = {
 }
 
 const DISZIPLINEN = [
-  {
-    kuerzel: 'SEO',
-    icon: Search,
-    frage: 'Rankt die Seite bei Google?',
-    text: 'Technik, Inhaltstiefe, Keyword-Platzierung, E-E-A-T-Signale und Backlink-Profil — gewichtet nach dem, was tatsächlich zählt.',
-  },
-  {
-    kuerzel: 'AEO',
-    icon: Bot,
-    frage: 'Erscheint sie in Antwortboxen?',
-    text: 'Answer Engine Optimization: Frage-Antwort-Struktur, FAQ-Auszeichnung und die Formate, aus denen Suchmaschinen ihre Antwortboxen füllen.',
-  },
-  {
-    kuerzel: 'GEO',
-    icon: Sparkles,
-    frage: 'Kennen ChatGPT & Co. sie?',
-    text: 'Generative Engine Optimization: Zitierbarkeit, Autoritätssignale und ob KI-Crawler den Inhalt überhaupt lesen können.',
-  },
-  {
-    kuerzel: 'SERP',
-    icon: Globe,
-    frage: 'Wo steht sie wirklich?',
-    text: 'Echte Platzierungen statt Schätzungen. Inklusive KI-Übersichten und der Frage, wer die Antwortflächen oberhalb der Ergebnisse besetzt.',
-  },
-  {
-    kuerzel: 'Wettbewerb',
-    icon: Swords,
-    frage: 'Wie gross ist der Abstand?',
-    text: 'Vergleichszahlen zu den Domains, die sich dieselben Suchergebnisse teilen — und die Themen, die dort ranken und bei Ihnen fehlen.',
-  },
-  {
-    kuerzel: 'Keywords',
-    icon: TrendingUp,
-    frage: 'Wo wird Geld ausgegeben?',
-    text: 'Suchvolumen, Klickpreise und Suchabsicht zu jedem Begriff — und damit die Antwort, welche Themen Nachfrage haben und welche nur Arbeit machen.',
-  },
-]
-
-const SCHRITTE = [
-  {
-    titel: 'Adresse eingeben',
-    text: 'Eine Website-Seite oder ein Profil bei Instagram, LinkedIn, TikTok, YouTube, Facebook oder X.',
-  },
-  {
-    titel: 'Messen lassen',
-    text: 'Der Lauf holt Seiteninhalt, Platzierungen, Keyword- und Backlink-Daten und wertet sie nach festen Kriterien aus.',
-  },
-  {
-    titel: 'Bericht bekommen',
-    text: 'Bewertungen von 1 bis 10 je Disziplin, dazu eine nach Dringlichkeit und Wirkung sortierte Massnahmenliste.',
-  },
+  { kuerzel: 'SEO', icon: Search, frage: 'Rankt die Seite bei Google?', text: 'Technik, Inhalt, Keywords, Verweise.' },
+  { kuerzel: 'AEO', icon: Bot, frage: 'Steht sie in der Antwortbox?', text: 'Frage-Antwort-Struktur und FAQ-Auszeichnung.' },
+  { kuerzel: 'GEO', icon: Sparkles, frage: 'Kennen ChatGPT & Co. sie?', text: 'Zitierbarkeit und Zugang für KI-Crawler.' },
+  { kuerzel: 'SERP', icon: Globe, frage: 'Wo steht sie wirklich?', text: 'Echte Platzierungen statt Schätzungen.' },
+  { kuerzel: 'Wettbewerb', icon: Swords, frage: 'Wie gross ist der Abstand?', text: 'Wer dieselben Ergebnisse besetzt — und womit.' },
+  { kuerzel: 'Keywords', icon: TrendingUp, frage: 'Wo wird Geld ausgegeben?', text: 'Suchvolumen, Klickpreise, Kaufabsicht.' },
 ]
 
 const HALTUNG = [
-  {
-    icon: Gauge,
-    titel: 'Vergleichbar über die Zeit',
-    text: 'Die Bewertungen entstehen aus festen, messbaren Kriterien. Zwei Läufe über dieselbe Seite ergeben dieselbe Note — sonst liesse sich Fortschritt nicht von Rauschen unterscheiden.',
-  },
-  {
-    icon: FileText,
-    titel: 'Konkret genug zum Loslegen',
-    text: 'Keine Hinweise wie „Meta Description verbessern", sondern der fertige Vorschlagstext. Jeder Befund nennt Aufwand und erwartete Wirkung.',
-  },
-  {
-    icon: ShieldCheck,
-    titel: 'Ehrlich über Lücken',
-    text: 'Was nicht gemessen werden konnte, steht als solches im Bericht. Eine Bewertung auf Basis fehlender Daten wäre wertlos.',
-  },
+  { icon: Gauge, titel: 'Vergleichbar', text: 'Feste Kriterien. Zwei Läufe, dieselbe Note.' },
+  { icon: FileText, titel: 'Konkret', text: 'Fertige Vorschlagstexte statt Hinweise.' },
+  { icon: ShieldCheck, titel: 'Ehrlich', text: 'Was fehlt, steht als Lücke im Bericht.' },
 ]
 
 export default async function Startseite() {
@@ -128,10 +72,9 @@ export default async function Startseite() {
               <br className="hidden sm:block" /> statt sie zu vermuten.
             </h1>
 
-            <p className="steigt mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-[var(--schrift-matt)] sm:text-lg">
-              Eine Adresse eingeben — heraus kommt ein Bericht, der sagt, was funktioniert, was nicht
-              und was als Nächstes zu tun ist. Für Google genauso wie für die KI-Systeme, über die
-              heute immer mehr Menschen suchen.
+            <p className="steigt mx-auto mt-6 max-w-xl text-pretty text-base leading-relaxed text-[var(--schrift-matt)] sm:text-lg">
+              Eine Adresse eingeben. Heraus kommt, was zu tun ist —
+              für Google und für die KI-Systeme.
             </p>
 
             <div className="steigt mt-9 flex flex-wrap items-center justify-center gap-3">
@@ -164,10 +107,6 @@ export default async function Startseite() {
               <h2 className="mt-3 text-3xl font-semibold tracking-tight lg:text-4xl">
                 Sechs Fragen, eine Analyse
               </h2>
-              <p className="mt-4 text-[15px] leading-relaxed text-[var(--schrift-matt)]">
-                Sichtbarkeit entscheidet sich längst nicht mehr nur bei Google. Jede Disziplin
-                bekommt eine eigene Bewertung — und eigene Massnahmen.
-              </p>
             </div>
 
             <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -183,41 +122,28 @@ export default async function Startseite() {
                     {d.kuerzel}
                   </p>
                   <p className="mt-1.5 text-[15px] font-semibold">{d.frage}</p>
-                  <p className="mt-2 text-[13px] leading-relaxed text-[var(--schrift-matt)]">{d.text}</p>
+                  <p className="mt-1.5 text-[13px] text-[var(--schrift-matt)]">{d.text}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Ablauf */}
-        <section className="relative border-t border-[var(--linie)] py-20 lg:py-24">
+        {/* Wirkungskette */}
+        <section className="schimmer relative border-t border-[var(--linie)] py-20 lg:py-24">
           <div className="mx-auto max-w-6xl px-5">
             <div className="mx-auto max-w-2xl text-center">
               <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--ton-hell)]">
-                Ablauf
+                Wozu das Ganze
               </span>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight lg:text-4xl">
-                Drei Schritte bis zum Bericht
+                Von der Messung zum <span className="tonverlauf">Umsatz</span>
               </h2>
             </div>
 
-            <ol className="relative mt-12 grid gap-6 sm:grid-cols-3">
-              {/* Verbindungslinie zwischen den Schritten */}
-              <span
-                aria-hidden
-                className="absolute left-0 right-0 top-5 hidden h-px bg-gradient-to-r from-transparent via-[var(--linie-hell)] to-transparent sm:block"
-              />
-              {SCHRITTE.map((s, i) => (
-                <li key={s.titel} className="relative">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[oklch(56%_0.244_295_/_0.35)] bg-[var(--grund)] text-[13px] font-semibold text-[var(--ton-hell)]">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <p className="mt-4 text-[15px] font-semibold">{s.titel}</p>
-                  <p className="mt-2 text-[13px] leading-relaxed text-[var(--schrift-matt)]">{s.text}</p>
-                </li>
-              ))}
-            </ol>
+            <div className="mt-14">
+              <Wirkungskette />
+            </div>
           </div>
         </section>
 
@@ -235,10 +161,14 @@ export default async function Startseite() {
 
             <div className="mt-12 grid gap-4 sm:grid-cols-3">
               {HALTUNG.map((h) => (
-                <div key={h.titel} className="kante rounded-2xl p-6">
-                  <h.icon size={20} className="text-[var(--ton-hell)]" />
-                  <p className="mt-4 text-[15px] font-semibold">{h.titel}</p>
-                  <p className="mt-2 text-[13px] leading-relaxed text-[var(--schrift-matt)]">{h.text}</p>
+                <div key={h.titel} className="kante flex items-center gap-4 rounded-2xl p-5">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[oklch(56%_0.244_295_/_0.3)] bg-[oklch(56%_0.244_295_/_0.14)] text-[var(--ton-hell)]">
+                    <h.icon size={19} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-semibold">{h.titel}</p>
+                    <p className="mt-0.5 text-[13px] text-[var(--schrift-matt)]">{h.text}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -261,10 +191,10 @@ export default async function Startseite() {
                 <h2 className="text-2xl font-semibold tracking-tight lg:text-3xl">
                   {session ? 'Bereit für den nächsten Lauf' : 'Zugang'}
                 </h2>
-                <p className="mx-auto mt-3 max-w-xl text-[15px] leading-relaxed text-[var(--schrift-matt)]">
+                <p className="mx-auto mt-3 max-w-md text-[15px] text-[var(--schrift-matt)]">
                   {session
-                    ? 'Der Arbeitsbereich enthält alle bisherigen Analysen, Recherchen, Projekte und Berichte.'
-                    : 'Diese Instanz wird derzeit intern betrieben. Neue Arbeitsbereiche werden auf Anfrage eingerichtet.'}
+                    ? 'Alle Analysen, Recherchen und Berichte an einem Ort.'
+                    : 'Derzeit intern betrieben. Arbeitsbereiche auf Anfrage.'}
                 </p>
                 <Link
                   href={session ? '/dashboard' : '/login'}

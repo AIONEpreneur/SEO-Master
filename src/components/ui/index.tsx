@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils/cn'
 
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
-    <div className={cn('rounded-xl border border-border bg-surface', className)}>{children}</div>
+    <div className={cn('flaeche rounded-xl border border-border', className)}>{children}</div>
   )
 }
 
@@ -179,6 +179,64 @@ export function EmptyState({
 }
 
 /** Waagerechter Balken für einen Wert von 0–10. */
+/**
+ * Bewertung als Ring.
+ *
+ * Eine Zahl allein muss gelesen und eingeordnet werden; der gefüllte Bogen
+ * ist auf einen Blick erfasst. Deshalb steht er dort, wo eine Bewertung die
+ * Hauptaussage der Fläche ist – neben Fliesstext bleibt die Plakette.
+ *
+ * Der Kreisumfang wird aus dem Radius berechnet und über strokeDasharray
+ * anteilig gefüllt; so bleibt der Ring bei jeder Grösse exakt.
+ */
+export function ScoreRing({
+  score,
+  label,
+  size = 76,
+}: {
+  score: number | null
+  label?: string
+  size?: number
+}) {
+  const strich = size / 11
+  const radius = (size - strich) / 2
+  const umfang = 2 * Math.PI * radius
+  const anteil = score === null ? 0 : Math.max(0, Math.min(10, score)) / 10
+
+  const ton =
+    score === null ? 'var(--color-ink-subtle)'
+    : score >= 7.5 ? 'var(--color-good)'
+    : score >= 5 ? 'var(--color-warn)'
+    : 'var(--color-bad)'
+
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="-rotate-90" aria-hidden>
+          <circle
+            cx={size / 2} cy={size / 2} r={radius}
+            fill="none" stroke="var(--color-surface-muted)" strokeWidth={strich}
+          />
+          {score !== null && (
+            <circle
+              cx={size / 2} cy={size / 2} r={radius}
+              fill="none" stroke={ton} strokeWidth={strich} strokeLinecap="round"
+              strokeDasharray={`${umfang * anteil} ${umfang}`}
+              className="transition-[stroke-dasharray] duration-700"
+            />
+          )}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-[15px] font-semibold tabular-nums leading-none">
+            {score === null ? '–' : score.toFixed(1).replace('.', ',')}
+          </span>
+        </div>
+      </div>
+      {label && <span className="text-[12px] font-medium text-ink-muted">{label}</span>}
+    </div>
+  )
+}
+
 export function ScoreBar({ score, label }: { score: number; label?: string }) {
   const tone = score >= 6.5 ? 'bg-good' : score >= 4 ? 'bg-warn' : 'bg-bad'
   return (

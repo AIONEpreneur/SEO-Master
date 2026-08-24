@@ -25,7 +25,7 @@ export async function Onboarding({ organizationId }: { organizationId: string })
       erledigt: providers.DATAFORSEO && providers.FIRECRAWL,
       icon: KeyRound,
       titel: 'Zugangsdaten hinterlegen',
-      text: 'Ohne DataForSEO gibt es keine Platzierungen, ohne Firecrawl nur das ausgelieferte HTML. Nach dem Eintragen je Anbieter auf „Prüfen" klicken.',
+      text: 'DataForSEO für Platzierungen, Firecrawl für den Seiteninhalt.',
       ziel: '/settings/vault',
       knopf: 'Zum Datentresor',
     },
@@ -33,7 +33,7 @@ export async function Onboarding({ organizationId }: { organizationId: string })
       erledigt: projektAnzahl > 0,
       icon: FolderKanban,
       titel: 'Projekt anlegen',
-      text: 'Ein Projekt hält Website, Markt und Wettbewerber fest. Erst dadurch werden Analysen über die Zeit vergleichbar.',
+      text: 'Macht Analysen über die Zeit vergleichbar.',
       ziel: '/projects',
       knopf: 'Projekt anlegen',
     },
@@ -41,7 +41,7 @@ export async function Onboarding({ organizationId }: { organizationId: string })
       erledigt: analyseAnzahl > 0,
       icon: ScanSearch,
       titel: 'Erste Analyse starten',
-      text: 'Adresse eingeben, Bausteine wählen, starten. Der Lauf dauert ein bis fünf Minuten und arbeitet im Hintergrund weiter.',
+      text: 'Adresse eingeben, starten. Dauert ein bis fünf Minuten.',
       ziel: '/analyses/new',
       knopf: 'Analyse starten',
     },
@@ -55,65 +55,81 @@ export async function Onboarding({ organizationId }: { organizationId: string })
 
   return (
     <Card className="overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-        <div>
-          <h2 className="text-[15px] font-semibold tracking-tight">Erste Schritte</h2>
-          <p className="mt-0.5 text-[13px] text-ink-muted">
-            In drei Schritten zur ersten vollständigen Analyse
-          </p>
+      {/*
+        Waagerecht statt untereinander: Die drei Schritte sind eine kurze
+        Abfolge, kein Textabschnitt. Gestapelt beanspruchten sie den halben
+        Bildschirm und standen damit vor dem, wofür die Übersicht da ist.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-4">
+        <h2 className="text-[15px] font-semibold tracking-tight">Erste Schritte</h2>
+        <div className="flex items-center gap-2.5">
+          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-surface-muted">
+            <div
+              className="h-full rounded-full bg-brand transition-all duration-500"
+              style={{ width: `${(erledigteAnzahl / schritte.length) * 100}%` }}
+            />
+          </div>
+          <span className="text-[12px] tabular-nums text-ink-subtle">
+            {erledigteAnzahl}/{schritte.length}
+          </span>
         </div>
-        <span className="text-[13px] tabular-nums text-ink-subtle">
-          {erledigteAnzahl} von {schritte.length}
-        </span>
       </div>
 
-      <ol className="divide-y divide-border">
+      <ol className="grid gap-3 px-5 pb-5 sm:grid-cols-3">
         {schritte.map((schritt, i) => {
           const istNaechster = i === offen
           return (
-            <li key={schritt.titel} className={cn('flex gap-4 px-5 py-4', schritt.erledigt && 'opacity-60')}>
-              <div
-                className={cn(
-                  'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold',
-                  schritt.erledigt
-                    ? 'bg-good-subtle text-good'
-                    : istNaechster
-                      ? 'bg-brand text-white'
-                      : 'bg-surface-muted text-ink-subtle',
-                )}
-              >
-                {schritt.erledigt ? <Check size={14} /> : i + 1}
+            <li
+              key={schritt.titel}
+              className={cn(
+                'rounded-xl border p-4 transition-colors',
+                schritt.erledigt
+                  ? 'border-border bg-surface-muted/50'
+                  : istNaechster
+                    ? 'border-brand/40 bg-brand-subtle'
+                    : 'border-border',
+              )}
+            >
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={cn(
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold',
+                    schritt.erledigt
+                      ? 'bg-good-subtle text-good'
+                      : istNaechster
+                        ? 'bg-brand text-white'
+                        : 'bg-surface-muted text-ink-subtle',
+                  )}
+                >
+                  {schritt.erledigt ? <Check size={14} /> : i + 1}
+                </span>
+                <schritt.icon
+                  size={15}
+                  className={cn('shrink-0', istNaechster ? 'text-brand' : 'text-ink-subtle')}
+                />
               </div>
 
-              <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-medium">{schritt.titel}</p>
-                <p className="mt-0.5 text-[13px] leading-relaxed text-ink-muted">{schritt.text}</p>
+              <p className={cn('mt-3 text-[13px] font-medium', schritt.erledigt && 'text-ink-muted')}>
+                {schritt.titel}
+              </p>
+              <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">{schritt.text}</p>
 
-                {!schritt.erledigt && (
-                  <Link
-                    href={schritt.ziel}
-                    className={cn(
-                      'mt-2.5 inline-flex items-center gap-1.5 text-[13px] font-medium',
-                      istNaechster ? 'text-brand hover:underline' : 'text-ink-muted hover:text-ink',
-                    )}
-                  >
-                    {schritt.knopf}
-                    <ArrowRight size={13} />
-                  </Link>
-                )}
-              </div>
+              {!schritt.erledigt && (
+                <Link
+                  href={schritt.ziel}
+                  className={cn(
+                    'mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium',
+                    istNaechster ? 'text-brand hover:underline' : 'text-ink-muted hover:text-ink',
+                  )}
+                >
+                  {schritt.knopf}
+                  <ArrowRight size={12} />
+                </Link>
+              )}
             </li>
           )
         })}
       </ol>
-
-      <div className="border-t border-border bg-surface-muted px-5 py-3">
-        <p className="text-[12px] leading-relaxed text-ink-muted">
-          <span className="font-medium">Gut zu wissen:</span> Fehlt ein Anbieter, läuft die Analyse
-          trotzdem — sie weist die Lücke dann im Bericht aus, statt auf unvollständiger Grundlage zu
-          bewerten. Apify wird ausschliesslich für Social-Media-Profile gebraucht.
-        </p>
-      </div>
     </Card>
   )
 }
