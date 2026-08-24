@@ -25,7 +25,12 @@ DOMAIN="${1:-}"
 BENUTZER="seomaster"
 ZIEL="/home/$BENUTZER/app"
 REPO="${REPO_URL:-https://github.com/AIONEpreneur/SEO-Master.git}"
-BRANCH="${REPO_BRANCH:-main}"
+
+# Standard ist der Zweig, aus dem dieses Skript stammt. Das vermeidet den
+# häufigsten Fehlgriff: von 'main' zu holen, während die Arbeit auf einem
+# Entwicklungszweig liegt und 'main' noch leer ist.
+EIGENER_ZWEIG="$(git -C "$(dirname "$0")/.." rev-parse --abbrev-ref HEAD 2>/dev/null)"
+BRANCH="${REPO_BRANCH:-${EIGENER_ZWEIG:-main}}"
 
 [ -n "$DOMAIN" ] || abbruch "Es fehlt die Domain." \
 "Aufruf:  bash deploy/setup-vps.sh seo.meine-domain.de
@@ -44,17 +49,33 @@ printf "%sDomain: %s%s\n" "$GRAU" "$DOMAIN" "$AUS"
 
 schritt "DNS prüfen"
 SERVER_IP="$(curl -fsS --max-time 10 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
-DOMAIN_IP="$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1)"
+SERVER_IP6="$(curl -fsS --max-time 10 https://api6.ipify.org 2>/dev/null || true)"
 
-if [ -z "$DOMAIN_IP" ]; then
+# getent liefert A- und AAAA-Einträge gemischt; sie werden getrennt bewertet.
+ALLE="$(getent ahosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | sort -u)"
+IPV4="$(printf '%s\n' "$ALLE" | grep -E '^[0-9]+\.' || true)"
+IPV6="$(printf '%s\n' "$ALLE" | grep ':' || true)"
+
+if [ -z "$ALLE" ]; then
   warn "$DOMAIN löst noch nicht auf."
   hinweis "Der A-Record fehlt oder ist noch nicht verteilt. Die Einrichtung läuft weiter,"
   hinweis "das TLS-Zertifikat kommt aber erst, wenn der Eintrag greift."
-elif [ "$DOMAIN_IP" != "$SERVER_IP" ]; then
-  warn "$DOMAIN zeigt auf $DOMAIN_IP, dieser Server hat $SERVER_IP."
-  hinweis "A-Record im Hostinger-Panel korrigieren, sonst kommt kein Zertifikat zustande."
 else
-  ok "$DOMAIN zeigt auf diesen Server ($SERVER_IP)"
+  if printf '%s\n' "$IPV4" | grep -qx "$SERVER_IP"; then
+    ok "$DOMAIN zeigt per IPv4 auf diesen Server ($SERVER_IP)"
+  else
+    warn "$DOMAIN zeigt auf $(printf '%s' "$IPV4" | tr '\n' ' '), dieser Server hat $SERVER_IP."
+    hinweis "A-Record im DNS-Panel auf $SERVER_IP ändern, sonst kommt kein Zertifikat zustande."
+  fi
+
+  # Ein IPv6-Eintrag, den dieser Server nicht bedient, führt Browser an ihm
+  # vorbei: sie versuchen IPv6 zuerst und landen beim alten Ziel.
+  if [ -n "$IPV6" ] && ! printf '%s\n' "$IPV6" | grep -qx "${SERVER_IP6:-KEINE}"; then
+    warn "Es bestehen AAAA-Einträge (IPv6), die nicht auf diesen Server zeigen:"
+    hinweis "$(printf '%s' "$IPV6" | tr '\n' ' ')"
+    hinweis "Browser bevorzugen IPv6 und landen damit am alten Ziel."
+    hinweis "Diese AAAA-Einträge im DNS-Panel löschen${SERVER_IP6:+ oder auf $SERVER_IP6 ändern}."
+  fi
 fi
 
 # --- System ---------------------------------------------------------------

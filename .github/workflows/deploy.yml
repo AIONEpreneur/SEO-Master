@@ -6,7 +6,9 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    # Solange die Arbeit auf einem Entwicklungszweig liegt, rollt auch dieser
+    # aus. Nach dem Zusammenführen genügt 'main'.
+    branches: [main, claude/seo-analysis-app-backend-hbufiw]
   workflow_dispatch:
 
 concurrency:
@@ -38,7 +40,6 @@ jobs:
     name: Ausrollen
     needs: check
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
       - name: Auf dem VPS aktualisieren
         uses: appleboy/ssh-action@v1
@@ -49,8 +50,9 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.VPS_PATH }}
-            git fetch origin main
-            git reset --hard origin/main
+            ZWEIG="${{ github.ref_name }}"
+            git fetch origin "$ZWEIG"
+            git reset --hard "origin/$ZWEIG"
             docker compose -f docker-compose.prod.yml build
             docker compose -f docker-compose.prod.yml up -d
             docker image prune -f

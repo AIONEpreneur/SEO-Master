@@ -38,18 +38,40 @@ analysierten Seiten. Analyseergebnisse verlassen den Server nie.
 Die bestehende Website bei Hostinger bleibt davon unberührt — die Anwendung
 läuft unter einer eigenen Subdomain.
 
-## Schritt 1: DNS
+## Schritt 1: DNS umstellen
 
-Im Hostinger-Panel unter **Domains → DNS-Zone** einen A-Record anlegen:
+Die Subdomain muss auf den VPS zeigen. Steht sie bereits im Hostinger-Panel
+als Website oder Subdomain, zeigt sie aufs Webhosting — dann wird der Eintrag
+geändert, nicht neu angelegt.
+
+Im Hostinger-Panel unter **Domains → DNS-Zone** für die Subdomain:
 
 | Typ | Name | Wert | TTL |
 |---|---|---|---|
-| A | `seo` | *IP-Adresse des VPS* | 3600 |
+| A | `seo-master` | *IPv4 des VPS* | 3600 |
 
-Die IP steht im VPS-Panel. Bis die Änderung greift, können bis zu 30 Minuten
-vergehen. Prüfen mit `dig seo.ihre-domain.de +short`.
+Drei Dinge, an denen es sonst scheitert:
 
----
+- **Genau ein A-Record.** Mehrere Einträge verteilen den Zugriff auf mehrere
+  Ziele; die Hälfte der Aufrufe landet dann am falschen Ort.
+- **AAAA-Einträge löschen**, sofern der VPS nicht selbst unter IPv6 erreichbar
+  ist. Browser versuchen IPv6 zuerst — ein übrig gebliebener AAAA-Eintrag
+  führt am VPS vorbei, obwohl der A-Record stimmt.
+- **Bestehende Website entkoppeln.** Ist die Subdomain im Panel als Website
+  angelegt, gehört sie dort entfernt, sonst setzt Hostinger den DNS-Eintrag
+  zurück.
+
+Die IPv4 des VPS steht im Hostinger-Panel unter **VPS → Übersicht**.
+
+Prüfen, ob die Änderung angekommen ist:
+
+```bash
+bash deploy/dns-check.sh seo-master.aionepreneur.com IPV4-DES-VPS
+```
+
+Das Skript zeigt, worauf die Domain gerade zeigt, und meldet mehrfache
+A-Records sowie übrig gebliebene AAAA-Einträge. Bis eine Änderung überall
+angekommen ist, vergehen meist 5 bis 30 Minuten.
 
 ## Schritt 2: Einrichten
 
@@ -62,9 +84,15 @@ ssh root@IP-DES-VPS
 Dann ein Befehl — die eigene Domain einsetzen:
 
 ```bash
-git clone https://github.com/AIONEpreneur/SEO-Master.git /tmp/seo-master
-bash /tmp/seo-master/deploy/setup-vps.sh seo.ihre-domain.de
+git clone -b claude/seo-analysis-app-backend-hbufiw \
+  https://github.com/AIONEpreneur/SEO-Master.git /tmp/seo-master
+
+bash /tmp/seo-master/deploy/setup-vps.sh seo-master.aionepreneur.com
 ```
+
+Der Zweig muss beim Klonen angegeben werden, solange die Arbeit nicht auf
+`main` liegt — sonst wird ein leeres Verzeichnis geholt. Das Skript übernimmt
+denselben Zweig danach automatisch für die Anwendung.
 
 Das Skript erledigt alles: System aktualisieren, Docker installieren,
 Firewall einrichten (nur SSH, HTTP, HTTPS), ein eigenes Benutzerkonto für die
@@ -86,7 +114,7 @@ weiter — das Zertifikat kommt dann nach, sobald der Eintrag greift.
 
 ## Schritt 3: Erstes Konto und Zugangsdaten
 
-`https://seo.ihre-domain.de` aufrufen. Beim ersten Aufruf führt die Seite
+`https://seo-master.aionepreneur.com` aufrufen. Beim ersten Aufruf führt die Seite
 direkt zur Einrichtung; das erste Konto erhält die Verwaltungsrechte.
 
 Danach **Einstellungen → Datentresor**: je Anbieter die Zugangsdaten eintragen
@@ -180,7 +208,7 @@ Arbeitsspeicher und Anbieter-Kontingent.
 ## Wenn etwas nicht läuft
 
 **Kein TLS-Zertifikat.** Zeigt der A-Record schon auf den VPS?
-`dig seo.ihre-domain.de +short`. Sind Port 80 und 443 offen? `ufw status`.
+`dig seo-master.aionepreneur.com +short`. Sind Port 80 und 443 offen? `ufw status`.
 Let's Encrypt braucht Port 80 erreichbar. Protokoll: `docker compose -f
 docker-compose.prod.yml logs caddy`.
 
