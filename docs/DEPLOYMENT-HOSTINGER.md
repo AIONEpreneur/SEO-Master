@@ -89,11 +89,17 @@ getent ahosts meine-andere-domain.de | head -1
 Prüfen, ob die Änderung angekommen ist:
 
 ```bash
-bash deploy/dns-check.sh seo-master.aionepreneur.com IPV4-DES-VPS
+bash deploy/dns-check.sh seo-master.aionepreneur.com 31.97.182.22
 ```
 
-Das Skript meldet mehrfache A-Records und übrig gebliebene AAAA-Einträge. Bis
-eine Änderung überall angekommen ist, vergehen meist 5 bis 30 Minuten.
+Das Skript fragt die autoritativen Nameserver der Domain direkt. Das ist
+wichtig: Der Resolver des eigenen Rechners liefert nach einer Änderung noch
+minutenlang den alten Wert und lässt eine korrekte Umstellung wie einen
+Fehlschlag aussehen. Weichen beide voneinander ab, sagt das Skript das
+ausdrücklich — massgeblich ist die autoritative Auskunft.
+
+Gemeldet werden ausserdem mehrfache A-Records und übrig gebliebene
+AAAA-Einträge.
 
 ## Schritt 2: Einrichten
 
