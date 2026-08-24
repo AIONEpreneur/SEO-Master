@@ -287,6 +287,34 @@ fi
 
 # --- Starten --------------------------------------------------------------
 
+# --- Alte Datenbank und neue Zugangsdaten ---------------------------------
+#
+# POSTGRES_PASSWORD wirkt nur beim allerersten Start eines Datenbank-Volumes.
+# Bleibt ein Volume aus einem früheren Versuch liegen und wird die .env neu
+# erzeugt, passen die Zugangsdaten nicht mehr zusammen – die Migration
+# scheitert dann mit einer Anmeldemeldung, die nach einem Fehler im Programm
+# aussieht.
+if [ "$NEU_ANGELEGT" = "1" ]; then
+  VOLUME="$(docker volume ls -q --filter name=app_postgres_data 2>/dev/null | head -1)"
+  if [ -n "$VOLUME" ]; then
+    schritt "Vorhandene Datenbank prüfen"
+    warn "Es liegt bereits ein Datenbank-Volume vor ($VOLUME)."
+    hinweis "Die Zugangsdaten wurden gerade neu erzeugt und passen nicht dazu."
+
+    # Ist die Datenbank leer, kann sie gefahrlos neu angelegt werden.
+    TABELLEN="$(docker run --rm -v "$VOLUME:/var/lib/postgresql/data" postgres:16-alpine \
+      sh -c 'ls /var/lib/postgresql/data/base 2>/dev/null | wc -l' 2>/dev/null || echo 0)"
+
+    if [ "${INHALT_BEHALTEN:-0}" = "1" ]; then
+      hinweis "INHALT_BEHALTEN gesetzt – Volume bleibt unangetastet."
+    else
+      docker volume rm "$VOLUME" >/dev/null 2>&1 \
+        && ok "Leeres Volume entfernt, die Datenbank wird neu angelegt" \
+        || warn "Volume liess sich nicht entfernen – läuft noch ein Container darauf?"
+    fi
+  fi
+fi
+
 schritt "Container bauen und starten (einige Minuten)"
 
 # Wurde beim letzten Lauf die andere Fassung verwendet, laufen deren
@@ -307,6 +335,20 @@ if su - "$BENUTZER" -c "cd $ZIEL && docker compose -f $COMPOSE up -d --build" >"
 else
   printf "\n"
   tail -20 "$BAULOG"
+  if grep -qi "password authentication failed\|migrate.*didn't complete" "$BAULOG"; then
+    abbruch "Die Datenbank hat die Zugangsdaten abgelehnt." \
+"Das passiert, wenn ein Datenbank-Volume aus einem früheren Versuch liegen
+geblieben ist: Es behält sein ursprüngliches Passwort, die neue
+Konfiguration hat ein anderes.
+
+Zurücksetzen und neu aufbauen – dabei gehen die Daten dieser Anwendung
+verloren, andere Anwendungen auf dem Server bleiben unberührt:
+
+  cd $ZIEL && docker compose -f $COMPOSE down -v && docker compose -f $COMPOSE up -d --build
+
+Vollständige Ausgabe:  cat $BAULOG"
+  fi
+
   abbruch "Das Bauen der Container ist fehlgeschlagen." \
 "Vollständige Ausgabe:  cat $BAULOG
 
