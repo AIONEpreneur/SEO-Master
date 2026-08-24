@@ -1,0 +1,360 @@
+// SEO-Master – Datenmodell
+// Mandantenfähig (Multi-Tenant) von Beginn an: jede Organisation ist ein
+// abgeschotteter Datenraum. Notwendig, damit die App später als bezahltes
+// SaaS-Produkt für externe Kundinnen betrieben werden kann.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identität & Mandanten
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  passwordHash String
+  isSuperAdmin Boolean   @default(false)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  memberships Membership[]
+  sessions    Session[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      Plan     @default(INTERNAL)
+  // Guthaben in Credits. 1 Credit ~ 1 externer API-Call-Block; verhindert,
+  // dass zahlende Kundinnen unbegrenzt fremde API-Kosten verursachen.
+  credits   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+  projects    Project[]
+  credentials Credential[]
+  analyses    Analysis[]
+  auditLogs   AuditLog[]
+  usage       UsageRecord[]
+
+  @@map("organizations")
+}
+
+model Membership {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String
+  role           Role     @default(MEMBER)
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("memberships")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum Plan {
+  INTERNAL
+  FREE
+  STARTER
+  PRO
+  AGENCY
+}
+
+// ---------------------------------------------------------------------------
+// Datentresor: API-Zugangsdaten, verschlüsselt at rest (AES-256-GCM)
+// ---------------------------------------------------------------------------
+
+model Credential {
+  id             String    @id @default(cuid())
+  organizationId String
+  provider       Provider
+  label          String
+  // Chiffrat des JSON-Secrets. Klartext verlässt niemals den Server und wird
+  // nie an den Browser ausgeliefert – die UI sieht ausschliesslich `hint`.
+  ciphertext     String
+  iv             String
+  authTag        String
+  keyVersion     Int       @default(1)
+  hint           String?
+  isActive       Boolean   @default(true)
+  lastCheckedAt  DateTime?
+  lastCheckOk    Boolean?
+  lastCheckError String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider, label])
+  @@index([organizationId])
+  @@map("credentials")
+}
+
+enum Provider {
+  DATAFORSEO
+  FIRECRAWL
+  APIFY
+  ANTHROPIC
+  PAGESPEED
+  SEARCH_CONSOLE
+}
+
+// ---------------------------------------------------------------------------
+// Projekte: eine Website oder ein Social-Profil, das dauerhaft beobachtet wird
+// ---------------------------------------------------------------------------
+
+model Project {
+  id             String     @id @default(cuid())
+  organizationId String
+  name           String
+  kind           TargetKind @default(WEBSITE)
+  // Website: vollständige URL. Social: Profil-URL.
+  url            String
+  domain         String?
+  locationCode   Int        @default(2276) // Deutschland
+  languageCode   String     @default("de")
+  description    String?
+  isArchived     Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  analyses     Analysis[]
+  competitors  Competitor[]
+  keywords     TrackedKeyword[]
+
+  @@index([organizationId])
+  @@map("projects")
+}
+
+enum TargetKind {
+  WEBSITE
+  SOCIAL_PROFILE
+}
+
+model Competitor {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String?
+  url       String
+  domain    String
+  // Automatisch aus SERP-Überschneidung gefunden statt manuell gepflegt.
+  isAuto    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, domain])
+  @@index([projectId])
+  @@map("competitors")
+}
+
+model TrackedKeyword {
+  id           String   @id @default(cuid())
+  projectId    String
+  keyword      String
+  searchVolume Int?
+  difficulty   Int?
+  intent       String?
+  createdAt    DateTime @default(now())
+
+  project  Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rankings KeywordRanking[]
+
+  @@unique([projectId, keyword])
+  @@index([projectId])
+  @@map("tracked_keywords")
+}
+
+model KeywordRanking {
+  id           String   @id @default(cuid())
+  keywordId    String
+  position     Int?
+  url          String?
+  // Rohdaten des SERP-Eintrags für spätere Auswertungen ohne erneuten API-Call.
+  serpFeatures Json?
+  checkedAt    DateTime @default(now())
+
+  keyword TrackedKeyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+
+  @@index([keywordId, checkedAt])
+  @@map("keyword_rankings")
+}
+
+// ---------------------------------------------------------------------------
+// Analysen: ein Lauf über einen oder mehrere Analysebausteine
+// ---------------------------------------------------------------------------
+
+model Analysis {
+  id             String         @id @default(cuid())
+  organizationId String
+  projectId      String?
+  createdById    String?
+  targetUrl      String
+  targetKind     TargetKind     @default(WEBSITE)
+  // Welche Bausteine laufen sollen: ["SEO","AEO","GEO","SERP","COMPETITORS"]
+  modules        String[]
+  status         AnalysisStatus @default(QUEUED)
+  progress       Int            @default(0)
+  currentStep    String?
+  error          String?
+  jobId          String?
+
+  scoreSeo     Float?
+  scoreAeo     Float?
+  scoreGeo     Float?
+  scoreSerp    Float?
+  scoreOverall Float?
+
+  // Vollständiges strukturiertes Ergebnis (siehe src/lib/analysis/types.ts).
+  result      Json?
+  // Rohantworten der Anbieter, für Nachvollziehbarkeit und Re-Auswertung.
+  rawData     Json?
+  creditsUsed Int   @default(0)
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  reports      Report[]
+  steps        AnalysisStep[]
+
+  @@index([organizationId, createdAt])
+  @@index([projectId])
+  @@index([status])
+  @@map("analyses")
+}
+
+enum AnalysisStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// Einzelschritt eines Laufs – macht sichtbar, welcher Anbieter wie lange
+// gebraucht hat und wo ein Lauf gescheitert ist.
+model AnalysisStep {
+  id         String     @id @default(cuid())
+  analysisId String
+  key        String
+  label      String
+  status     StepStatus @default(PENDING)
+  provider   Provider?
+  message    String?
+  durationMs Int?
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId])
+  @@map("analysis_steps")
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  DONE
+  SKIPPED
+  FAILED
+}
+
+model Report {
+  id          String    @id @default(cuid())
+  analysisId  String
+  title       String
+  // Markdown-Fassung des Berichts – Quelle für HTML- und PDF-Ausgabe.
+  markdown    String
+  summary     String?
+  // Öffentlicher Freigabe-Link (optional, widerrufbar).
+  shareToken  String?   @unique
+  sharedUntil DateTime?
+  createdAt   DateTime  @default(now())
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId])
+  @@map("reports")
+}
+
+// ---------------------------------------------------------------------------
+// Betrieb: Nachvollziehbarkeit und Kostenkontrolle
+// ---------------------------------------------------------------------------
+
+model UsageRecord {
+  id             String   @id @default(cuid())
+  organizationId String
+  provider       Provider
+  operation      String
+  units          Int      @default(1)
+  costCredits    Int      @default(0)
+  analysisId     String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("usage_records")
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  action         String
+  target         String?
+  metadata       Json?
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}

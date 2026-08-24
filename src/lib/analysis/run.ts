@@ -1,0 +1,509 @@
+import { db } from '@/lib/db'
+import { resolveSecret } from '@/lib/connectors/credentials'
+import { DataForSeoClient } from '@/lib/connectors/dataforseo'
+import { FirecrawlClient } from '@/lib/connectors/firecrawl'
+import { ApifyClient, detectPlatform, DEFAULT_ACTORS, actorInput, normalizeProfile } from '@/lib/connectors/apify'
+import { PageSpeedClient } from '@/lib/connectors/pagespeed'
+import { extractSignals, type PageSignals } from './extract'
+import { analyzeSeo } from './seo'
+import { analyzeAeo } from './aeo'
+import { analyzeGeo, parseRobots } from './geo'
+import { analyzeSerp, extractPeopleAlsoAsk } from './serp'
+import { analyzeCompetitors, type CompetitorProfile } from './competitors'
+import { analyzeSocial } from './social'
+import { generateReport, sortFindings } from './report'
+import type { AnalysisResult, ModuleResult } from './types'
+import type { Provider } from '@prisma/client'
+
+export type ModuleKey = 'SEO' | 'AEO' | 'GEO' | 'SERP' | 'COMPETITORS'
+
+type StepUpdate = (step: string, progress: number) => Promise<void>
+
+/**
+ * Ein vollständiger Analyselauf.
+ *
+ * Aufbau in vier Phasen, entsprechend dem etablierten Analyse-Workflow:
+ *   1. Seite laden und Kontext verstehen
+ *   2. Daten bei den Anbietern erheben
+ *   3. Je Baustein bewerten
+ *   4. Bericht formulieren
+ *
+ * Grundsatz: Ein Ausfall bei einem Anbieter beendet nicht den ganzen Lauf.
+ * Der betroffene Baustein entfällt und wird im Bericht als fehlend benannt,
+ * statt eine Bewertung auf Basis fehlender Daten vorzutäuschen.
+ */
+export async function runAnalysis(params: {
+  analysisId: string
+  organizationId: string
+  targetUrl: string
+  targetKind: 'WEBSITE' | 'SOCIAL_PROFILE'
+  modules: ModuleKey[]
+  locationCode: number
+  languageCode: string
+  seedKeywords?: string[]
+  competitorDomains?: string[]
+  onStep?: StepUpdate
+}): Promise<{ result: AnalysisResult; report: { markdown: string; summary: string }; raw: Record<string, unknown> }> {
+  const { analysisId, organizationId, targetUrl, targetKind, modules, locationCode, languageCode } = params
+  const step: StepUpdate = params.onStep ?? (async () => {})
+
+  const skipped: AnalysisResult['meta']['skipped'] = []
+  const providersUsed = new Set<string>()
+  const raw: Record<string, unknown> = {}
+  const moduleResults: ModuleResult[] = []
+
+  const domain = safeDomain(targetUrl)
+
+  // --- Zugangsdaten auflösen -----------------------------------------------
+  const [dfsSecret, fcSecret, apifySecret, anthropicSecret, psiSecret] = await Promise.all([
+    resolveSecret<{ login: string; password: string }>(organizationId, 'DATAFORSEO'),
+    resolveSecret<{ apiKey: string }>(organizationId, 'FIRECRAWL'),
+    resolveSecret<{ apiKey: string }>(organizationId, 'APIFY'),
+    resolveSecret<{ apiKey: string }>(organizationId, 'ANTHROPIC'),
+    resolveSecret<{ apiKey: string }>(organizationId, 'PAGESPEED'),
+  ])
+
+  const dfs = dfsSecret ? new DataForSeoClient(dfsSecret) : null
+  const firecrawl = fcSecret ? new FirecrawlClient(fcSecret) : null
+  const apify = apifySecret ? new ApifyClient(apifySecret) : null
+  const pagespeed = new PageSpeedClient(psiSecret?.apiKey)
+
+  // =========================================================================
+  // Social-Profil: eigener, kürzerer Weg
+  // =========================================================================
+  if (targetKind === 'SOCIAL_PROFILE') {
+    await step('Social-Profil wird abgerufen', 20)
+    const platform = detectPlatform(targetUrl)
+
+    if (!platform) {
+      throw new Error(`Plattform aus der URL nicht erkennbar: ${targetUrl}`)
+    }
+    if (!apify) {
+      throw new Error('Für Social-Profile werden Apify-Zugangsdaten benötigt. Im Datentresor hinterlegen.')
+    }
+
+    const items = await apify.runActor<Record<string, unknown>>(
+      DEFAULT_ACTORS[platform],
+      actorInput(platform, targetUrl),
+    )
+    providersUsed.add('Apify')
+    raw.apify = items.slice(0, 3)
+
+    if (items.length === 0) {
+      throw new Error('Der Actor hat keine Daten geliefert. Profil öffentlich erreichbar?')
+    }
+
+    await step('Profil wird bewertet', 60)
+    const profile = normalizeProfile(platform, items[0])
+    moduleResults.push(analyzeSocial({ profile }))
+
+    const result = assemble({ targetUrl, targetKind, domain, modules: ['SOCIAL'], moduleResults, skipped, providersUsed, languageCode, locationCode })
+
+    await step('Bericht wird erstellt', 85)
+    const report = await generateReport(result, anthropicSecret?.apiKey ?? null)
+    if (anthropicSecret) providersUsed.add('Anthropic')
+    result.executiveSummary = report.summary
+
+    return { result, report, raw }
+  }
+
+  // =========================================================================
+  // Website
+  // =========================================================================
+
+  // --- Phase 1: Seite laden -------------------------------------------------
+  await step('Seite wird geladen', 10)
+
+  let signals: PageSignals
+  let robots: { content: string | null; blocksAiCrawlers: string[] } | null = null
+
+  {
+    let html: string | null = null
+    let renderedText: string | null = null
+    let statusCode: number | null = null
+
+    if (firecrawl) {
+      try {
+        const scraped = await firecrawl.scrape(targetUrl)
+        providersUsed.add('Firecrawl')
+        html = scraped?.rawHtml ?? scraped?.html ?? null
+        renderedText = scraped?.markdown ?? null
+        statusCode = scraped?.metadata?.statusCode ?? null
+        raw.firecrawl = { metadata: scraped?.metadata, markdownLength: scraped?.markdown?.length }
+      } catch (error) {
+        skipped.push({ module: 'Firecrawl-Abruf', reason: message(error) })
+      }
+    }
+
+    if (!html) {
+      // Direkter Abruf als Rückfallebene. Zeigt nur das ausgelieferte HTML –
+      // genau das, was auch ein einfacher KI-Crawler sieht.
+      const response = await fetch(targetUrl, {
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; SEO-Master/1.0; +Sichtbarkeitsanalyse)' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(45_000),
+      })
+      statusCode = response.status
+      html = await response.text()
+      if (!firecrawl) {
+        skipped.push({
+          module: 'JavaScript-Rendering',
+          reason: 'Keine Firecrawl-Zugangsdaten – gemessen wurde nur das ausgelieferte HTML',
+        })
+      }
+    }
+
+    signals = extractSignals({ url: targetUrl, html, renderedText, statusCode })
+    raw.signals = { ...signals, text: signals.text.slice(0, 2000) }
+  }
+
+  // robots.txt: entscheidet darüber, ob KI-Crawler überhaupt lesen dürfen.
+  await step('robots.txt wird geprüft', 18)
+  try {
+    const response = await fetch(new URL('/robots.txt', targetUrl).toString(), {
+      signal: AbortSignal.timeout(15_000),
+    })
+    robots = parseRobots(response.ok ? await response.text() : null)
+  } catch {
+    robots = parseRobots(null)
+  }
+
+  // Hauptkeyword bestimmen: bevorzugt vorgegeben, sonst aus der Seite abgeleitet.
+  const primaryKeyword = params.seedKeywords?.[0] ?? deriveKeyword(signals)
+  const keywordsToCheck = (params.seedKeywords?.length ? params.seedKeywords : [primaryKeyword])
+    .filter((k): k is string => Boolean(k))
+    .slice(0, 5)
+
+  // --- Phase 2: Daten erheben ----------------------------------------------
+  await step('Messdaten werden erhoben', 30)
+
+  let psiResult = null
+  let backlinks = null
+  let domainRank = null
+  let rankedKeywords = null
+  let llmMentions = null
+  const serps: Array<{ keyword: string; result: any }> = []
+
+  // Die Erhebungen sind voneinander unabhängig und laufen deshalb parallel.
+  const collectors: Promise<void>[] = []
+
+  collectors.push(
+    (async () => {
+      try {
+        psiResult = await pagespeed.analyze(targetUrl, 'mobile')
+        providersUsed.add('PageSpeed Insights')
+        raw.pagespeed = psiResult
+      } catch (error) {
+        skipped.push({ module: 'Geschwindigkeitsmessung', reason: message(error) })
+      }
+    })(),
+  )
+
+  if (dfs && domain) {
+    collectors.push(
+      (async () => {
+        try {
+          backlinks = await dfs.backlinksSummary(domain)
+          raw.backlinks = backlinks
+          providersUsed.add('DataForSEO')
+        } catch (error) {
+          skipped.push({ module: 'Backlink-Profil', reason: message(error) })
+        }
+      })(),
+    )
+
+    collectors.push(
+      (async () => {
+        try {
+          domainRank = await dfs.domainRankOverview({ target: domain, locationCode, languageCode })
+          raw.domainRank = domainRank
+          providersUsed.add('DataForSEO')
+        } catch (error) {
+          skipped.push({ module: 'Domain-Kennzahlen', reason: message(error) })
+        }
+      })(),
+    )
+
+    if (modules.includes('SERP')) {
+      collectors.push(
+        (async () => {
+          try {
+            rankedKeywords = await dfs.rankedKeywords({ target: domain, locationCode, languageCode, limit: 200 })
+            raw.rankedKeywords = { total: rankedKeywords?.total_count, sample: rankedKeywords?.items?.slice(0, 20) }
+            providersUsed.add('DataForSEO')
+          } catch (error) {
+            skipped.push({ module: 'Ranking-Übersicht', reason: message(error) })
+          }
+        })(),
+      )
+
+      // Suchergebnisse nacheinander abrufen, um das Anfragelimit nicht zu reissen.
+      collectors.push(
+        (async () => {
+          for (const keyword of keywordsToCheck) {
+            try {
+              const result = await dfs.serpOrganic({ keyword, locationCode, languageCode, depth: 20 })
+              serps.push({ keyword, result })
+              providersUsed.add('DataForSEO')
+            } catch (error) {
+              skipped.push({ module: `Suchergebnis "${keyword}"`, reason: message(error) })
+            }
+          }
+          raw.serps = serps.map((s) => ({ keyword: s.keyword, itemsCount: s.result?.items?.length }))
+        })(),
+      )
+    }
+
+    if (modules.includes('GEO') && primaryKeyword) {
+      collectors.push(
+        (async () => {
+          try {
+            llmMentions = await dfs.llmMentionsTopDomains({ keyword: primaryKeyword, locationCode, languageCode, limit: 20 })
+            raw.llmMentions = llmMentions
+            providersUsed.add('DataForSEO')
+          } catch (error) {
+            // Die AI-Optimization-Endpunkte sind nicht in jedem Tarif enthalten.
+            skipped.push({ module: 'LLM-Sichtbarkeit', reason: message(error) })
+          }
+        })(),
+      )
+    }
+  } else if (!dfs) {
+    skipped.push({
+      module: 'DataForSEO-Daten',
+      reason: 'Keine Zugangsdaten hinterlegt – Rankings, Backlinks und Wettbewerb entfallen',
+    })
+  }
+
+  await Promise.all(collectors)
+
+  // --- Phase 3: Bewerten ----------------------------------------------------
+  await step('Bewertung läuft', 60)
+
+  const paa = serps.flatMap((s) => extractPeopleAlsoAsk(s.result))
+
+  if (modules.includes('SEO')) {
+    moduleResults.push(analyzeSeo({ signals, pagespeed: psiResult, backlinks, domainRank, primaryKeyword }))
+  }
+  if (modules.includes('AEO')) {
+    moduleResults.push(analyzeAeo({ signals, serp: serps[0]?.result ?? null, peopleAlsoAsk: [...new Set(paa)] }))
+  }
+  if (modules.includes('GEO')) {
+    moduleResults.push(analyzeGeo({ signals, backlinks, llmMentions, robotsTxt: robots }))
+  }
+  if (modules.includes('SERP')) {
+    if (!dfs || !domain) {
+      skipped.push({ module: 'SERP', reason: 'Ohne DataForSEO-Zugangsdaten nicht möglich' })
+    } else {
+      moduleResults.push(analyzeSerp({ domain, serps, rankedKeywords, domainRank }))
+    }
+  }
+
+  // --- Wettbewerb -----------------------------------------------------------
+  if (modules.includes('COMPETITORS')) {
+    if (!dfs || !domain) {
+      skipped.push({ module: 'COMPETITORS', reason: 'Ohne DataForSEO-Zugangsdaten nicht möglich' })
+    } else {
+      await step('Wettbewerb wird verglichen', 75)
+      try {
+        const competitors = await dfs.competitorsDomain({ target: domain, locationCode, languageCode, limit: 10 })
+        providersUsed.add('DataForSEO')
+        raw.competitors = competitors
+
+        // Vorgegebene Wettbewerber haben Vorrang vor automatisch gefundenen.
+        const rivalDomains = (
+          params.competitorDomains?.length
+            ? params.competitorDomains
+            : (competitors?.items ?? []).map((c) => c.domain).filter(Boolean)
+        )
+          .map((d) => String(d).replace(/^www\./, ''))
+          .filter((d) => d && d !== domain)
+          .slice(0, 3)
+
+        // Keyword-Lücken je Wettbewerber und deren Backlink-Profil.
+        const gaps = await Promise.all(
+          rivalDomains.map(async (competitor) => {
+            try {
+              const result = await dfs.domainIntersection({
+                target1: domain,
+                target2: competitor,
+                locationCode,
+                languageCode,
+                limit: 50,
+              })
+              return { competitor, result }
+            } catch (error) {
+              skipped.push({ module: `Keyword-Lücken ${competitor}`, reason: message(error) })
+              return { competitor, result: null }
+            }
+          }),
+        )
+
+        const profiles: CompetitorProfile[] = await Promise.all(
+          (competitors?.items ?? []).slice(0, 6).map(async (c) => {
+            const d = (c.domain ?? '').replace(/^www\./, '')
+            let refDomains: number | null = null
+            try {
+              const summary = await dfs.backlinksSummary(d)
+              refDomains = summary?.referring_main_domains ?? summary?.referring_domains ?? null
+            } catch {
+              // Ohne Backlink-Daten bleibt der Vergleich unvollständig, aber nutzbar.
+            }
+            return {
+              domain: d,
+              keywordsTop100: c.full_domain_metrics?.organic?.count ?? null,
+              estimatedTraffic: Math.round(c.full_domain_metrics?.organic?.etv ?? 0),
+              referringDomains: refDomains,
+              avgPosition: c.avg_position ?? null,
+              sharedKeywords: c.intersections ?? null,
+            }
+          }),
+        )
+
+        moduleResults.push(
+          analyzeCompetitors({
+            domain,
+            own: { domainRank, backlinks },
+            competitors,
+            gaps,
+            competitorProfiles: profiles,
+          }),
+        )
+      } catch (error) {
+        skipped.push({ module: 'COMPETITORS', reason: message(error) })
+      }
+    }
+  }
+
+  // --- Phase 4: Bericht -----------------------------------------------------
+  await step('Bericht wird erstellt', 88)
+
+  const result = assemble({
+    targetUrl,
+    targetKind,
+    domain,
+    modules,
+    moduleResults,
+    skipped,
+    providersUsed,
+    languageCode,
+    locationCode,
+    pageType: guessPageType(signals),
+    pageLanguage: signals.lang,
+  })
+
+  const report = await generateReport(result, anthropicSecret?.apiKey ?? null)
+  if (anthropicSecret) providersUsed.add('Anthropic')
+  result.executiveSummary = report.summary
+  result.meta.providersUsed = [...providersUsed]
+
+  // Verbrauch je Anbieter festhalten – Grundlage für Kostenkontrolle und
+  // spätere Abrechnung gegenüber zahlenden Kundinnen.
+  if (dfs && dfs.totalCost > 0) {
+    await db.usageRecord.create({
+      data: {
+        organizationId,
+        provider: 'DATAFORSEO' as Provider,
+        operation: 'analysis',
+        units: 1,
+        // Kosten in Cent, kaufmännisch aufgerundet.
+        costCredits: Math.ceil(dfs.totalCost * 100),
+        analysisId,
+      },
+    })
+  }
+
+  return { result, report, raw }
+}
+
+// ---------------------------------------------------------------------------
+
+function assemble(input: {
+  targetUrl: string
+  targetKind: 'WEBSITE' | 'SOCIAL_PROFILE'
+  domain: string | null
+  modules: string[]
+  moduleResults: ModuleResult[]
+  skipped: AnalysisResult['meta']['skipped']
+  providersUsed: Set<string>
+  languageCode: string
+  locationCode: number
+  pageType?: string | null
+  pageLanguage?: string | null
+}): AnalysisResult {
+  const find = (m: string) => input.moduleResults.find((r) => r.module === m)?.score ?? null
+
+  const seo = find('SEO')
+  const aeo = find('AEO')
+  const geo = find('GEO')
+  const serp = find('SERP')
+
+  const present = input.moduleResults.map((m) => m.score)
+  const overall = present.length ? Math.round((present.reduce((a, b) => a + b, 0) / present.length) * 10) / 10 : null
+
+  return {
+    target: { url: input.targetUrl, kind: input.targetKind, domain: input.domain },
+    meta: {
+      analyzedAt: new Date().toISOString(),
+      pageType: input.pageType ?? null,
+      language: input.pageLanguage ?? input.languageCode,
+      market: marketName(input.locationCode),
+      modules: input.modules,
+      providersUsed: [...input.providersUsed],
+      skipped: input.skipped,
+    },
+    scores: { seo, aeo, geo, serp, overall },
+    modules: input.moduleResults,
+    priorities: sortFindings(input.moduleResults.flatMap((m) => m.findings)),
+    executiveSummary: null,
+  }
+}
+
+/**
+ * Hauptkeyword aus der Seite ableiten, wenn keines vorgegeben ist.
+ * Der H1 ist dafür das verlässlichste Signal, danach der Title.
+ */
+function deriveKeyword(signals: PageSignals): string | null {
+  const source = signals.h1[0] ?? signals.title
+  if (!source) return null
+  // Markenzusätze nach Trennzeichen abschneiden.
+  const cleaned = source.split(/[|–—•·]/)[0].trim()
+  const words = cleaned.split(/\s+/).filter((w) => w.length > 2)
+  return words.slice(0, 5).join(' ') || null
+}
+
+function guessPageType(signals: PageSignals): string {
+  const types = signals.schemaTypes.join(' ').toLowerCase()
+  if (types.includes('blogposting') || types.includes('article')) return 'Blogartikel'
+  if (types.includes('product')) return 'Produktseite'
+  if (types.includes('localbusiness')) return 'Lokale Unternehmensseite'
+  if (signals.urlDepth === 0) return 'Startseite'
+  if (signals.faqBlocks.length > 3) return 'FAQ-Seite'
+  if (signals.wordCount > 1200) return 'Ausführliche Inhaltsseite'
+  return 'Landing Page'
+}
+
+/** Ländercodes von DataForSEO für die verbreitetsten Märkte. */
+const MARKETS: Record<number, string> = {
+  2276: 'Deutschland',
+  2040: 'Österreich',
+  2756: 'Schweiz',
+  2826: 'Vereinigtes Königreich',
+  2840: 'USA',
+}
+
+function marketName(code: number): string {
+  return MARKETS[code] ?? `Standort ${code}`
+}
+
+function safeDomain(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return null
+  }
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message.slice(0, 200) : 'Unbekannter Fehler'
+}
