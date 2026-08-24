@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth/session'
+import { isRegistrationOpen } from '@/lib/auth/actions'
 import { db } from '@/lib/db'
 import { LoginForm } from './form'
 
@@ -14,6 +15,8 @@ export default async function LoginPage() {
   const hasUsers = (await db.user.count()) > 0
   if (!hasUsers) redirect('/register')
 
+  const registrierungOffen = await isRegistrationOpen()
+
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
@@ -24,12 +27,14 @@ export default async function LoginPage() {
           </p>
         </div>
         <LoginForm />
-        <p className="mt-6 text-center text-[13px] text-ink-muted">
-          Noch kein Zugang?{' '}
-          <Link href="/register" className="text-brand hover:underline">
-            Arbeitsbereich anlegen
-          </Link>
-        </p>
+        {registrierungOffen && (
+          <p className="mt-6 text-center text-[13px] text-ink-muted">
+            Noch kein Zugang?{' '}
+            <Link href="/register" className="text-brand hover:underline">
+              Arbeitsbereich anlegen
+            </Link>
+          </p>
+        )}
       </div>
     </main>
   )

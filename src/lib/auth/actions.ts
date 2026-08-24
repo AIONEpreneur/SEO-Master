@@ -46,18 +46,19 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   if (!organizationName) return { error: 'Bitte einen Namen für den Arbeitsbereich angeben.' }
 
-  // Solange die App intern läuft, kann die Registrierung auf bekannte
-  // Adressen begrenzt werden. Für den späteren Verkauf bleibt die Liste leer.
-  const allowlist = env().ALLOWED_SIGNUP_EMAILS?.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)
-  if (allowlist?.length && !allowlist.includes(parsed.data.email)) {
-    return { error: 'Diese E-Mail-Adresse ist für die Registrierung nicht freigeschaltet.' }
+  const isFirstUser = (await db.user.count()) === 0
+
+  // Nach dem ersten Konto ist die Registrierung geschlossen, sofern sie nicht
+  // ausdrücklich geöffnet wurde. Ohne diese Sperre könnte sich jede Person,
+  // die die Adresse kennt, einen eigenen Arbeitsbereich anlegen.
+  if (!isFirstUser && !registrationOpen(parsed.data.email)) {
+    return { error: 'Die Registrierung ist geschlossen. Bitte wenden Sie sich an die Verwaltung dieser Instanz.' }
   }
 
   const existing = await db.user.findUnique({ where: { email: parsed.data.email } })
   if (existing) return { error: 'Für diese E-Mail-Adresse besteht bereits ein Konto.' }
 
   const slug = await uniqueSlug(organizationName)
-  const isFirstUser = (await db.user.count()) === 0
 
   const user = await db.user.create({
     data: {
@@ -90,6 +91,30 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
 export async function logoutAction() {
   await destroySession()
   redirect('/login')
+}
+
+/**
+ * Darf sich diese Adresse registrieren?
+ *
+ * Reihenfolge: eine hinterlegte Adressliste hat Vorrang, danach entscheidet
+ * ALLOW_PUBLIC_SIGNUP. Ist beides nicht gesetzt, bleibt die Registrierung zu.
+ */
+function registrationOpen(email: string): boolean {
+  const e = env()
+  const allowlist = e.ALLOWED_SIGNUP_EMAILS?.split(',')
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean)
+
+  if (allowlist?.length) return allowlist.includes(email)
+  return e.ALLOW_PUBLIC_SIGNUP === 'true'
+}
+
+/** Für die Anzeige: Ist die Registrierung überhaupt offen? */
+export async function isRegistrationOpen(): Promise<boolean> {
+  if ((await db.user.count()) === 0) return true
+  const e = env()
+  const allowlist = e.ALLOWED_SIGNUP_EMAILS?.split(',').map((x) => x.trim()).filter(Boolean)
+  return Boolean(allowlist?.length) || e.ALLOW_PUBLIC_SIGNUP === 'true'
 }
 
 async function uniqueSlug(name: string): Promise<string> {

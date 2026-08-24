@@ -5,7 +5,6 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'SEO-Master — Sichtbarkeitsanalyse',
   description: 'SEO-, AEO-, GEO-, SERP- und Wettbewerbsanalyse für Websites und Social-Profile.',
-  robots: { index: false, follow: false },
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

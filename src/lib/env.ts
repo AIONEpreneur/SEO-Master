@@ -17,8 +17,11 @@ const schema = z.object({
 
   APP_URL: z.string().url().default('http://localhost:3000'),
   // Wenn gesetzt, dürfen sich nur diese E-Mail-Adressen registrieren.
-  // Leer = offene Registrierung (für den späteren Verkauf).
   ALLOWED_SIGNUP_EMAILS: z.string().optional(),
+  // Registrierung für beliebige Personen öffnen. Standardmässig geschlossen:
+  // Eine offen erreichbare Anwendung, bei der sich jede Person ein Konto
+  // anlegen kann, ist beim internen Betrieb nie gewollt.
+  ALLOW_PUBLIC_SIGNUP: z.enum(['true', 'false']).default('false'),
   // Fallback-Zugangsdaten für den Einzelbetrieb. Im Mehrmandantenbetrieb
   // hinterlegt jede Organisation ihre Schlüssel stattdessen im Tresor.
   DATAFORSEO_LOGIN: z.string().optional(),
