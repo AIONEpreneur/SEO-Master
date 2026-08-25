@@ -33,6 +33,10 @@ export default async function AdminSeite() {
           <Link href="/admin/analysen" className="font-medium text-brand hover:underline">
             Läufe
           </Link>
+          <span className="text-ink-subtle">·</span>
+          <Link href="/admin/kalkulation" className="font-medium text-brand hover:underline">
+            Kalkulation
+          </Link>
         </div>
       </header>
 

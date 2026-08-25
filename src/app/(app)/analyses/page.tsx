@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ScanSearch, Trash2 } from 'lucide-react'
+import { ScanSearch, Trash2, Download } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
@@ -23,11 +23,29 @@ export default async function AnalysesPage() {
           <h1 className="text-xl font-semibold tracking-tight">Analysen</h1>
           <p className="mt-0.5 text-[13px] text-ink-muted">{analyses.length} Läufe</p>
         </div>
-        <ButtonLink href="/analyses/new">
-          <ScanSearch size={16} />
-          Neue Analyse
-        </ButtonLink>
+        <div className="flex items-center gap-2">
+          {analyses.length > 0 && (
+            <ButtonLink href="/api/export" variant="secondary">
+              <Download size={16} />
+              Alles herunterladen
+            </ButtonLink>
+          )}
+          <ButtonLink href="/analyses/new">
+            <ScanSearch size={16} />
+            Neue Analyse
+          </ButtonLink>
+        </div>
       </header>
+
+      {analyses.length > 0 && (
+        <Card className="flex flex-wrap items-center gap-x-3 gap-y-1 border-border bg-surface-muted px-4 py-3">
+          <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-ink-muted">
+            Deine Historie bleibt erhalten — sie wird weder nach einer Frist gelöscht noch beim Tarifwechsel
+            entfernt. „Alles herunterladen" gibt ein Zip mit allen Berichten, nach Projekt sortiert, samt
+            Messwerten und einer Übersicht für Excel.
+          </p>
+        </Card>
+      )}
 
       <Card>
         {analyses.length === 0 ? (

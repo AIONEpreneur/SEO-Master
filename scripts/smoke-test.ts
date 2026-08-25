@@ -29,6 +29,8 @@ import { bezeichnung, wiederkehrendeBefunde } from '../src/lib/analysis/wiederke
 import { VERWENDETE_ANBIETER } from '../src/lib/connectors/credentials'
 import { reichtGuthaben, guthabenHinweis, KOSTEN_ANALYSE } from '../src/lib/billing/guthaben'
 import { MINUTEN_JE_ANALYSE } from '../src/lib/admin/kennzahlen'
+import { deckung, empfohlenesKontingent } from '../src/lib/admin/kalkulation'
+import { csvVon, dateiname } from '../src/app/api/export/route'
 import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
 import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
@@ -1113,6 +1115,114 @@ function main() {
     'Die Zeitersparnis wird als Schätzung ausgewiesen',
     /Geschätzt, nicht gemessen/.test(uebersicht),
     `${MINUTEN_JE_ANALYSE} Minuten je Analyse – eine Annahme, keine Messung`,
+  )
+
+  section('Kalkulation rechnet mit dem teuren Fall')
+
+  // Gerechnet wird in Cent. Ein Tarif von 29 Euro netto bei 45 Cent je
+  // teurem Lauf: Der Preis traegt rechnerisch 64 Laeufe.
+  const d = deckung({ preisCent: 2900, kostenJeLaufCent: 30, ungunstJeLaufCent: 45, laeufeImMonat: 4 })
+  check('Der teure Fall deckt weniger Laeufe als der uebliche', d.gedeckteLaeufeUngunst < d.gedeckteLaeufe)
+  check('Bei erwarteter Nutzung bleibt etwas uebrig', d.traegtSich && d.margeCent === 2900 - 120)
+
+  const verlust = deckung({ preisCent: 900, kostenJeLaufCent: 30, ungunstJeLaufCent: 45, laeufeImMonat: 40 })
+  check(
+    'Vielnutzung unter zu kleinem Preis wird als Verlust erkannt',
+    !verlust.traegtSich && verlust.margeCent < 0,
+    `${verlust.margeCent} Cent`,
+  )
+
+  check(
+    'Das empfohlene Kontingent rechnet mit dem teuren Lauf',
+    empfohlenesKontingent({ preisCent: 2900, ungunstJeLaufCent: 45, zielmarge: 0.7 }) ===
+      Math.floor((2900 * 0.3) / 45),
+    'ein Kontingent ist ein Versprechen',
+  )
+  check(
+    'Eine hoehere Zielmarge erlaubt weniger Analysen',
+    empfohlenesKontingent({ preisCent: 2900, ungunstJeLaufCent: 45, zielmarge: 0.8 }) <
+      empfohlenesKontingent({ preisCent: 2900, ungunstJeLaufCent: 45, zielmarge: 0.5 }),
+  )
+  check(
+    'Ohne bekannte Kosten wird nichts versprochen',
+    empfohlenesKontingent({ preisCent: 2900, ungunstJeLaufCent: 0, zielmarge: 0.7 }) === 0,
+  )
+
+  section('Die Historie laesst sich mitnehmen')
+
+  const exportZeilen = [
+    {
+      createdAt: new Date('2026-08-25T10:00:00Z'),
+      targetUrl: 'https://www.kirstenbiema.com/blog/was-kostet-claude/',
+      project: { name: 'Kirsten; Biema' },
+      modules: ['SEO', 'AEO'],
+      scoreOverall: 7.25,
+      scoreSeo: 8,
+      scoreAeo: 6.5,
+      scoreGeo: null,
+      scoreSerp: null,
+    },
+  ]
+  const csv = csvVon(exportZeilen)
+  check('Die Uebersicht traegt eine Kopfzeile', /Datum;Projekt;Adresse/.test(csv))
+  check(
+    'Semikolon im Text sprengt die Spalten nicht',
+    /"Kirsten; Biema"/.test(csv),
+    'sonst verrutscht in Excel die ganze Zeile',
+  )
+  check(
+    'Zahlen kommen mit Dezimalkomma',
+    /;7,3;8,0;6,5;;/.test(csv),
+    'sonst rechnet die deutsche Tabellenkalkulation nicht damit',
+  )
+  check('Leere Noten bleiben leer statt null', !/null/.test(csv))
+  check(
+    'Die Datei beginnt mit einer Byte-Reihenfolge-Marke',
+    csv.charCodeAt(0) === 0xfeff,
+    'sonst zerfallen Umlaute in Excel',
+  )
+
+  check(
+    'Dateinamen vertragen sich mit Windows',
+    dateiname('Projekt: A/B "Test"?') === 'Projekt- A-B -Test--',
+    dateiname('Projekt: A/B "Test"?'),
+  )
+  check('Ein leerer Name bleibt nicht leer', dateiname('   ') === 'ohne-namen')
+
+  const exportQuelltext = readFileSync(
+    join(dir, '..', '..', 'src', 'app', 'api', 'export', 'route.ts'),
+    'utf8',
+  )
+  check(
+    'Der Export bleibt beim eigenen Arbeitsbereich',
+    /organizationId: session\.organizationId/.test(exportQuelltext),
+    'sonst laedt jemand fremde Historien herunter',
+  )
+  check(
+    'Ohne Anmeldung kein Export',
+    /if \(!session\) return new Response\('Nicht angemeldet', \{ status: 401 \}\)/.test(exportQuelltext),
+  )
+
+  // Zugesagt ist, dass die Historie bleibt. Ein Aufraeumauftrag oder eine
+  // Aufbewahrungsfrist wuerde die Zusage brechen, ohne dass es auffaellt.
+  const loeschstellen = execSync(
+    "grep -rn 'analysis.deleteMany\\|analysis.delete(' src || true",
+    { encoding: 'utf8' },
+  )
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+  check(
+    'Analysen werden nur auf ausdrueckliche Anweisung geloescht',
+    loeschstellen.length === 1 && /deleteAnalysisAction|actions\.ts/.test(loeschstellen[0]),
+    loeschstellen.join(' · ') || 'keine',
+  )
+  check(
+    'Es gibt keine Aufbewahrungsfrist',
+    !/retention|aufbewahrungsfrist|olderThan/i.test(
+      execSync("cat src/worker/index.ts", { encoding: 'utf8' }),
+    ),
+    'eine Frist wuerde die Historie still verfallen lassen',
   )
 
   section('Bericht')
