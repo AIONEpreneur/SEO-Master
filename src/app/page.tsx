@@ -7,6 +7,7 @@ import {
 import { getSession } from '@/lib/auth/session'
 import { Produktvorschau } from '@/components/produktvorschau'
 import { Wirkungskette } from '@/components/wirkungskette'
+import { SchnellCheck } from '@/components/schnellcheck'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,6 +90,10 @@ export default async function Startseite() {
                 <Lock size={14} />
                 Zugang derzeit auf Einladung
               </span>
+            </div>
+
+            <div className="steigt mx-auto mt-10">
+              <SchnellCheck />
             </div>
 
             <div className="steigt mx-auto mt-16 max-w-4xl text-left">

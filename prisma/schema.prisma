@@ -72,6 +72,7 @@ model Organization {
   usage             UsageRecord[]
   keywordResearches KeywordResearch[]
   invitations       Invitation[]
+  erledigteBefunde  ErledigterBefund[]
 
   @@map("organizations")
 }
@@ -217,6 +218,10 @@ model Project {
   languageCode   String     @default("de")
   description    String?
   isArchived     Boolean    @default(false)
+  // Monatliche Prüfung ohne Zutun: Der Worker stellt fällige Projekte selbst
+  // wieder ein. Erst dadurch entsteht der Verlauf, der ein Abo trägt.
+  autoPruefung   Boolean    @default(false)
+  autoZuletzt    DateTime?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -227,6 +232,29 @@ model Project {
 
   @@index([organizationId])
   @@map("projects")
+}
+
+/**
+ * Abgehakte Befunde.
+ * Der Schlüssel ist bewusst (Organisation, Adresse, Befund-Kennung) und nicht
+ * die Analyse: Ein Häkchen soll den nächsten Lauf überleben. Wer "Title zu
+ * kurz" auf seiner Startseite abgehakt hat, hat es für diese Seite erledigt –
+ * nicht für einen bestimmten Bericht. Meldet ein späterer Lauf denselben
+ * Befund erneut, zeigt die Oberfläche das als Rückfall statt als neues Thema.
+ */
+model ErledigterBefund {
+  id             String   @id @default(cuid())
+  organizationId String
+  targetUrl      String
+  findingId      String
+  erledigtVonId  String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, targetUrl, findingId])
+  @@index([organizationId, targetUrl])
+  @@map("erledigte_befunde")
 }
 
 enum TargetKind {

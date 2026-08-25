@@ -5,9 +5,16 @@ import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { Button, ButtonLink, Card, CardHeader, ScoreBadge, ScoreBar, ScoreRing, SeverityPill, StatusPill } from '@/components/ui'
 import { restartAnalysisAction } from '@/lib/analysis/actions'
+import { hakeBefundAbAction } from '@/lib/analysis/aufgaben-actions'
+import { vergleiche, verlaufsSatz } from '@/lib/analysis/verlauf'
 import type { AnalysisResult } from '@/lib/analysis/types'
+import { TrendingUp, TrendingDown, CheckCircle2, PlusCircle, Undo2, Check } from 'lucide-react'
+import { cn } from '@/lib/utils/cn'
 import { ProgressWatcher } from './progress'
-import { ReportView } from './report-view'
+import { Freigabe } from './freigabe'
+import { headers } from 'next/headers'
+import { env } from '@/lib/env'
+import { ReportView } from '@/components/report-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +35,57 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
   const result = analysis.result as AnalysisResult | null
   const report = analysis.reports[0] ?? null
   const isRunning = analysis.status === 'QUEUED' || analysis.status === 'RUNNING'
+
+  // Verlauf und Häkchen gehören zur Adresse, nicht zum einzelnen Lauf.
+  const [vorheriger, erledigteZeilen] = await Promise.all([
+    analysis.status === 'COMPLETED'
+      ? db.analysis.findFirst({
+          where: {
+            organizationId: session.organizationId,
+            targetUrl: analysis.targetUrl,
+            status: 'COMPLETED',
+            createdAt: { lt: analysis.createdAt },
+            id: { not: analysis.id },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { result: true, createdAt: true },
+        })
+      : null,
+    db.erledigterBefund.findMany({
+      where: { organizationId: session.organizationId, targetUrl: analysis.targetUrl },
+      select: { findingId: true },
+    }),
+  ])
+
+  const erledigt = new Set(erledigteZeilen.map((z) => z.findingId))
+
+  // Für den Freigabe-Link: dieselbe Herleitung wie bei den Einladungen –
+  // der localhost-Vorgabewert darf nie in einem verschickten Link landen.
+  const konfiguriert = env().APP_URL
+  let basis = konfiguriert
+  if (!konfiguriert || /^https?:\/\/localhost(:|$)/.test(konfiguriert)) {
+    const hdrs = await headers()
+    const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host')
+    if (host) {
+      const protokoll = hdrs.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
+      basis = `${protokoll}://${host}`
+    }
+  }
+  const freigabeLink = report?.shareToken ? `${basis.replace(/\/+$/, '')}/b/${report.shareToken}` : null
+  const vorherResult = vorheriger?.result as AnalysisResult | null
+  const verlauf =
+    result && vorherResult
+      ? vergleiche({
+          aktuell: result,
+          vorher: vorherResult,
+          vorherigesDatum: vorheriger!.createdAt.toLocaleDateString('de-DE', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+          }),
+          erledigt,
+        })
+      : null
 
   return (
     <div className="space-y-6">
@@ -204,31 +262,123 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
             </Card>
           )}
 
+          {verlauf && (
+            <Card>
+              <CardHeader
+                title="Seit dem letzten Lauf"
+                description={`Verglichen mit der Analyse vom ${verlauf.vorherigesDatum}. ${verlaufsSatz(verlauf)}`}
+              />
+              <div className="grid grid-cols-2 gap-3 px-5 pb-4 sm:grid-cols-4">
+                {[verlauf.gesamt, ...verlauf.schritte].map((s) => (
+                  <div key={s.module} className="rounded-lg border border-border px-3 py-2.5">
+                    <p className="text-[12px] text-ink-subtle">{s.module}</p>
+                    <p className="mt-1 flex items-baseline gap-1.5 text-[15px] font-semibold tabular-nums">
+                      {s.nachher?.toFixed(1).replace('.', ',')}
+                      {s.delta !== null && s.delta !== 0 && (
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-0.5 text-[12px] font-medium',
+                            s.delta > 0 ? 'text-good' : 'text-bad',
+                          )}
+                        >
+                          {s.delta > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                          {s.delta > 0 ? '+' : ''}
+                          {s.delta.toFixed(1).replace('.', ',')}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {(verlauf.behoben.length > 0 || verlauf.neu.length > 0 || verlauf.rueckfaelle.length > 0) && (
+                <ul className="divide-y divide-border border-t border-border">
+                  {verlauf.behoben.map((b) => (
+                    <li key={`weg-${b.id}`} className="flex items-center gap-2.5 px-5 py-2.5 text-[13px]">
+                      <CheckCircle2 size={14} className="shrink-0 text-good" />
+                      <span className="min-w-0 flex-1 truncate">{b.title}</span>
+                      <span className="shrink-0 text-[12px] text-good">behoben</span>
+                    </li>
+                  ))}
+                  {verlauf.neu.map((b) => (
+                    <li key={`neu-${b.id}`} className="flex items-center gap-2.5 px-5 py-2.5 text-[13px]">
+                      <PlusCircle size={14} className="shrink-0 text-warn" />
+                      <span className="min-w-0 flex-1 truncate">{b.title}</span>
+                      <span className="shrink-0 text-[12px] text-warn">neu</span>
+                    </li>
+                  ))}
+                  {verlauf.rueckfaelle.map((b) => (
+                    <li key={`rueck-${b.id}`} className="flex items-center gap-2.5 px-5 py-2.5 text-[13px]">
+                      <Undo2 size={14} className="shrink-0 text-bad" />
+                      <span className="min-w-0 flex-1 truncate">{b.title}</span>
+                      <span className="shrink-0 text-[12px] text-bad">
+                        abgehakt, aber erneut gemessen
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
+
           {result.priorities.length > 0 && (
             <Card>
               <CardHeader
                 title="Handlungsempfehlungen"
-                description={`${result.priorities.length} Befunde, nach Dringlichkeit und Wirkung sortiert`}
+                description={`${result.priorities.filter((f) => erledigt.has(f.id)).length} von ${result.priorities.length} abgehakt. Ein Häkchen gilt für diese Adresse und bleibt über spätere Läufe bestehen.`}
               />
               <ul className="divide-y divide-border">
-                {result.priorities.map((finding) => (
-                  <li key={finding.id} className="px-5 py-4">
-                    <div className="flex items-start gap-3">
-                      <SeverityPill severity={finding.severity} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-semibold">{finding.title}</p>
-                        <p className="mt-1 text-[13px] text-ink-muted">{finding.why}</p>
-                        <p className="mt-2 text-[13px]">
-                          <span className="font-medium">Zu tun: </span>
-                          {finding.action}
-                        </p>
-                        <p className="mt-1.5 text-[12px] text-ink-subtle">
-                          Aufwand: {finding.effort} · Wirkung: {finding.impact}
-                        </p>
+                {result.priorities.map((finding) => {
+                  const abgehakt = erledigt.has(finding.id)
+                  return (
+                    <li key={finding.id} className={cn('px-5 py-4', abgehakt && 'opacity-55')}>
+                      <div className="flex items-start gap-3">
+                        {/* Abhaken schreibt – in der Fremdansicht gibt es nur den Zustand. */}
+                        {session.nurAnsicht ? (
+                          <span
+                            className={cn(
+                              'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border',
+                              abgehakt ? 'border-good bg-good-subtle text-good' : 'border-border-strong',
+                            )}
+                          >
+                            {abgehakt && <Check size={13} />}
+                          </span>
+                        ) : (
+                          <form action={hakeBefundAbAction} className="shrink-0">
+                            <input type="hidden" name="targetUrl" value={analysis.targetUrl} />
+                            <input type="hidden" name="findingId" value={finding.id} />
+                            <input type="hidden" name="analysisId" value={analysis.id} />
+                            <button
+                              type="submit"
+                              aria-label={abgehakt ? 'Häkchen zurücknehmen' : 'Als erledigt abhaken'}
+                              className={cn(
+                                'mt-0.5 flex h-5 w-5 items-center justify-center rounded border transition-colors',
+                                abgehakt
+                                  ? 'border-good bg-good-subtle text-good'
+                                  : 'border-border-strong hover:border-brand hover:text-brand',
+                              )}
+                            >
+                              {abgehakt && <Check size={13} />}
+                            </button>
+                          </form>
+                        )}
+                        <SeverityPill severity={finding.severity} />
+                        <div className="min-w-0 flex-1">
+                          <p className={cn('text-[13px] font-semibold', abgehakt && 'line-through decoration-ink-subtle')}>
+                            {finding.title}
+                          </p>
+                          <p className="mt-1 text-[13px] text-ink-muted">{finding.why}</p>
+                          <p className="mt-2 text-[13px]">
+                            <span className="font-medium">Zu tun: </span>
+                            {finding.action}
+                          </p>
+                          <p className="mt-1.5 text-[12px] text-ink-subtle">
+                            Aufwand: {finding.effort} · Wirkung: {finding.impact}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  )
+                })}
               </ul>
             </Card>
           )}
@@ -254,6 +404,12 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
               <div className="p-5">
                 <ReportView markdown={report.markdown} />
               </div>
+              <Freigabe
+                reportId={report.id}
+                analysisId={analysis.id}
+                link={freigabeLink}
+                nurAnsicht={session.nurAnsicht}
+              />
             </Card>
           )}
 

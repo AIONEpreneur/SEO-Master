@@ -2,6 +2,7 @@ import { Worker, type Job } from 'bullmq'
 import { db } from '@/lib/db'
 import { redis, ANALYSIS_QUEUE, type AnalysisJobData } from '@/lib/queue'
 import { runAnalysis } from '@/lib/analysis/run'
+import { starteFaelligePruefungen } from '@/lib/analysis/auto-pruefung'
 import { randomToken } from '@/lib/crypto/vault'
 
 /**
@@ -126,6 +127,34 @@ worker.on('completed', (job) => {
 
 console.log(`[worker] Bereit. Nebenläufigkeit: ${CONCURRENCY}`)
 
+/**
+ * Stündliche Prüfung auf fällige automatische Läufe.
+ *
+ * Ein schlichter Zeitgeber statt einer BullMQ-Wiederholung: Er braucht keinen
+ * eigenen Auftragstyp, überlebt Redis-Aufräumläufe und die Fälligkeit steht
+ * ohnehin in der Datenbank (autoZuletzt), nicht in der Warteschlange. Läuft
+ * der Worker beim Fälligkeitstermin gerade nicht, holt die nächste Stunde
+ * das nach – für einen Monatsrhythmus ist eine Stunde Versatz bedeutungslos.
+ */
+const PRUEF_INTERVALL_MS = 60 * 60 * 1000
+async function pruefeAutomatik() {
+  try {
+    const ergebnis = await starteFaelligePruefungen()
+    if (ergebnis.gestartet > 0 || ergebnis.uebersprungen.length > 0) {
+      console.log(
+        `[worker] Automatik: ${ergebnis.gestartet} gestartet` +
+          (ergebnis.uebersprungen.length > 0
+            ? `, übersprungen: ${ergebnis.uebersprungen.map((u) => `${u.projekt} (${u.grund})`).join(', ')}`
+            : ''),
+      )
+    }
+  } catch (error) {
+    console.error('[worker] Automatik fehlgeschlagen:', error instanceof Error ? error.message : error)
+  }
+}
+void pruefeAutomatik()
+const automatik = setInterval(() => void pruefeAutomatik(), PRUEF_INTERVALL_MS)
+
 class AbbruchFehler extends Error {
   constructor() {
     super('Der Lauf wurde abgebrochen.')
@@ -143,6 +172,7 @@ async function istAbgebrochen(analysisId: string): Promise<boolean> {
 
 async function shutdown(signal: string) {
   console.log(`[worker] ${signal} empfangen, fahre herunter…`)
+  clearInterval(automatik)
   await worker.close()
   await db.$disconnect()
   process.exit(0)

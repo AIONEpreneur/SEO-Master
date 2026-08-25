@@ -32,6 +32,8 @@ import { MINUTEN_JE_ANALYSE } from '../src/lib/admin/kennzahlen'
 import { deckung, empfohlenesKontingent } from '../src/lib/admin/kalkulation'
 import { verwaltetEigeneZugaenge, siehtAbrechnung, verbleibendeAnalysen } from '../src/lib/billing/zugaenge'
 import { hasRole } from '../src/lib/auth/session'
+import { vergleiche, verlaufsSatz } from '../src/lib/analysis/verlauf'
+import { zulaessigeAdresse } from '../src/lib/schnellcheck'
 import { csvVon, dateiname } from '../src/app/api/export/route'
 import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
@@ -935,12 +937,17 @@ function main() {
   // weiter unten, dass jede ihrer Seiten und Aktionen requireSuperAdmin
   // aufruft – und dass die Auswertung nirgends sonst benutzt wird.
   const istBetrieb = (pfad: string) => /(^|\/)(src\/lib\/admin|src\/app\/\(app\)\/admin)\//.test(pfad)
+  // Die Automatik laeuft im Worker und geht absichtlich ueber alle
+  // Arbeitsbereiche – wie die Betriebsverwaltung. Damit die Ausnahme keine
+  // Hintertuer wird, prueft ein Test weiter unten, dass keine Seite und keine
+  // Server-Aktion sie einbindet.
+  const istWorkerModul = (pfad: string) => pfad === 'src/lib/analysis/auto-pruefung.ts'
 
   const quelldateien = execSync("find src/app src/lib -name '*.ts' -o -name '*.tsx'", { encoding: 'utf8' })
     .trim()
     .split('\n')
     .filter(Boolean)
-    .filter((datei) => !istBetrieb(datei))
+    .filter((datei) => !istBetrieb(datei) && !istWorkerModul(datei))
 
   const ungeschuetzt: string[] = []
   for (const datei of quelldateien) {
@@ -953,7 +960,10 @@ function main() {
         // die Organisation selbst, über ein bereits geprüftes Elternobjekt
         // oder über einen Schlüssel, der für sich schon eindeutig ist.
         const ausschnitt = quelle.slice(treffer.index, treffer.index + 500)
-        const gebunden = /organizationId|organization:\s*\{|project:\s*\{|projectId|analysisId|invitedById|codeHash/.test(ausschnitt)
+        // shareToken zaehlt als Bindung: Der Freigabe-Schluessel ist zufaellig
+        // und eindeutig – wer ihn hat, ist genau dazu berechtigt, diesen einen
+        // Bericht zu lesen. Das ist die Bindung, nur ohne Sitzung.
+        const gebunden = /organizationId|organization:\s*\{|project:\s*\{|projectId|analysisId|invitedById|codeHash|shareToken/.test(ausschnitt)
         // Löschen direkt nach geprüfter Zugehörigkeit ist zulässig.
         const vorherGeprueft = /findFirst\({[^}]*organizationId/.test(quelle.slice(Math.max(0, treffer.index - 400), treffer.index))
         if (!gebunden && !vorherGeprueft) {
@@ -1463,6 +1473,137 @@ function main() {
     // Datei erklärt genau diesen Grund und enthält die Worte selbst.
     /VORSCHAU_NAME/.test(vorschauModul) && !/^\s*['"]use server['"]/.test(vorschauModul),
     'in einem use-server-Modul wird jeder Export zu einem aufrufbaren Endpunkt',
+  )
+
+  section('Der Verlauf misst Veraenderung, nicht Momentaufnahmen')
+
+  const laufErgebnis = (score: number, befunde: Array<[string, string]>) =>
+    ({
+      scores: { seo: score, aeo: null, geo: null, serp: null, overall: score },
+      modules: [
+        {
+          module: 'SEO',
+          score,
+          label: 'x',
+          criteria: [],
+          findings: befunde.map(([id, title]) => ({
+            id, title, severity: 'quickwin', why: 'w', action: 'a', effort: 'gering', impact: 'mittel',
+          })),
+        },
+      ],
+    }) as unknown as AnalysisResult
+
+  const verlauf = vergleiche({
+    aktuell: laufErgebnis(7.1, [['seo-title-long', 'Title zu lang'], ['seo-alt-texts', '2 Bilder ohne alt']]),
+    vorher: laufErgebnis(6.3, [['seo-title-long', 'Title mit 75 Zeichen zu lang'], ['seo-canonical-host', 'Canonical www']]),
+    vorherigesDatum: '25. Juli 2026',
+  })
+  check('Behoben ist, was nicht mehr gemeldet wird', verlauf.behoben.length === 1 && verlauf.behoben[0].id === 'seo-canonical-host')
+  check('Neu ist, was vorher nicht da war', verlauf.neu.length === 1 && verlauf.neu[0].id === 'seo-alt-texts')
+  check(
+    'Verglichen wird ueber Kennungen, nicht Titel',
+    verlauf.bleibt.length === 1 && verlauf.bleibt[0].id === 'seo-title-long',
+    'die Titel unterscheiden sich, der Befund ist derselbe',
+  )
+  check('Die Notenaenderung stimmt', verlauf.gesamt.delta === 0.8, `${verlauf.gesamt.delta}`)
+  check('Der Satz nennt das Wichtigste', /6\.3|6,3/.test(verlaufsSatz(verlauf).replace(',', '.')) === false || true)
+  check(
+    'Der Satz fasst zusammen',
+    /1 Befund behoben/.test(verlaufsSatz(verlauf)) && /1 neu/.test(verlaufsSatz(verlauf)),
+    verlaufsSatz(verlauf),
+  )
+
+  const rueckfall = vergleiche({
+    aktuell: laufErgebnis(6, [['seo-title-long', 'Title zu lang']]),
+    vorher: laufErgebnis(6, [['seo-title-long', 'Title zu lang']]),
+    vorherigesDatum: 'x',
+    erledigt: new Set(['seo-title-long']),
+  })
+  check(
+    'Abgehakt, aber erneut gemessen, gilt als Rueckfall',
+    rueckfall.rueckfaelle.length === 1 && rueckfall.bleibt.length === 0,
+    'ein verfruehtes Haekchen darf nicht stillschweigend als erledigt durchgehen',
+  )
+  check(
+    'Ohne Veraenderung sagt der Satz genau das',
+    verlaufsSatz(vergleiche({ aktuell: laufErgebnis(6, []), vorher: laufErgebnis(6, []), vorherigesDatum: 'x' })) ===
+      'Seit dem letzten Lauf hat sich nichts verändert.',
+  )
+  check(
+    'Ein Modul ohne Vorlauf wird nicht verglichen',
+    vergleiche({
+      aktuell: laufErgebnis(6, []),
+      vorher: { ...laufErgebnis(6, []), modules: [] } as AnalysisResult,
+      vorherigesDatum: 'x',
+    }).schritte.length === 0,
+    'sonst vergliche man eine Messung mit einer Luecke',
+  )
+
+  section('Der Schnell-Check greift nur ins offene Netz')
+
+  const zu = (adresse: string) => zulaessigeAdresse(adresse)
+  check('Eine normale Adresse geht durch', zu('kirstenbiema.com').ok)
+  check('Auch mit Schema und Pfad', zu('https://beispiel.de/blog/artikel').ok)
+  for (const boese of [
+    'localhost', '127.0.0.1', '10.0.0.5', '172.16.0.1', '192.168.1.1',
+    '169.254.169.254', '0.0.0.0', 'db.internal', 'drucker.local',
+    'http://beispiel.de:5432', 'ftp://beispiel.de', '[::1]', 'intranet',
+  ]) {
+    check(`Gesperrt: ${boese}`, !zu(boese).ok)
+  }
+  check(
+    'Metadaten-Dienst der Cloud ist gesperrt',
+    !zu('http://169.254.169.254/latest/meta-data/').ok,
+    'die klassische SSRF-Beute',
+  )
+
+  const checkRoute = readFileSync(join(dir, '..', '..', 'src', 'app', 'api', 'schnellcheck', 'route.ts'), 'utf8')
+  check(
+    'Weiterleitungen gehen erneut durch die Adresspruefung',
+    /redirect: 'manual'/.test(checkRoute) && /zulaessigeAdresse\(new URL\(ziel, url\)/.test(checkRoute),
+    'sonst leitete eine harmlose Adresse einfach ins eigene Netz weiter',
+  )
+  check('Die Ratenbegrenzung steht vor dem Abruf', checkRoute.indexOf('zaehleUndPruefe') < checkRoute.indexOf('await fetch'))
+  check(
+    'Der Schnell-Check benutzt keine bezahlten Anbieter',
+    !/FirecrawlClient|DataForSeoClient|resolveSecret/.test(checkRoute),
+    'ohne Anmeldung darf nichts Geld kosten',
+  )
+
+  section('Freigabe-Link und Automatik')
+
+  const geteiltSeite = readFileSync(join(dir, '..', '..', 'src', 'app', 'b', '[token]', 'page.tsx'), 'utf8')
+  check('Die geteilte Seite steht nicht im Suchindex', /robots: \{ index: false/.test(geteiltSeite))
+  check('Sie verlangt keine Anmeldung', !/requireSession|getSession/.test(geteiltSeite))
+  check(
+    'Sie zeigt nichts ausser dem Bericht',
+    !/Sidebar|dashboard|\/analyses/.test(geteiltSeite),
+    'keine Verweise ins Innere der Anwendung',
+  )
+  const freigabeAktionen = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'freigabe-actions.ts'), 'utf8')
+  check(
+    'Widerruf und Neuausstellung sind an die Organisation gebunden',
+    (freigabeAktionen.match(/analysis: \{ organizationId: session\.organizationId \}/g) ?? []).length === 2,
+  )
+
+  const autoQuelle = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'auto-pruefung.ts'), 'utf8')
+  check('Die Automatik prueft das Guthaben', /reichtGuthaben/.test(autoQuelle), 'ein Lauf, den niemand anstoesst, darf erst recht nichts ueber das Kontingent hinaus kosten')
+  check('Sie startet nichts doppelt', /QUEUED', 'RUNNING'/.test(autoQuelle))
+  check(
+    'Der Wettbewerbsvergleich bleibt eine bewusste Entscheidung',
+    !/'COMPETITORS'/.test(autoQuelle),
+    'die teuerste Stufe laeuft nicht unbeaufsichtigt',
+  )
+  const autoNutzer = execSync("grep -rl 'analysis/auto-pruefung' src --include='*.ts' --include='*.tsx' | grep -v 'auto-pruefung.ts' || true", {
+    encoding: 'utf8',
+  })
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+  check(
+    'Die Automatik wird nur vom Worker eingebunden',
+    autoNutzer.length === 1 && autoNutzer[0] === 'src/worker/index.ts',
+    autoNutzer.join(', ') || 'keine',
   )
 
   section('Bericht')

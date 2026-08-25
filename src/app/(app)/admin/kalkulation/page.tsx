@@ -20,7 +20,9 @@ export default async function KalkulationsSeite() {
         </Link>
         <h1 className="mt-2 text-xl font-semibold tracking-tight">Kalkulation</h1>
         <p className="mt-0.5 text-[13px] text-ink-muted">
-          Was ein Lauf wirklich kostet — gemessen an den abgerechneten Läufen, nicht geschätzt.
+          Was ein Lauf wirklich kostet — gemessen an den abgerechneten Läufen, nicht geschätzt. Kosten in
+          US-Dollar (so rechnen die Anbieter ab), der Monatspreis im Rechner in Euro; da der Euro mehr wert
+          ist, fällt die Marge eher besser aus als angezeigt.
         </p>
       </header>
 
@@ -72,8 +74,8 @@ export default async function KalkulationsSeite() {
               />
               <Zeile
                 begriff="Anbieterkosten insgesamt"
-                wert={`${(lage.gesamtCent / 100).toFixed(2).replace('.', ',')} €`}
-                erlaeuterung="Über die berücksichtigten Läufe."
+                wert={`${(lage.gesamtCent / 100).toFixed(2).replace('.', ',')} $`}
+                erlaeuterung="Über die berücksichtigten Läufe. DataForSEO rechnet in US-Dollar ab; die Beträge hier tun es deshalb auch."
               />
             </dl>
           </Card>
@@ -88,7 +90,7 @@ function Kachel({ label, cent, zusatz }: { label: string; cent: number; zusatz: 
     <Card className="p-4">
       <p className="text-[12px] text-ink-subtle">{label}</p>
       <p className="mt-2 text-xl font-semibold tabular-nums">
-        {(cent / 100).toFixed(2).replace('.', ',')} €
+        {(cent / 100).toFixed(2).replace('.', ',')} $
       </p>
       <p className="mt-0.5 text-[12px] text-ink-subtle">{zusatz}</p>
     </Card>
