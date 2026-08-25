@@ -317,6 +317,40 @@ body {
   }
 }
 
+/*
+ * Rechtstexte.
+ *
+ * Sie werden gelesen, nicht überflogen: grosszügige Zeilenhöhe, klare
+ * Abstände zwischen den Abschnitten, ruhige Farbe. Bewusst schmal gesetzt –
+ * über etwa 70 Zeichen je Zeile findet das Auge den Zeilenanfang schlechter.
+ */
+.rechtstext {
+  color: var(--schrift-matt);
+  font-size: 15px;
+  line-height: 1.75;
+}
+.rechtstext h2 {
+  margin: 2.75rem 0 0.9rem;
+  color: var(--schrift);
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.rechtstext h2:first-child { margin-top: 0; }
+.rechtstext p { margin: 0 0 1.1rem; max-width: 65ch; }
+.rechtstext ul { margin: 0 0 1.1rem; padding-left: 1.15rem; max-width: 65ch; }
+.rechtstext li { margin-bottom: 0.45rem; }
+.rechtstext strong { color: var(--schrift); font-weight: 600; }
+.rechtstext code {
+  padding: 0.1em 0.4em;
+  border-radius: 5px;
+  background: oklch(100% 0 0 / 0.06);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.86em;
+  word-break: break-all;
+}
+
 /* Berichte werden als Markdown gerendert und brauchen eigene Typografie. */
 .prose-report {
   line-height: 1.7;

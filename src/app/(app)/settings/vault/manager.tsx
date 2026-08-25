@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
-import { CheckCircle2, XCircle, Trash2, ShieldCheck, Server } from 'lucide-react'
+import { CheckCircle2, XCircle, Trash2, ShieldCheck, Server, AlertTriangle } from 'lucide-react'
 import { saveCredentialAction, deleteCredentialAction, testCredentialAction, type VaultState } from '@/lib/connectors/vault-actions'
 import { Button, Card, CardHeader, Input, Label } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
@@ -271,6 +271,21 @@ export function VaultManager({
                       Console, nichts anderes. Der Zugriff lässt sich jederzeit hier oder im
                       Google-Konto zurücknehmen.
                     </p>
+                    {/*
+                      Solange Google die Anwendung nicht geprüft hat, erscheint ein
+                      Warnbildschirm. Er lässt sich nicht abschalten – aber unangekündigt
+                      wirkt er wie ein Sicherheitsproblem, angekündigt wie eine Formalie.
+                    */}
+                    <div className="mt-3 flex gap-2.5 rounded-lg border border-warn/30 bg-warn-subtle px-3 py-2.5">
+                      <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warn" />
+                      <p className="text-[12px] leading-relaxed text-ink-muted">
+                        <span className="font-medium text-ink">Google zeigt gleich einen Warnhinweis</span>{' '}
+                        („Diese App wurde nicht von Google überprüft"). Das ist erwartbar, solange
+                        die Prüfung durch Google noch aussteht — nicht Anzeichen eines Problems.
+                        Weiter geht es über <span className="font-medium">Erweitert</span> →{' '}
+                        <span className="font-medium">Weiter zu SEO-Master</span>.
+                      </p>
+                    </div>
                   </>
                 ) : (
                   <p className="text-[12px] text-ink-subtle">

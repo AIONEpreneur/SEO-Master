@@ -219,9 +219,17 @@ export default async function Startseite() {
               SEO-Master — Sichtbarkeit messen, statt sie zu vermuten
             </span>
           </div>
-          <Link href="/login" className="text-[13px] text-[var(--schrift-matt)] transition-colors hover:text-[var(--schrift)]">
-            Anmelden
-          </Link>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <Link href="/impressum" className="text-[13px] text-[var(--schrift-matt)] transition-colors hover:text-[var(--schrift)]">
+              Impressum
+            </Link>
+            <Link href="/datenschutz" className="text-[13px] text-[var(--schrift-matt)] transition-colors hover:text-[var(--schrift)]">
+              Datenschutz
+            </Link>
+            <Link href="/login" className="text-[13px] text-[var(--schrift-matt)] transition-colors hover:text-[var(--schrift)]">
+              Anmelden
+            </Link>
+          </div>
         </div>
       </footer>
     </div>
