@@ -30,6 +30,7 @@ import { VERWENDETE_ANBIETER } from '../src/lib/connectors/credentials'
 import { reichtGuthaben, guthabenHinweis, KOSTEN_ANALYSE } from '../src/lib/billing/guthaben'
 import { MINUTEN_JE_ANALYSE } from '../src/lib/admin/kennzahlen'
 import { deckung, empfohlenesKontingent } from '../src/lib/admin/kalkulation'
+import { verwaltetEigeneZugaenge } from '../src/lib/billing/zugaenge'
 import { csvVon, dateiname } from '../src/app/api/export/route'
 import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
@@ -1223,6 +1224,83 @@ function main() {
       execSync("cat src/worker/index.ts", { encoding: 'utf8' }),
     ),
     'eine Frist wuerde die Historie still verfallen lassen',
+  )
+
+  section('Die Kundin sieht keinen Datentresor')
+
+  // Der Kern des Geschaeftsmodells: Niemand hinterlegt eigene Schluessel,
+  // abgerechnet wird ueber die Zugaenge des Betriebs. Traegt eine Kundin doch
+  // eigene ein, laufen ihre Analysen ueber ein fremdes Konto und die
+  // Guthabenrechnung stimmt nicht mehr.
+  const alsKundin = {
+    id: 'k1', email: 'kundin@beispiel.de', name: null, isSuperAdmin: false,
+    organizationId: 'o1', organizationName: 'Praxis Sommer', organizationSlug: 'praxis-sommer',
+    credits: 850, plan: 'STARTER' as const, role: 'OWNER' as const,
+  }
+  check(
+    'Eine Kundin verwaltet keine eigenen Zugaenge',
+    !verwaltetEigeneZugaenge(alsKundin),
+    'obwohl sie in ihrem Arbeitsbereich Inhaberin ist',
+  )
+  check(
+    'Der interne Betrieb schon',
+    verwaltetEigeneZugaenge({ ...alsKundin, plan: 'INTERNAL' }),
+  )
+  check(
+    'Die Betriebsverwaltung ebenfalls',
+    verwaltetEigeneZugaenge({ ...alsKundin, isSuperAdmin: true }),
+  )
+
+  const tresorSeite = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'settings', 'vault', 'page.tsx'),
+    'utf8',
+  )
+  check(
+    'Die Tresor-Seite weist Kundinnen ab',
+    /if \(!verwaltetEigeneZugaenge\(session\)\) redirect/.test(tresorSeite),
+  )
+
+  const tresorAktionen = readFileSync(
+    join(dir, '..', '..', 'src', 'lib', 'connectors', 'vault-actions.ts'),
+    'utf8',
+  )
+  const tresorRollen = tresorAktionen.match(/requireRole\('ADMIN'\)/g) ?? []
+  check(
+    'Keine Tresor-Aktion prueft nur die Rolle',
+    tresorRollen.length === 1,
+    'die Rolle allein genuegt nicht — eine Kundin ist Inhaberin ihres Bereichs',
+  )
+  const tresorWachen = tresorAktionen.match(/await requireTresor\(\)/g) ?? []
+  const tresorHandlungen = tresorAktionen.match(/export async function \w+Action/g) ?? []
+  check(
+    'Jede Tresor-Aktion geht durch dieselbe Wache',
+    tresorHandlungen.length > 0 && tresorWachen.length === tresorHandlungen.length,
+    `${tresorHandlungen.length} Aktionen, ${tresorWachen.length} Wachen — eine Server-Aktion ist ein oeffentlicher Endpunkt`,
+  )
+
+  // Eine Kundin darf nirgends aufgefordert werden, etwas zu hinterlegen, das
+  // sie gar nicht besorgen soll.
+  const einstiegshilfe = readFileSync(join(dir, '..', '..', 'src', 'components', 'onboarding.tsx'), 'utf8')
+  check(
+    'Die Einstiegshilfe zeigt den Tresor-Schritt nur wo er erledigt werden kann',
+    /eigeneZugaenge\s*\?/.test(einstiegshilfe),
+    'ein Schritt, den man nie abhaken kann, ist schlimmer als keiner',
+  )
+  const uebersichtSeite = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'dashboard', 'page.tsx'),
+    'utf8',
+  )
+  check(
+    'Der Hinweis auf fehlende Anbieter richtet sich nur an den Betrieb',
+    /eigeneZugaenge && missingProviders\.length > 0/.test(uebersichtSeite),
+    'sonst mahnt die App etwas an, das die Kundin nicht aendern kann',
+  )
+
+  const seitenleiste = readFileSync(join(dir, '..', '..', 'src', 'components', 'sidebar.tsx'), 'utf8')
+  check(
+    'Der Datentresor steht nicht in der festen Navigation',
+    !/NAVIGATION[\s\S]*?settings\/vault[\s\S]*?^\]/m.test(seitenleiste),
+    'er wird nur eingeblendet, wo eigene Zugaenge verwaltet werden',
   )
 
   section('Bericht')

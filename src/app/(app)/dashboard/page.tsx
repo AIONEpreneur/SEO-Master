@@ -7,6 +7,7 @@ import { providerLabel } from '@/lib/connectors/labels'
 import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
 import { Onboarding } from '@/components/onboarding'
+import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
 import { wiederkehrendeBefunde } from '@/lib/analysis/wiederkehrend'
 
 export const dynamic = 'force-dynamic'
@@ -41,6 +42,7 @@ export default async function DashboardPage() {
 
   const muster = wiederkehrendeBefunde(letzteErgebnisse.map((a) => a.result))
 
+  const eigeneZugaenge = verwaltetEigeneZugaenge(session)
   const missingProviders = Object.entries(providers)
     .filter(([, ready]) => !ready)
     .map(([key]) => providerLabel(key as Parameters<typeof providerLabel>[0]))
@@ -58,11 +60,14 @@ export default async function DashboardPage() {
         </ButtonLink>
       </header>
 
-      <Onboarding organizationId={session.organizationId} />
+      <Onboarding organizationId={session.organizationId} eigeneZugaenge={eigeneZugaenge} />
 
       {/* Nur zeigen, wenn schon analysiert wurde – sonst sagt die Einstiegshilfe
           darüber bereits dasselbe. */}
-      {missingProviders.length > 0 && completedCount > 0 && (
+      {/* Fehlende Anbieter sind nur dort eine Aufgabe, wo eigene Zugänge
+          verwaltet werden. Eine Kundin könnte daran nichts ändern – der
+          Hinweis wäre eine Mahnung ohne Adressat. */}
+      {eigeneZugaenge && missingProviders.length > 0 && completedCount > 0 && (
         // Einzeilig: Die ausführliche Begründung steht bereits in der
         // Einstiegshilfe darüber. Zweimal dasselbe in voller Länge macht die
         // Übersicht zu einer Textseite.

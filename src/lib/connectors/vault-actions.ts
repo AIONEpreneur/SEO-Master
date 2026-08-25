@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
-import { requireRole } from '@/lib/auth/session'
+import { requireRole, type SessionUser } from '@/lib/auth/session'
+import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
 import { seal, hintOf } from '@/lib/crypto/vault'
 import { DataForSeoClient } from './dataforseo'
 import { FirecrawlClient } from './firecrawl'
@@ -48,8 +49,22 @@ function entpackeBase64Zugang(wert: string): DataForSeoSecret | null {
  * die Person, die ihn eingetragen hat. Wer den Schlüssel ändern will, trägt
  * einen neuen ein.
  */
-export async function saveCredentialAction(_prev: VaultState, formData: FormData): Promise<VaultState> {
+/**
+ * Zugriff auf den Tresor.
+ *
+ * Die Rolle allein genuegt hier nicht: Eine Kundin ist in ihrem eigenen
+ * Arbeitsbereich Inhaberin und kaeme damit durch jede Rollenpruefung. Eine
+ * Server-Aktion ist ein oeffentlicher Endpunkt – dass die Seite nicht
+ * verlinkt ist, schuetzt sie nicht.
+ */
+async function requireTresor(): Promise<SessionUser> {
   const session = await requireRole('ADMIN')
+  if (!verwaltetEigeneZugaenge(session)) throw new Error('FORBIDDEN')
+  return session
+}
+
+export async function saveCredentialAction(_prev: VaultState, formData: FormData): Promise<VaultState> {
+  const session = await requireTresor()
   const provider = String(formData.get('provider')) as Provider
   const label = String(formData.get('label') ?? 'Standard').trim() || 'Standard'
 
@@ -102,7 +117,7 @@ export async function saveCredentialAction(_prev: VaultState, formData: FormData
 }
 
 export async function deleteCredentialAction(formData: FormData) {
-  const session = await requireRole('ADMIN')
+  const session = await requireTresor()
   const id = String(formData.get('id'))
 
   await db.credential.deleteMany({ where: { id, organizationId: session.organizationId } })
@@ -119,7 +134,7 @@ export async function deleteCredentialAction(formData: FormData) {
  * ersten Analyselauf auf.
  */
 export async function testCredentialAction(formData: FormData) {
-  const session = await requireRole('ADMIN')
+  const session = await requireTresor()
   const provider = String(formData.get('provider')) as Provider
 
   let ok = false

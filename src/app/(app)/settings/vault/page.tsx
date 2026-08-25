@@ -1,4 +1,6 @@
+import { redirect } from 'next/navigation'
 import { requireSession } from '@/lib/auth/session'
+import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
 import { db } from '@/lib/db'
 import { env } from '@/lib/env'
 import { VaultManager } from './manager'
@@ -7,6 +9,10 @@ export const dynamic = 'force-dynamic'
 
 export default async function VaultPage() {
   const session = await requireSession()
+  // Die Seite ist fuer Kundinnen nicht nur unnoetig, sondern gefaehrlich:
+  // Eigene Schluessel wuerden die Abrechnung ueber Guthaben aushebeln.
+  if (!verwaltetEigeneZugaenge(session)) redirect('/dashboard')
+
   const credentials = await db.credential.findMany({
     where: { organizationId: session.organizationId },
     orderBy: { provider: 'asc' },

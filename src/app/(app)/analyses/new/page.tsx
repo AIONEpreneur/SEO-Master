@@ -1,6 +1,7 @@
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { availableProviders } from '@/lib/connectors/credentials'
+import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
 import { NewAnalysisForm } from './form'
 
 export const dynamic = 'force-dynamic'
@@ -24,7 +25,7 @@ export default async function NewAnalysisPage() {
           Website-URL oder Social-Profil eingeben. Der Lauf dauert je nach Umfang ein bis fünf Minuten.
         </p>
       </header>
-      <NewAnalysisForm projects={projects} providers={providers} />
+      <NewAnalysisForm projects={projects} providers={providers} eigeneZugaenge={verwaltetEigeneZugaenge(session)} />
     </div>
   )
 }

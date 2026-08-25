@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import { db } from '@/lib/db'
 import { hashToken, randomToken } from '@/lib/crypto/vault'
-import type { Role } from '@prisma/client'
+import type { Plan, Role } from '@prisma/client'
 
 export const SESSION_COOKIE = 'seomaster_session'
 const SESSION_DAYS = 30
@@ -54,6 +54,7 @@ export type SessionUser = {
   organizationName: string
   organizationSlug: string
   credits: number
+  plan: Plan
   role: Role
 }
 
@@ -95,6 +96,7 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
     organizationName: membership.organization.name,
     organizationSlug: membership.organization.slug,
     credits: membership.organization.credits,
+    plan: membership.organization.plan,
     role: membership.role,
   }
 })

@@ -58,9 +58,16 @@ const MARKETS = [
 export function NewAnalysisForm({
   projects,
   providers,
+  eigeneZugaenge,
 }: {
   projects: Project[]
   providers: Record<VerwendeterAnbieter, boolean>
+  /**
+   * Verwaltet dieser Arbeitsbereich eigene Anbieter-Zugänge? Entscheidet nur
+   * über den Wortlaut: Eine Kundin kann an fehlenden Zugängen nichts ändern,
+   * ein Verweis auf den Datentresor wäre für sie eine Sackgasse.
+   */
+  eigeneZugaenge: boolean
 }) {
   const [state, action, pending] = useActionState<StartState, FormData>(startAnalysisAction, {})
   const [selected, setSelected] = useState<string[]>(['SEO', 'AEO', 'GEO'])
@@ -123,7 +130,11 @@ export function NewAnalysisForm({
                 Social-Profil erkannt. Es läuft die Profilanalyse (Vollständigkeit, Auffindbarkeit,
                 Reichweite, Interaktion) — die Website-Bausteine sind darauf nicht anwendbar.
                 {!providers.APIFY && (
-                  <strong className="block text-bad"> Dafür fehlen noch Apify-Zugangsdaten im Datentresor.</strong>
+                  <strong className="block text-bad">
+                    {eigeneZugaenge
+                      ? ' Dafür fehlen noch Apify-Zugangsdaten im Datentresor.'
+                      : ' Die Profilanalyse ist derzeit nicht verfügbar. Die Website-Analyse läuft davon unabhängig.'}
+                  </strong>
                 )}
               </p>
             </div>
@@ -185,7 +196,7 @@ export function NewAnalysisForm({
                       <p className="mt-0.5 text-[12px] text-ink-muted">{module.description}</p>
                       {missing.length > 0 && (
                         <p className="mt-1 text-[12px] font-medium text-warn">
-                          Braucht {missing.join(', ')}
+                          {eigeneZugaenge ? `Braucht ${missing.join(', ')}` : 'Derzeit nicht verfügbar'}
                         </p>
                       )}
                     </div>

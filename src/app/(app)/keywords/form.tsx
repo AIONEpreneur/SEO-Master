@@ -13,7 +13,14 @@ const MAERKTE = [
   { code: 2840, label: 'USA', sprache: 'en' },
 ]
 
-export function KeywordForm({ hatDataForSeo }: { hatDataForSeo: boolean }) {
+export function KeywordForm({
+  hatDataForSeo,
+  eigeneZugaenge,
+}: {
+  hatDataForSeo: boolean
+  /** Nur für den Wortlaut: Eine Kundin kann fehlende Zugänge nicht ergänzen. */
+  eigeneZugaenge: boolean
+}) {
   const [state, action, pending] = useActionState<ResearchState, FormData>(startKeywordResearchAction, {})
 
   return (
@@ -55,7 +62,9 @@ export function KeywordForm({ hatDataForSeo }: { hatDataForSeo: boolean }) {
 
           {!hatDataForSeo && (
             <p className="rounded-lg bg-warn-subtle px-4 py-3 text-[13px] text-warn">
-              Dafür fehlen noch DataForSEO-Zugangsdaten im Datentresor.
+              {eigeneZugaenge
+                ? 'Dafür fehlen noch DataForSEO-Zugangsdaten im Datentresor.'
+                : 'Die Keyword-Recherche ist derzeit nicht verfügbar.'}
             </p>
           )}
 

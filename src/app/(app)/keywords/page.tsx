@@ -3,6 +3,7 @@ import { TrendingUp, Trash2 } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { availableProviders } from '@/lib/connectors/credentials'
+import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
 import { Card, CardHeader, EmptyState } from '@/components/ui'
 import { deleteKeywordResearchAction } from '@/lib/keywords/actions'
 import type { Zusammenfassung } from '@/lib/keywords/research'
@@ -31,7 +32,7 @@ export default async function KeywordsPage() {
         </p>
       </header>
 
-      <KeywordForm hatDataForSeo={providers.DATAFORSEO} />
+      <KeywordForm hatDataForSeo={providers.DATAFORSEO} eigeneZugaenge={verwaltetEigeneZugaenge(session)} />
 
       <Card>
         {researches.length === 0 ? (

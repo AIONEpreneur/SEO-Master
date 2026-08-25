@@ -12,6 +12,7 @@ import { logoutAction } from '@/lib/auth/actions'
 import { ThemeToggle } from '@/components/theme-toggle'
 import type { SessionUser } from '@/lib/auth/session'
 import type { Theme } from '@/lib/theme'
+import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
 
 const NAVIGATION = [
   {
@@ -33,12 +34,17 @@ const NAVIGATION = [
   {
     label: 'Einstellungen',
     items: [
-      { href: '/settings/vault', label: 'Datentresor', icon: KeyRound },
       { href: '/settings/team', label: 'Team', icon: Users2 },
       { href: '/settings/usage', label: 'Verbrauch', icon: Receipt },
     ],
   },
 ]
+
+/**
+ * Der Datentresor erscheint nur, wo eigene Anbieter-Zugaenge verwaltet werden.
+ * Eine Kundin bezahlt fuer die Nutzung; Schluessel besorgt sie keine.
+ */
+const TRESOR = { href: '/settings/vault', label: 'Datentresor', icon: KeyRound }
 
 /**
  * Nur für den Betrieb der Instanz. Wird ausschliesslich eingeblendet, wenn das
@@ -87,7 +93,14 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          {[...NAVIGATION, ...(session.isSuperAdmin ? [BETRIEB] : [])].map((group) => (
+          {[
+            ...NAVIGATION.map((group) =>
+              group.label === 'Einstellungen' && verwaltetEigeneZugaenge(session)
+                ? { ...group, items: [TRESOR, ...group.items] }
+                : group,
+            ),
+            ...(session.isSuperAdmin ? [BETRIEB] : []),
+          ].map((group) => (
             <div key={group.label} className="mb-5">
               <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                 {group.label}

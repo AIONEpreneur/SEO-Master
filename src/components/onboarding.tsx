@@ -12,7 +12,14 @@ import { cn } from '@/lib/utils/cn'
  * einem Merker: Wer die Schritte auf anderem Weg erledigt hat, bekommt sie
  * nicht erneut vorgesetzt. Sind alle erledigt, verschwindet die Hilfe.
  */
-export async function Onboarding({ organizationId }: { organizationId: string }) {
+export async function Onboarding({
+  organizationId,
+  eigeneZugaenge,
+}: {
+  organizationId: string
+  /** Verwaltet dieser Arbeitsbereich eigene Anbieter-Zugänge? */
+  eigeneZugaenge: boolean
+}) {
   const [providers, projektAnzahl, analyseAnzahl, berichtAnzahl] = await Promise.all([
     availableProviders(organizationId),
     db.project.count({ where: { organizationId } }),
@@ -21,14 +28,21 @@ export async function Onboarding({ organizationId }: { organizationId: string })
   ])
 
   const schritte = [
-    {
-      erledigt: providers.DATAFORSEO && providers.FIRECRAWL,
-      icon: KeyRound,
-      titel: 'Zugangsdaten hinterlegen',
-      text: 'DataForSEO für Platzierungen, Firecrawl für den Seiteninhalt.',
-      ziel: '/settings/vault',
-      knopf: 'Zum Datentresor',
-    },
+    // Der Schritt zum Datentresor erscheint nur dort, wo er auch erledigt
+    // werden kann. Einer Kundin einen Schritt vorzusetzen, den sie nie
+    // abhaken kann, ist schlimmer als gar keine Einstiegshilfe.
+    ...(eigeneZugaenge
+      ? [
+          {
+            erledigt: providers.DATAFORSEO && providers.FIRECRAWL,
+            icon: KeyRound,
+            titel: 'Zugangsdaten hinterlegen',
+            text: 'DataForSEO für Platzierungen, Firecrawl für den Seiteninhalt.',
+            ziel: '/settings/vault',
+            knopf: 'Zum Datentresor',
+          },
+        ]
+      : []),
     {
       erledigt: projektAnzahl > 0,
       icon: FolderKanban,

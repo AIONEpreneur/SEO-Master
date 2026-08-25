@@ -1,0 +1,21 @@
+import type { SessionUser } from '@/lib/auth/session'
+
+/**
+ * Wer verwaltet die Anbieter-Zugaenge selbst?
+ *
+ * Im Kundenbetrieb niemand ausser dem Betrieb. Kundinnen hinterlegen keine
+ * eigenen Schluessel – sie bezahlen fuer die Nutzung, abgerechnet wird ueber
+ * die Zugaenge des Betriebs. Der Datentresor waere fuer sie also nicht nur
+ * ueberfluessig, sondern schaedlich:
+ *
+ *  - Er verlangt etwas, das sie nicht haben und nicht besorgen sollen.
+ *  - Die Einstiegshilfe haette einen Schritt, den sie nie erledigen koennen.
+ *  - Traegt jemand doch eigene Schluessel ein, laufen ihre Analysen ploetzlich
+ *    ueber fremde Konten, und die Abrechnung ueber Guthaben stimmt nicht mehr.
+ *
+ * Massgeblich ist der Tarif, nicht die Rolle: Eine Kundin ist in ihrem eigenen
+ * Arbeitsbereich Inhaberin und haette sonst Zugriff.
+ */
+export function verwaltetEigeneZugaenge(session: SessionUser): boolean {
+  return session.isSuperAdmin || session.plan === 'INTERNAL'
+}
