@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth/session'
 import { getTheme } from '@/lib/theme'
 import { Sidebar } from '@/components/sidebar'
+import { AnsichtsBalken } from '@/components/ansichts-balken'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-dvh">
       <Sidebar session={session} theme={theme} />
       <div className="relative min-w-0 flex-1 lg:pl-60">
+        <AnsichtsBalken session={session} />
         {/*
           Ein sehr schwacher Schein am oberen Rand. Ohne ihn beginnt jede
           Seite mit einer harten Kante zwischen Leiste und Inhalt; mit ihm

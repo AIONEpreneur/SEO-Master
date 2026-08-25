@@ -1,7 +1,9 @@
 'use client'
 
 import { useActionState } from 'react'
+import { Eye } from 'lucide-react'
 import { setzeGuthabenAction, setzeTarifAction, type AdminState } from '@/lib/admin/actions'
+import { wechsleBereichAction } from '@/lib/auth/ansicht'
 import { Button, Input, Select } from '@/components/ui'
 
 type Bereich = {
@@ -14,7 +16,7 @@ type Bereich = {
 
 const TARIFE = ['INTERNAL', 'FREE', 'STARTER', 'PRO', 'AGENCY']
 
-export function BereichsZeile({ bereich }: { bereich: Bereich }) {
+export function BereichsZeile({ bereich, istEigener }: { bereich: Bereich; istEigener: boolean }) {
   const [state, formAction, pending] = useActionState<AdminState, FormData>(setzeGuthabenAction, {})
 
   return (
@@ -29,6 +31,16 @@ export function BereichsZeile({ bereich }: { bereich: Bereich }) {
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {!istEigener && (
+            <form action={wechsleBereichAction}>
+              <input type="hidden" name="organizationId" value={bereich.id} />
+              <Button type="submit" variant="ghost" size="sm">
+                <Eye size={13} />
+                Ansicht
+              </Button>
+            </form>
+          )}
+
           <form action={setzeTarifAction} className="flex items-center gap-1.5">
             <input type="hidden" name="organizationId" value={bereich.id} />
             <Select name="plan" defaultValue={bereich.plan} className="h-8 w-32 text-[13px]">

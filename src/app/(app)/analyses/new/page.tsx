@@ -2,6 +2,8 @@ import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { availableProviders } from '@/lib/connectors/credentials'
 import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
+import { Card } from '@/components/ui'
+import { Eye } from 'lucide-react'
 import { NewAnalysisForm } from './form'
 
 export const dynamic = 'force-dynamic'
@@ -25,7 +27,23 @@ export default async function NewAnalysisPage() {
           Website-URL oder Social-Profil eingeben. Der Lauf dauert je nach Umfang ein bis fünf Minuten.
         </p>
       </header>
-      <NewAnalysisForm projects={projects} providers={providers} eigeneZugaenge={verwaltetEigeneZugaenge(session)} />
+      {session.nurAnsicht ? (
+        // Das Formular gar nicht erst zeigen: Ein Knopf, der beim Drücken
+        // abgewiesen wird, ist schlechter als kein Knopf.
+        <Card className="flex items-start gap-3 p-5">
+          <Eye size={16} className="mt-0.5 shrink-0 text-warn" />
+          <div>
+            <p className="text-[13px] font-medium">In dieser Ansicht lassen sich keine Läufe starten</p>
+            <p className="mt-1 text-[13px] text-ink-muted">
+              Sie sehen den Arbeitsbereich einer Kundin. Ein Lauf von hier aus würde in ihren Daten landen und
+              ihr Kontingent verbrauchen. Zum Ausprobieren gibt es den Vorschau-Bereich unter Betrieb →
+              Arbeitsbereiche.
+            </p>
+          </div>
+        </Card>
+      ) : (
+        <NewAnalysisForm projects={projects} providers={providers} eigeneZugaenge={verwaltetEigeneZugaenge(session)} />
+      )}
     </div>
   )
 }

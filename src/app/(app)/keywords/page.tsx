@@ -32,7 +32,9 @@ export default async function KeywordsPage() {
         </p>
       </header>
 
-      <KeywordForm hatDataForSeo={providers.DATAFORSEO} eigeneZugaenge={verwaltetEigeneZugaenge(session)} />
+      {session.nurAnsicht ? null : (
+        <KeywordForm hatDataForSeo={providers.DATAFORSEO} eigeneZugaenge={verwaltetEigeneZugaenge(session)} />
+      )}
 
       <Card>
         {researches.length === 0 ? (

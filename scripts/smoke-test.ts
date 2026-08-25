@@ -31,6 +31,7 @@ import { reichtGuthaben, guthabenHinweis, KOSTEN_ANALYSE } from '../src/lib/bill
 import { MINUTEN_JE_ANALYSE } from '../src/lib/admin/kennzahlen'
 import { deckung, empfohlenesKontingent } from '../src/lib/admin/kalkulation'
 import { verwaltetEigeneZugaenge, siehtAbrechnung, verbleibendeAnalysen } from '../src/lib/billing/zugaenge'
+import { hasRole } from '../src/lib/auth/session'
 import { csvVon, dateiname } from '../src/app/api/export/route'
 import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
@@ -1236,6 +1237,7 @@ function main() {
     id: 'k1', email: 'kundin@beispiel.de', name: null, isSuperAdmin: false,
     organizationId: 'o1', organizationName: 'Praxis Sommer', organizationSlug: 'praxis-sommer',
     credits: 850, plan: 'STARTER' as const, role: 'OWNER' as const,
+    nurAnsicht: false, wechsel: null,
   }
   check(
     'Eine Kundin verwaltet keine eigenen Zugaenge',
@@ -1374,6 +1376,93 @@ function main() {
     'Nirgends wird das Guthaben ungeprüft angezeigt',
     guthabenAnzeigen.length === 0,
     guthabenAnzeigen.join(' · ') || 'jede Anzeige ist an siehtAbrechnung gebunden',
+  )
+
+  section('Ansicht wechseln, ohne fremde Daten anzufassen')
+
+  const sitzungsQuelle = readFileSync(join(dir, '..', '..', 'src', 'lib', 'auth', 'session.ts'), 'utf8')
+
+  // Der Engpass: Alle veraendernden Vorgaenge laufen durch requireRole.
+  // Die Sperre gehoert deshalb dorthin und nicht in jede einzelne Aktion.
+  check(
+    'Die Fremdansicht ist in requireRole gesperrt',
+    /requireRole[\s\S]{0,400}?nurAnsicht\) throw new Error\('NUR_ANSICHT'\)/.test(sitzungsQuelle),
+  )
+  const veraendernde = execSync(
+    "grep -rn 'await requireRole(' src/lib src/app | wc -l",
+    { encoding: 'utf8' },
+  ).trim()
+  const nurSitzung = execSync(
+    "grep -rn 'await requireSession()' src/lib/*/actions.ts src/lib/connectors/vault-actions.ts 'src/app/(app)/settings/team/actions.ts' 2>/dev/null | wc -l",
+    { encoding: 'utf8' },
+  ).trim()
+  check(
+    'Alle veraendernden Aktionen gehen durch diesen Engpass',
+    Number(veraendernde) > 10,
+    `${veraendernde} Aufrufe von requireRole, ${nurSitzung} Aktion(en) mit blosser Sitzungspruefung`,
+  )
+
+  const ansichtsQuelle = readFileSync(join(dir, '..', '..', 'src', 'lib', 'auth', 'ansicht.ts'), 'utf8')
+  check(
+    'Ein fremder Bereich braucht die Betriebsverwaltung',
+    /if \(!eigen && !benutzer\.isSuperAdmin\) return/.test(ansichtsQuelle),
+    'der Cookie ist eine Bitte, kein Ausweis',
+  )
+  check(
+    'Der Wechsel liest die echte Sitzung, nicht die gezeigte',
+    /await echteSitzung\(\)/.test(ansichtsQuelle),
+    'sonst koennte man sich aus einer Ansicht in die naechste weiterreichen',
+  )
+  check(
+    'Die Fremdansicht laeuft von selbst ab',
+    /COOKIE_TAGE = 1/.test(ansichtsQuelle),
+    'eine vergessene Ansicht soll enden',
+  )
+  check(
+    'Der Vorschau-Bereich bekommt Kundentarif, nicht INTERNAL',
+    /plan: 'STARTER'/.test(ansichtsQuelle),
+    'mit INTERNAL waere die Vorschau wertlos — sie zeigte wieder die Betriebssicht',
+  )
+
+  // In jeder gewechselten Ansicht gilt die Kundensicht.
+  check(
+    'Im gewechselten Bereich gilt nie die Betriebsverwaltung',
+    (sitzungsQuelle.match(/isSuperAdmin: false/g) ?? []).length === 2,
+    'sowohl im eigenen Vorschau-Bereich als auch in der Fremdansicht',
+  )
+  check(
+    'Die Fremdansicht bekommt die niedrigste Rolle',
+    /role: 'VIEWER',\s*\n\s*nurAnsicht: true/.test(sitzungsQuelle),
+  )
+  check(
+    'VIEWER darf nichts starten',
+    !hasRole({ ...alsKundin, role: 'VIEWER' }, 'MEMBER'),
+    'zwei Sperren hintereinander: Rolle und Ansicht',
+  )
+
+  const balken = readFileSync(join(dir, '..', '..', 'src', 'components', 'ansichts-balken.tsx'), 'utf8')
+  check(
+    'Der Balken laesst sich nicht wegklicken',
+    !/dismiss|schliessen|useState/.test(balken),
+    'die schlimmste Fassung waere die, bei der man vergisst, dass sie an ist',
+  )
+  const einstiegsseite = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'analyses', 'new', 'page.tsx'),
+    'utf8',
+  )
+  check(
+    'In der Fremdansicht erscheint das Analyse-Formular gar nicht erst',
+    /session\.nurAnsicht \?/.test(einstiegsseite),
+    'ein Knopf, der beim Druecken abgewiesen wird, ist schlechter als kein Knopf',
+  )
+
+  const vorschauModul = readFileSync(join(dir, '..', '..', 'src', 'lib', 'auth', 'vorschau.ts'), 'utf8')
+  check(
+    'Der Name des Vorschau-Bereichs steht ausserhalb des Server-Moduls',
+    // Auf die Direktive prüfen, nicht auf den Text: Der Kommentar in der
+    // Datei erklärt genau diesen Grund und enthält die Worte selbst.
+    /VORSCHAU_NAME/.test(vorschauModul) && !/^\s*['"]use server['"]/.test(vorschauModul),
+    'in einem use-server-Modul wird jeder Export zu einem aufrufbaren Endpunkt',
   )
 
   section('Bericht')
