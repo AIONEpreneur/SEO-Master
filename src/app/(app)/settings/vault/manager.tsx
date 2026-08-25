@@ -66,9 +66,9 @@ const PROVIDERS: Array<{
   {
     key: 'SEARCH_CONSOLE',
     name: 'Google Search Console',
-    role: 'Gezählte Suchdaten',
+    role: 'Nur für eigene Seiten',
     purpose:
-      'Die einzige Quelle, die zählt statt zu schätzen: tatsächliche Klicks, Einblendungen und Positionen je Suchanfrage. Alle anderen Anbieter rechnen hoch — auf einer echten Seite standen 35 geschätzten Besuchen 277 gezählte gegenüber.',
+      'Ersetzt Hochrechnungen durch gezählte Klicks — aber nur für Seiten, für die man selbst freigeschaltet ist. Ohne diese Verbindung läuft jede Analyse vollständig durch, mit geschätzten Werten statt gezählten.',
     required: false,
     fields: 'serviceAccount',
     docs: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
@@ -157,13 +157,110 @@ export function VaultManager({
       )}
       {state.error && <p className="rounded-lg bg-bad-subtle px-4 py-3 text-[13px] text-bad">{state.error}</p>}
 
-      {PROVIDERS.map((provider) => {
+      {/*
+        Die Trennung ist keine Kosmetik. Vorher standen alle sechs Anbieter
+        in einer Reihe, und wer den Tresor zum ersten Mal öffnete, sah sechs
+        Einrichtungsschritte. Tatsächlich sind es drei; der Rest erweitert die
+        Analyse, ohne dass ohne ihn etwas fehlschlägt. Diese Unterscheidung ist
+        das Erste, was jemand hier verstehen muss.
+      */}
+      <div>
+        <h2 className="text-[13px] font-semibold tracking-tight">Nötig für jede Analyse</h2>
+        <p className="mt-0.5 text-[13px] text-ink-muted">
+          Drei Zugänge. Ohne sie fehlen der Analyse die Grundlagen.
+        </p>
+      </div>
+
+      {PROVIDERS.filter((p) => p.required).map((provider) => {
         const stored = credentials.find((c) => c.provider === provider.key)
         const viaEnv = fromEnv[provider.key] && !stored
         const configured = Boolean(stored) || viaEnv
         const isOpen = open === provider.key
 
         return (
+          <ProviderKarte
+            key={provider.key}
+            provider={provider}
+            stored={stored}
+            viaEnv={viaEnv}
+            configured={configured}
+            isOpen={isOpen}
+            setOpen={setOpen}
+            canEdit={canEdit}
+            googleBereit={googleBereit}
+            action={action}
+            pending={pending}
+          />
+        )
+      })}
+
+      <div className="pt-2">
+        <h2 className="text-[13px] font-semibold tracking-tight">Zusätzlich, wenn vorhanden</h2>
+        <p className="mt-0.5 max-w-2xl text-[13px] text-ink-muted">
+          Erweitern die Analyse um Bereiche, die ohne sie entfallen. Jede Analyse läuft auch
+          ohne sie vollständig durch und weist im Bericht aus, was nicht erhoben wurde.
+        </p>
+      </div>
+
+      {PROVIDERS.filter((p) => !p.required).map((provider) => {
+        const stored = credentials.find((c) => c.provider === provider.key)
+        const viaEnv = fromEnv[provider.key] && !stored
+        const configured = Boolean(stored) || viaEnv
+        const isOpen = open === provider.key
+
+        return (
+          <ProviderKarte
+            key={provider.key}
+            provider={provider}
+            stored={stored}
+            viaEnv={viaEnv}
+            configured={configured}
+            isOpen={isOpen}
+            setOpen={setOpen}
+            canEdit={canEdit}
+            googleBereit={googleBereit}
+            action={action}
+            pending={pending}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+
+/**
+ * Eine Anbieterkarte.
+ *
+ * Herausgezogen, weil sie in zwei Gruppen erscheint – nötige und zusätzliche
+ * Zugänge. Zweimal derselbe Rumpf im Formular wäre dieselbe Karte mit zwei
+ * Schicksalen; jede Änderung müsste man an beiden Stellen machen und würde
+ * es irgendwann an einer vergessen.
+ */
+function ProviderKarte({
+  provider,
+  stored,
+  viaEnv,
+  configured,
+  isOpen,
+  setOpen,
+  canEdit,
+  googleBereit,
+  action,
+  pending,
+}: {
+  provider: (typeof PROVIDERS)[number]
+  stored: Credential | undefined
+  viaEnv: boolean
+  configured: boolean
+  isOpen: boolean
+  setOpen: (p: Provider | null) => void
+  canEdit: boolean
+  googleBereit: boolean
+  action: (formData: FormData) => void
+  pending: boolean
+}) {
+  return (
           <Card key={provider.key}>
             <CardHeader
               title={
@@ -352,8 +449,5 @@ export function VaultManager({
               </form>
             )}
           </Card>
-        )
-      })}
-    </div>
   )
 }
