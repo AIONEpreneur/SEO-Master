@@ -76,13 +76,15 @@ Beim ersten Mal fragt Google nach dem Zustimmungsbildschirm. Ausfüllen:
 
 Es erscheinen **Client-ID** und **Client-Schlüssel**. Beide bereithalten.
 
-**5.** Auf dem Server:
+**5.** Auf dem Server — beide Werte direkt mitgeben:
 
 ```
-bash /home/seomaster/app/deploy/google-anmeldung.sh
+bash /home/seomaster/app/deploy/google-anmeldung.sh 'CLIENT-ID' 'CLIENT-SCHLUESSEL'
 ```
 
-Das Skript fragt nach den beiden Werten, trägt sie ein und startet neu.
+Die Anführungszeichen mit eintippen, die beiden Platzhalter durch die echten
+Werte ersetzen. Ohne Argumente fragt das Skript nach — das klappt aber nicht in
+jedem Terminal, deshalb ist die Form oben die verlässliche.
 
 ### Danach: verbinden
 
