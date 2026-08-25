@@ -45,6 +45,12 @@ export class FirecrawlClient {
         onlyMainContent: options?.onlyMainContent ?? false,
         waitFor: options?.waitFor ?? 2000,
         timeout: 45_000,
+        // maxAge: 0 erzwingt einen frischen Abruf. Ohne diese Angabe darf
+        // Firecrawl eine bereits gespeicherte Fassung der Seite ausliefern –
+        // wie alt sie sein darf, entscheidet Firecrawl je Domain. Für eine
+        // Analyse ist das der schlimmste Fall: Die Seite wurde geändert, der
+        // Bericht bewertet den Stand von vorgestern und niemand merkt es.
+        maxAge: 0,
       },
       timeoutMs: 90_000,
     })

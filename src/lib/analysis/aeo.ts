@@ -190,18 +190,23 @@ export function analyzeAeo(input: {
 
   const score = weightedScore(criteria)
 
-  // Hinweis aus dem Framework: AEO ohne Ranking bleibt wirkungslos.
+  // Struktur steht, klassisches Ranking noch nicht. Das ist ein Hinweis auf
+  // eine Chance, keine Vertagung: KI-Übersichten und Sprachmodelle zitieren
+  // regelmässig Quellen, die organisch nicht auf Seite eins stehen. Die
+  // frühere Fassung dieses Befundes riet, erst das SEO-Fundament zu bauen –
+  // das war fachlich überholt und stand im Widerspruch zu der Regel, die dem
+  // Berichtstext vorgegeben wird.
   const ranksTop10 = input.serp?.items?.some(
     (i) => i.type === 'organic' && (i.rank_group ?? 99) <= 10 && matchesTarget(i.domain, s.url),
   )
   if (ranksTop10 === false && score >= 6) {
     findings.push({
       id: 'aeo-no-ranking',
-      severity: 'longterm',
-      title: 'Gute AEO-Struktur, aber keine Top-10-Platzierung',
-      why: 'Antwortboxen werden fast ausschliesslich aus den ersten zehn Ergebnissen befüllt. Ohne Ranking bleibt die Struktur ungenutzt.',
-      action: 'Erst das SEO-Fundament stärken (Inhaltstiefe, interne Verlinkung, Backlinks) – die AEO-Struktur zahlt sich dann automatisch aus.',
-      effort: 'hoch',
+      severity: 'quickwin',
+      title: 'Gute AEO-Struktur, klassisches Ranking noch offen',
+      why: 'Die Antwortstruktur steht, eine Top-10-Platzierung für den geprüften Begriff gibt es noch nicht. Beides hängt weniger zusammen als früher: KI-Übersichten und Sprachmodelle zitieren regelmässig Quellen, die organisch nicht auf Seite eins stehen. Der Weg über die Antwort ist hier der kürzere.',
+      action: 'Die vorhandene Struktur auf weitere konkrete Fragen ausdehnen – je präziser die Frage, desto eher wird die Antwort zitiert, unabhängig vom Ranking. Das klassische Ranking parallel aufbauen, nicht davor.',
+      effort: 'mittel',
       impact: 'hoch',
     })
   }

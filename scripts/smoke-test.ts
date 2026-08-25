@@ -161,6 +161,16 @@ function main() {
     abrufFormate ? abrufFormate[0] : 'ohne rawHtml bleibt der Kopfbereich leer',
   )
 
+  // Zweite Stufe desselben Problems: Firecrawl darf ohne Angabe eine
+  // gespeicherte Fassung der Seite ausliefern. Der Bericht bewertet dann einen
+  // alten Stand, ohne dass irgendwo ein Fehler auftaucht. maxAge: 0 erzwingt
+  // den frischen Abruf – die Prüfung hält das fest.
+  check(
+    'Der Seitenabruf erzwingt eine frische Fassung',
+    /maxAge:\s*0\b/.test(firecrawlQuelltext),
+    'ohne maxAge: 0 kann Firecrawl den Stand von vorgestern liefern',
+  )
+
   section('Auswertung erkennt die Mängel der schwachen Seite')
   const w = weak.signals
   check('Fehlende Meta Description erkannt', w.metaDescription === null)
@@ -594,6 +604,35 @@ function main() {
   check(
     'Stattdessen der Hinweis auf die Eingabe',
     serpOhneNachfrage.findings.some((f) => f.id === 'keyword-ohne-nachfrage'),
+  )
+
+  section('AEO wird nicht hinter das Ranking gestellt')
+
+  // Der Befund und die Regel im Berichtstext müssen dasselbe sagen. Vorher
+  // riet der Befund, erst das SEO-Fundament zu bauen – während dem Bericht
+  // ausdrücklich verboten war, genau das zu schreiben.
+  const aeoOhneRanking = analyzeAeo({
+    signals: strong.signals,
+    serp: { keyword: 'ki beratung', items: [{ type: 'organic', rank_group: 1, domain: 'fremde-domain.de' }] },
+    peopleAlsoAsk: [],
+  })
+  const rangBefund = aeoOhneRanking.findings.find((f) => f.id === 'aeo-no-ranking')
+  check('Der Befund entsteht', Boolean(rangBefund), `AEO-Note ${aeoOhneRanking.score.toFixed(1)}`)
+  check(
+    'Er rät nicht mehr, erst das SEO-Fundament zu bauen',
+    !/Erst das SEO-Fundament/.test(rangBefund?.action ?? ''),
+  )
+  check(
+    'Er nennt den Weg über die Antwort als den kürzeren',
+    /nicht auf Seite eins/.test(rangBefund?.why ?? ''),
+    'KI-Übersichten zitieren auch jenseits der Top 10',
+  )
+  check(
+    'Ohne SERP-Daten entsteht kein Befund',
+    !analyzeAeo({ signals: strong.signals, serp: null, peopleAlsoAsk: [] }).findings.some(
+      (f) => f.id === 'aeo-no-ranking',
+    ),
+    'eine fehlende Messung darf keine Behauptung erzeugen',
   )
 
   section('Canonical wird gegen die ausgelieferte Adresse geprüft')
