@@ -8,6 +8,7 @@ import { requireSession, requireRole } from '@/lib/auth/session'
 import { enqueueAnalysis, analysisQueue } from '@/lib/queue'
 import { availableProviders } from '@/lib/connectors/credentials'
 import { reichtGuthaben, guthabenHinweis } from '@/lib/billing/guthaben'
+import { siehtAbrechnung } from '@/lib/billing/zugaenge'
 import { detectPlatform } from '@/lib/connectors/apify'
 import type { ModuleKey } from './run'
 
@@ -62,7 +63,7 @@ export async function startAnalysisAction(_prev: StartState, formData: FormData)
 
   const organization = await db.organization.findUniqueOrThrow({ where: { id: session.organizationId } })
   if (!reichtGuthaben(organization, 'analyse')) {
-    return { error: guthabenHinweis(organization, 'analyse') }
+    return { error: guthabenHinweis(organization, 'analyse', { mitZahlen: siehtAbrechnung(session) }) }
   }
 
   const analysis = await db.analysis.create({

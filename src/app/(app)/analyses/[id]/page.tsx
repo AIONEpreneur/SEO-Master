@@ -100,7 +100,7 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
         <Card className="p-4">
           <p className="text-[13px] font-medium">Der Lauf wurde abgebrochen</p>
           <p className="mt-1 text-[13px] text-ink-muted">
-            Es wurde nichts ausgewertet und nichts vom Guthaben abgezogen.
+            Es wurde nichts ausgewertet — der Lauf zählt nicht mit.
           </p>
           <form action={restartAnalysisAction} className="mt-3">
             <input type="hidden" name="id" value={analysis.id} />

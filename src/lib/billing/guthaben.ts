@@ -35,9 +35,25 @@ export function reichtGuthaben(organisation: { plan: Plan; credits: number }, vo
   return organisation.credits >= NOETIG[vorgang]
 }
 
-export function guthabenHinweis(organisation: { plan: Plan; credits: number }, vorgang: Vorgang): string {
+/**
+ * Der Hinweis, wenn es nicht mehr reicht.
+ *
+ * Für Kundinnen ohne Zahlen aus der Kostenrechnung: Credits sind Cent an
+ * Anbieterkosten und gehen sie nichts an. Sie brauchen zu wissen, dass Schluss
+ * ist und an wen sie sich wenden – nicht, was ein Aufruf kostet.
+ */
+export function guthabenHinweis(
+  organisation: { plan: Plan; credits: number },
+  vorgang: Vorgang,
+  optionen?: { mitZahlen?: boolean },
+): string {
   const noetig = NOETIG[vorgang]
   const was = vorgang === 'analyse' ? 'Analyse' : 'Recherche'
+
+  if (!optionen?.mitZahlen) {
+    return `Für diesen Zeitraum sind keine ${was}n mehr frei. Bitte wenden Sie sich an die Verwaltung, um weitere freizuschalten.`
+  }
+
   return organisation.credits <= 0
     ? `Das Guthaben ist aufgebraucht. Für eine ${was} werden etwa ${noetig} Credits gebraucht.`
     : `Das Guthaben reicht nicht für eine weitere ${was}: ${organisation.credits} vorhanden, etwa ${noetig} nötig.`

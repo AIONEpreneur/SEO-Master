@@ -1,4 +1,6 @@
+import { redirect } from 'next/navigation'
 import { requireSession } from '@/lib/auth/session'
+import { siehtAbrechnung } from '@/lib/billing/zugaenge'
 import { db } from '@/lib/db'
 import { Card, CardHeader, EmptyState } from '@/components/ui'
 import { Receipt } from 'lucide-react'
@@ -8,6 +10,10 @@ export const dynamic = 'force-dynamic'
 
 export default async function UsagePage() {
   const session = await requireSession()
+  // Guthaben und Anbieterkosten sind die Kostenrechnung des Betriebs. Eine
+  // Kundin zahlt einen Monatspreis – ihr die Marge vorzurechnen gehört nicht
+  // zum Angebot.
+  if (!siehtAbrechnung(session)) redirect('/dashboard')
 
   const since = new Date()
   since.setDate(since.getDate() - 30)

@@ -12,7 +12,8 @@ import { logoutAction } from '@/lib/auth/actions'
 import { ThemeToggle } from '@/components/theme-toggle'
 import type { SessionUser } from '@/lib/auth/session'
 import type { Theme } from '@/lib/theme'
-import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
+import { verwaltetEigeneZugaenge, siehtAbrechnung, verbleibendeAnalysen } from '@/lib/billing/zugaenge'
+import { KOSTEN_ANALYSE } from '@/lib/billing/guthaben'
 
 const NAVIGATION = [
   {
@@ -33,18 +34,15 @@ const NAVIGATION = [
   },
   {
     label: 'Einstellungen',
-    items: [
-      { href: '/settings/team', label: 'Team', icon: Users2 },
-      { href: '/settings/usage', label: 'Verbrauch', icon: Receipt },
-    ],
+    items: [{ href: '/settings/team', label: 'Team', icon: Users2 }],
   },
 ]
 
-/**
- * Der Datentresor erscheint nur, wo eigene Anbieter-Zugaenge verwaltet werden.
- * Eine Kundin bezahlt fuer die Nutzung; Schluessel besorgt sie keine.
- */
 const TRESOR = { href: '/settings/vault', label: 'Datentresor', icon: KeyRound }
+/** Verbrauch heisst Anbieterkosten – das ist die Rechnung des Betriebs. */
+const VERBRAUCH = { href: '/settings/usage', label: 'Verbrauch', icon: Receipt }
+
+
 
 /**
  * Nur für den Betrieb der Instanz. Wird ausschliesslich eingeblendet, wenn das
@@ -95,8 +93,17 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           {[
             ...NAVIGATION.map((group) =>
-              group.label === 'Einstellungen' && verwaltetEigeneZugaenge(session)
-                ? { ...group, items: [TRESOR, ...group.items] }
+              group.label === 'Einstellungen'
+                ? {
+                    ...group,
+                    // Datentresor und Verbrauch erscheinen nur dort, wo sie
+                    // hingehoeren: beim Betrieb.
+                    items: [
+                      ...(verwaltetEigeneZugaenge(session) ? [TRESOR] : []),
+                      ...group.items,
+                      ...(siehtAbrechnung(session) ? [VERBRAUCH] : []),
+                    ],
+                  }
                 : group,
             ),
             ...(session.isSuperAdmin ? [BETRIEB] : []),
@@ -141,18 +148,33 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
             gehört an eine Stelle, die immer sichtbar ist: Es entscheidet
             darüber, ob der nächste Lauf überhaupt startet.
           */}
-          <Link
-            href="/settings/usage"
-            className="mb-3 flex items-center justify-between rounded-lg border border-border px-2.5 py-2 transition-colors hover:bg-surface-muted"
-          >
-            <span className="flex items-center gap-2 text-[12px] text-ink-muted">
-              <Coins size={14} className="text-brand" />
-              Guthaben
-            </span>
-            <span className="text-[12px] font-semibold tabular-nums">
-              {session.credits >= 100000 ? '∞' : session.credits.toLocaleString('de-DE')}
-            </span>
-          </Link>
+          {siehtAbrechnung(session) ? (
+            <Link
+              href="/settings/usage"
+              className="mb-3 flex items-center justify-between rounded-lg border border-border px-2.5 py-2 transition-colors hover:bg-surface-muted"
+            >
+              <span className="flex items-center gap-2 text-[12px] text-ink-muted">
+                <Coins size={14} className="text-brand" />
+                Guthaben
+              </span>
+              <span className="text-[12px] font-semibold tabular-nums">
+                {session.credits >= 100000 ? '∞' : session.credits.toLocaleString('de-DE')}
+              </span>
+            </Link>
+          ) : (
+            // Fuer Kundinnen dieselbe Information in ihrer Sprache: Credits
+            // sind Cent an Anbieterkosten, Analysen sind das, was sie gekauft
+            // haben.
+            <div className="mb-3 flex items-center justify-between rounded-lg border border-border px-2.5 py-2">
+              <span className="flex items-center gap-2 text-[12px] text-ink-muted">
+                <ScanSearch size={14} className="text-brand" />
+                Analysen frei
+              </span>
+              <span className="text-[12px] font-semibold tabular-nums">
+                {verbleibendeAnalysen(session.credits, KOSTEN_ANALYSE).toLocaleString('de-DE')}
+              </span>
+            </div>
+          )}
 
           <div className="mb-3 px-0.5">
             <ThemeToggle initial={theme} />

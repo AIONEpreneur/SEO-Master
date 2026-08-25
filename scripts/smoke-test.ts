@@ -30,7 +30,7 @@ import { VERWENDETE_ANBIETER } from '../src/lib/connectors/credentials'
 import { reichtGuthaben, guthabenHinweis, KOSTEN_ANALYSE } from '../src/lib/billing/guthaben'
 import { MINUTEN_JE_ANALYSE } from '../src/lib/admin/kennzahlen'
 import { deckung, empfohlenesKontingent } from '../src/lib/admin/kalkulation'
-import { verwaltetEigeneZugaenge } from '../src/lib/billing/zugaenge'
+import { verwaltetEigeneZugaenge, siehtAbrechnung, verbleibendeAnalysen } from '../src/lib/billing/zugaenge'
 import { csvVon, dateiname } from '../src/app/api/export/route'
 import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
@@ -988,9 +988,9 @@ function main() {
       !reichtGuthaben({ plan: 'FREE', credits: 10 }, 'analyse'),
   )
   check(
-    'Der Hinweis nennt den fehlenden Betrag',
-    /5 vorhanden/.test(guthabenHinweis({ plan: 'FREE', credits: 5 }, 'analyse')),
-    guthabenHinweis({ plan: 'FREE', credits: 5 }, 'analyse'),
+    'Der Hinweis an den Betrieb nennt den fehlenden Betrag',
+    /5 vorhanden/.test(guthabenHinweis({ plan: 'FREE', credits: 5 }, 'analyse', { mitZahlen: true })),
+    guthabenHinweis({ plan: 'FREE', credits: 5 }, 'analyse', { mitZahlen: true }),
   )
 
   section('Einladungen')
@@ -1301,6 +1301,79 @@ function main() {
     'Der Datentresor steht nicht in der festen Navigation',
     !/NAVIGATION[\s\S]*?settings\/vault[\s\S]*?^\]/m.test(seitenleiste),
     'er wird nur eingeblendet, wo eigene Zugaenge verwaltet werden',
+  )
+
+  section('Die Kundin sieht keine Abrechnung')
+
+  // Ein Credit ist ein US-Cent an Anbieterkosten. Wer einen Monatspreis
+  // zahlt, bekommt damit die Marge des Betriebs vorgerechnet.
+  check('Eine Kundin sieht die Abrechnung nicht', !siehtAbrechnung(alsKundin))
+  check('Der Betrieb schon', siehtAbrechnung({ ...alsKundin, plan: 'INTERNAL' }))
+
+  const verbrauchsSeite = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'settings', 'usage', 'page.tsx'),
+    'utf8',
+  )
+  check(
+    'Die Verbrauchsseite weist Kundinnen ab',
+    /if \(!siehtAbrechnung\(session\)\) redirect/.test(verbrauchsSeite),
+  )
+
+  check(
+    'Weder Tresor noch Verbrauch stehen in der festen Navigation',
+    !/NAVIGATION[\s\S]*?settings\/(vault|usage)[\s\S]*?^\]/m.test(seitenleiste),
+    'beide werden nur dort eingeblendet, wo sie hingehören',
+  )
+
+  // Statt Credits die Zahl, die sie gekauft hat.
+  check(
+    'Guthaben wird in Analysen umgerechnet',
+    verbleibendeAnalysen(850, KOSTEN_ANALYSE) === Math.floor(850 / KOSTEN_ANALYSE),
+    `850 Credits sind ${verbleibendeAnalysen(850, KOSTEN_ANALYSE)} Analysen`,
+  )
+  check(
+    'Es wird abgerundet, nie aufgerundet',
+    verbleibendeAnalysen(KOSTEN_ANALYSE * 3 - 1, KOSTEN_ANALYSE) === 2,
+    'eine Zahl, die verspricht, muss halten',
+  )
+  check('Ohne Guthaben keine Analyse', verbleibendeAnalysen(0, KOSTEN_ANALYSE) === 0)
+  check('Ein leeres Konto ergibt keine negative Zahl', verbleibendeAnalysen(-50, KOSTEN_ANALYSE) === 0)
+
+  // Der Hinweis bei erschöpftem Kontingent darf keine Kostenzahlen tragen.
+  const kundenHinweis = guthabenHinweis({ plan: 'STARTER', credits: 5 }, 'analyse')
+  check(
+    'Der Hinweis an die Kundin nennt keine Credits',
+    !/Credit/i.test(kundenHinweis) && !/\d/.test(kundenHinweis),
+    kundenHinweis,
+  )
+  check(
+    'Für den Betrieb stehen die Zahlen weiterhin drin',
+    /5 vorhanden/.test(guthabenHinweis({ plan: 'INTERNAL', credits: 5 }, 'analyse', { mitZahlen: true })),
+  )
+
+  // Zeilenweise zu suchen genügt hier nicht: Die Absicherung steht ein paar
+  // Zeilen über der Anzeige. Geprüft wird deshalb der Text davor.
+  const guthabenAnzeigen: string[] = []
+  for (const datei of execSync("grep -rl 'session.credits' src/app src/components || true", {
+    encoding: 'utf8',
+  })
+    .trim()
+    .split('\n')
+    .filter(Boolean)) {
+    const quelle = readFileSync(join(dir, '..', '..', datei), 'utf8')
+    const muster = /session\.credits/g
+    let treffer: RegExpExecArray | null
+    while ((treffer = muster.exec(quelle))) {
+      const davor = quelle.slice(Math.max(0, treffer.index - 700), treffer.index)
+      if (!/siehtAbrechnung|verbleibendeAnalysen/.test(davor)) {
+        guthabenAnzeigen.push(`${datei}:${quelle.slice(0, treffer.index).split('\n').length}`)
+      }
+    }
+  }
+  check(
+    'Nirgends wird das Guthaben ungeprüft angezeigt',
+    guthabenAnzeigen.length === 0,
+    guthabenAnzeigen.join(' · ') || 'jede Anzeige ist an siehtAbrechnung gebunden',
   )
 
   section('Bericht')

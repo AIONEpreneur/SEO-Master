@@ -7,7 +7,8 @@ import { providerLabel } from '@/lib/connectors/labels'
 import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
 import { Onboarding } from '@/components/onboarding'
-import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
+import { verwaltetEigeneZugaenge, siehtAbrechnung, verbleibendeAnalysen } from '@/lib/billing/zugaenge'
+import { KOSTEN_ANALYSE } from '@/lib/billing/guthaben'
 import { wiederkehrendeBefunde } from '@/lib/analysis/wiederkehrend'
 
 export const dynamic = 'force-dynamic'
@@ -94,11 +95,20 @@ export default async function DashboardPage() {
           label="Geprüfte Adressen"
           value={String(geprueft.length)}
         />
-        <Metric
-          icon={<Coins size={15} />}
-          label="Guthaben"
-          value={session.credits >= 100000 ? 'Unbegrenzt' : session.credits.toLocaleString('de-DE')}
-        />
+        {siehtAbrechnung(session) ? (
+          <Metric
+            icon={<Coins size={15} />}
+            label="Guthaben"
+            value={session.credits >= 100000 ? 'Unbegrenzt' : session.credits.toLocaleString('de-DE')}
+          />
+        ) : (
+          <Metric
+            icon={<ScanSearch size={15} />}
+            label="Analysen frei"
+            value={verbleibendeAnalysen(session.credits, KOSTEN_ANALYSE).toLocaleString('de-DE')}
+            zusatz="in diesem Zeitraum"
+          />
+        )}
       </div>
 
       {/* Kein Durchschnitt über alle Läufe: Wer eine starke und eine schwache
