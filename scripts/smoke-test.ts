@@ -1684,6 +1684,25 @@ function main() {
     'wer die Website einmal vollstaendig prueft, bekommt sie monatlich vollstaendig',
   )
 
+  section('Die Ausser-Haus-Kopie ist vorbereitet')
+
+  const kopieSkript = readFileSync(join(dir, '..', '..', 'deploy', 'kopie-einrichten.sh'), 'utf8')
+  check(
+    'Das Ziel kommt als Argument, nicht ueber eine Rueckfrage',
+    // Auf den Befehl pruefen, nicht auf das Wort: Der Kommentar im Skript
+    // erklaert genau diesen Grund und enthaelt das Wort selbst.
+    /\$\{1:-\}/.test(kopieSkript) && !/^\s*read\s/m.test(kopieSkript),
+    'in Web-Terminals schlaegt read ohne TTY fehl – das war schon einmal der Fehler',
+  )
+  check('Ein eigener Schluessel nur fuer die Kopie', /seomaster-kopie/.test(kopieSkript))
+  check('Der Probelauf passiert sofort, nicht erst nachts', kopieSkript.indexOf('Probelauf') < kopieSkript.indexOf('crontab'))
+  check('Alte Kopien raeumen sich auf dem Ziel selbst weg', /-mtime \+30 -delete/.test(kopieSkript))
+  check(
+    'Das Skript warnt, dass der ENCRYPTION_KEY nirgends auf die Server gehoert',
+    /ENCRYPTION_KEY/.test(kopieSkript) && /Passwortmanager/.test(kopieSkript),
+  )
+  check('Der Auftrag wird nicht doppelt eingerichtet', /grep -qF "seomaster-kopie"/.test(kopieSkript))
+
   section('Bericht')
   const result: AnalysisResult = {
     target: { url: 'https://beispiel.de/ki-beratung', kind: 'WEBSITE', domain: 'beispiel.de' },
