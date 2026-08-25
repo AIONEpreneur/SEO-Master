@@ -7,6 +7,7 @@ import { db } from '@/lib/db'
 import { requireSession, requireRole } from '@/lib/auth/session'
 import { enqueueAnalysis, analysisQueue } from '@/lib/queue'
 import { availableProviders } from '@/lib/connectors/credentials'
+import { reichtGuthaben, guthabenHinweis } from '@/lib/billing/guthaben'
 import { detectPlatform } from '@/lib/connectors/apify'
 import type { ModuleKey } from './run'
 
@@ -60,8 +61,8 @@ export async function startAnalysisAction(_prev: StartState, formData: FormData)
   }
 
   const organization = await db.organization.findUniqueOrThrow({ where: { id: session.organizationId } })
-  if (organization.plan !== 'INTERNAL' && organization.credits <= 0) {
-    return { error: 'Das Guthaben ist aufgebraucht. Bitte aufladen, um weitere Analysen zu starten.' }
+  if (!reichtGuthaben(organization, 'analyse')) {
+    return { error: guthabenHinweis(organization, 'analyse') }
   }
 
   const analysis = await db.analysis.create({
@@ -173,7 +174,7 @@ export async function restartAnalysisAction(formData: FormData) {
   if (!alt) return
 
   const organization = await db.organization.findUniqueOrThrow({ where: { id: session.organizationId } })
-  if (organization.plan !== 'INTERNAL' && organization.credits <= 0) return
+  if (!reichtGuthaben(organization, 'analyse')) return
 
   const neu = await db.analysis.create({
     data: {

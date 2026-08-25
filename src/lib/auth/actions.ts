@@ -6,6 +6,7 @@ import { db } from '@/lib/db'
 import { hashPassword, verifyPassword } from './password'
 import { createSession, destroySession } from './session'
 import { env } from '@/lib/env'
+import { pruefeEinladung, FEHLERTEXTE } from './einladungen'
 
 const credentials = z.object({
   email: z.string().email('Bitte eine gültige E-Mail-Adresse angeben.'),
@@ -30,6 +31,12 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   const invalid: FormState = { error: 'E-Mail-Adresse oder Passwort stimmen nicht.' }
   if (!user) return invalid
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) return invalid
+
+  // Erst nach geprüftem Passwort: Sonst liesse sich über die Meldung
+  // herausfinden, welche Adressen ein gesperrtes Konto haben.
+  if (user.suspendedAt) {
+    return { error: 'Dieser Zugang ist gesperrt. Bitte wenden Sie sich an die Verwaltung.' }
+  }
 
   await createSession(user.id)
   await db.auditLog.create({ data: { userId: user.id, action: 'auth.login' } })
@@ -88,6 +95,87 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
   redirect('/dashboard')
 }
 
+/**
+ * Einladung annehmen: Konto anlegen und in den vorgesehenen Arbeitsbereich
+ * setzen.
+ *
+ * Ohne organizationId auf der Einladung entsteht ein eigener Arbeitsbereich –
+ * das ist der Kundenfall. Die Person ist dort Inhaberin und sieht danach
+ * ausschliesslich ihre eigenen Projekte, Analysen und Berichte; die
+ * Mandantentrennung läuft über genau diese Zugehörigkeit.
+ *
+ * Die Adressliste aus ALLOWED_SIGNUP_EMAILS gilt hier absichtlich nicht: Eine
+ * gültige Einladung ist die Erlaubnis. Sonst müsste vor jeder Einladung noch
+ * eine Umgebungsvariable geändert werden.
+ */
+export async function acceptInvitationAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const code = String(formData.get('code') ?? '')
+  const name = String(formData.get('name') ?? '').trim()
+  const parsed = credentials.safeParse({
+    email: String(formData.get('email') ?? '').toLowerCase().trim(),
+    password: String(formData.get('password') ?? ''),
+  })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+
+  const { fehler, einladung } = await pruefeEinladung(code)
+  if (fehler || !einladung) return { error: FEHLERTEXTE[fehler ?? 'unbekannt'] }
+
+  // Die Einladung gilt für genau eine Adresse. Sonst liesse sich ein
+  // weitergereichter Link auf ein beliebiges Konto ummünzen.
+  if (parsed.data.email !== einladung.email) {
+    return { error: `Diese Einladung gilt für ${einladung.email}. Bitte diese Adresse verwenden.` }
+  }
+
+  if (await db.user.findUnique({ where: { email: parsed.data.email } })) {
+    return { error: 'Für diese E-Mail-Adresse besteht bereits ein Konto. Bitte einfach anmelden.' }
+  }
+
+  const arbeitsbereichName = einladung.newOrganizationName || name || parsed.data.email.split('@')[0]
+  const passwordHash = await hashPassword(parsed.data.password)
+  const slug = einladung.organizationId ? null : await uniqueSlug(arbeitsbereichName)
+
+  const user = await db.$transaction(async (tx) => {
+    const angelegt = await tx.user.create({
+      data: {
+        email: parsed.data.email,
+        name: name || null,
+        passwordHash,
+        memberships: {
+          create: einladung.organizationId
+            ? { role: einladung.role, organizationId: einladung.organizationId }
+            : {
+                role: 'OWNER',
+                organization: {
+                  create: {
+                    name: arbeitsbereichName,
+                    slug: slug as string,
+                    plan: einladung.plan,
+                    credits: einladung.credits,
+                  },
+                },
+              },
+        },
+      },
+    })
+
+    // Im selben Vorgang entwerten, damit ein zweimal geöffneter Link nicht
+    // zwei Konten anlegt.
+    const entwertet = await tx.invitation.updateMany({
+      where: { id: einladung.id, acceptedAt: null, revokedAt: null },
+      data: { acceptedAt: new Date(), acceptedUserId: angelegt.id },
+    })
+    if (entwertet.count !== 1) throw new Error('Diese Einladung wurde soeben bereits eingelöst.')
+
+    return angelegt
+  })
+
+  await createSession(user.id)
+  await db.auditLog.create({
+    data: { userId: user.id, action: 'auth.invitation.accepted', target: einladung.id },
+  })
+  redirect('/dashboard')
+}
+
 export async function logoutAction() {
   await destroySession()
   redirect('/login')
@@ -117,7 +205,7 @@ export async function isRegistrationOpen(): Promise<boolean> {
   return Boolean(allowlist?.length) || e.ALLOW_PUBLIC_SIGNUP === 'true'
 }
 
-async function uniqueSlug(name: string): Promise<string> {
+export async function uniqueSlug(name: string): Promise<string> {
   const base =
     name
       .toLowerCase()

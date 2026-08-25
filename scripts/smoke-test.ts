@@ -27,6 +27,8 @@ import { beurteile, begriffsBefund, istZuAllgemein, messbare } from '../src/lib/
 import { beurteileKanonisch, kanonischerBefund, kanonischeNote } from '../src/lib/analysis/kanonisch'
 import { bezeichnung, wiederkehrendeBefunde } from '../src/lib/analysis/wiederkehrend'
 import { VERWENDETE_ANBIETER } from '../src/lib/connectors/credentials'
+import { reichtGuthaben, guthabenHinweis, KOSTEN_ANALYSE } from '../src/lib/billing/guthaben'
+import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
 import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
 import { normalizeProfile } from '../src/lib/connectors/apify'
@@ -905,6 +907,113 @@ function main() {
       lauf([['seo-stale', 'Inhalt veraltet', 'longterm']]),
       lauf([['seo-stale', 'Inhalt veraltet', 'critical']]),
     ])[0]?.severity === 'critical',
+  )
+
+  section('Jede Kundin sieht nur ihre eigenen Daten')
+
+  // Der wichtigste Test dieser Datei, sobald fremde Personen die Anwendung
+  // nutzen. Er liest den Quelltext: Jede Abfrage auf ein mandantengebundenes
+  // Modell muss an die Organisation gebunden sein. Eine vergessene Bindung
+  // wäre von aussen nicht sichtbar – die Seite sähe richtig aus und zeigte
+  // fremde Daten.
+  const MANDANTENMODELLE = [
+    'analysis', 'project', 'report', 'keywordResearch', 'credential',
+    'competitor', 'trackedKeyword', 'usageRecord', 'analysisStep', 'invitation',
+  ]
+  const ZUGRIFFE = [
+    'findMany', 'findFirst', 'findUnique', 'findUniqueOrThrow', 'update',
+    'updateMany', 'delete', 'deleteMany', 'upsert', 'aggregate', 'count', 'groupBy',
+  ]
+
+  const quelldateien = execSync("find src/app src/lib -name '*.ts' -o -name '*.tsx'", { encoding: 'utf8' })
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+
+  const ungeschuetzt: string[] = []
+  for (const datei of quelldateien) {
+    const quelle = readFileSync(join(dir, '..', '..', datei), 'utf8')
+    for (const modell of MANDANTENMODELLE) {
+      const muster = new RegExp(`db\\.${modell}\\.(${ZUGRIFFE.join('|')})`, 'g')
+      let treffer: RegExpExecArray | null
+      while ((treffer = muster.exec(quelle))) {
+        // Der Ausschnitt hinter dem Aufruf muss die Bindung enthalten – über
+        // die Organisation selbst, über ein bereits geprüftes Elternobjekt
+        // oder über einen Schlüssel, der für sich schon eindeutig ist.
+        const ausschnitt = quelle.slice(treffer.index, treffer.index + 500)
+        const gebunden = /organizationId|organization:\s*\{|project:\s*\{|projectId|analysisId|invitedById|codeHash/.test(ausschnitt)
+        // Löschen direkt nach geprüfter Zugehörigkeit ist zulässig.
+        const vorherGeprueft = /findFirst\({[^}]*organizationId/.test(quelle.slice(Math.max(0, treffer.index - 400), treffer.index))
+        if (!gebunden && !vorherGeprueft) {
+          ungeschuetzt.push(`${datei}: ${treffer[0]}`)
+        }
+      }
+    }
+  }
+  check(
+    'Keine Abfrage ohne Bindung an die Organisation',
+    ungeschuetzt.length === 0,
+    ungeschuetzt.length > 0 ? ungeschuetzt.join(' · ') : `${quelldateien.length} Dateien geprüft`,
+  )
+
+  section('Guthaben begrenzt fremde Kosten')
+
+  // Ohne eigene Zugangsdaten greift eine Kundin auf die des Betriebs zurück.
+  // Das Guthaben ist damit die einzige Grenze zur eigenen Rechnung.
+  check(
+    'Ein einzelner Credit genügt nicht mehr für einen Lauf',
+    !reichtGuthaben({ plan: 'FREE', credits: 1 }, 'analyse'),
+    `eine Analyse kostet etwa ${KOSTEN_ANALYSE} Credits`,
+  )
+  check('Genug Guthaben lässt den Lauf zu', reichtGuthaben({ plan: 'FREE', credits: KOSTEN_ANALYSE }, 'analyse'))
+  check('Leeres Guthaben sperrt', !reichtGuthaben({ plan: 'FREE', credits: 0 }, 'analyse'))
+  check(
+    'Der interne Arbeitsbereich rechnet nicht ab',
+    reichtGuthaben({ plan: 'INTERNAL', credits: 0 }, 'analyse'),
+  )
+  check(
+    'Die Recherche ist günstiger als eine Analyse',
+    reichtGuthaben({ plan: 'FREE', credits: 10 }, 'recherche') &&
+      !reichtGuthaben({ plan: 'FREE', credits: 10 }, 'analyse'),
+  )
+  check(
+    'Der Hinweis nennt den fehlenden Betrag',
+    /5 vorhanden/.test(guthabenHinweis({ plan: 'FREE', credits: 5 }, 'analyse')),
+    guthabenHinweis({ plan: 'FREE', credits: 5 }, 'analyse'),
+  )
+
+  section('Einladungen')
+
+  const einladungsQuelltext = readFileSync(
+    join(dir, '..', '..', 'src', 'lib', 'auth', 'einladungen.ts'),
+    'utf8',
+  )
+  check(
+    'Der Einladungscode wird nur als Hash gespeichert',
+    /codeHash: hashToken\(code\)/.test(einladungsQuelltext) && !/code,\s*$/m.test(einladungsQuelltext),
+    'wer die Datenbank liest, darf keine fremden Zugänge einrichten können',
+  )
+
+  const anmeldeQuelltext = readFileSync(join(dir, '..', '..', 'src', 'lib', 'auth', 'actions.ts'), 'utf8')
+  check(
+    'Eine Einladung gilt nur für die eingeladene Adresse',
+    /parsed\.data\.email !== einladung\.email/.test(anmeldeQuelltext),
+    'sonst liesse sich ein weitergereichter Link auf ein fremdes Konto ummünzen',
+  )
+  check(
+    'Das Einlösen entwertet die Einladung im selben Vorgang',
+    /db\.\$transaction/.test(anmeldeQuelltext) && /entwertet\.count !== 1/.test(anmeldeQuelltext),
+    'sonst legt ein zweimal geöffneter Link zwei Konten an',
+  )
+  check(
+    'Gesperrte Konten kommen nicht durch die Anmeldung',
+    /user\.suspendedAt/.test(anmeldeQuelltext),
+  )
+  const sitzungsQuelltext = readFileSync(join(dir, '..', '..', 'src', 'lib', 'auth', 'session.ts'), 'utf8')
+  check(
+    'Eine Sperre wirkt auch auf bestehende Sitzungen',
+    /session\.user\.suspendedAt/.test(sitzungsQuelltext),
+    'sonst arbeitet die gesperrte Person bis zum Ablauf des Cookies weiter',
   )
 
   section('Bericht')

@@ -1,6 +1,8 @@
-import { requireSession } from '@/lib/auth/session'
+import { requireSession, hasRole } from '@/lib/auth/session'
 import { db } from '@/lib/db'
-import { Card, CardHeader } from '@/components/ui'
+import { Card, CardHeader, Button } from '@/components/ui'
+import { Einladen } from './einladen'
+import { ziehZurueckAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,13 +15,22 @@ const ROLE_LABELS: Record<string, { label: string; description: string }> = {
 
 export default async function TeamPage() {
   const session = await requireSession()
-  const [memberships, organization] = await Promise.all([
+  const [memberships, organization, offeneEinladungen] = await Promise.all([
     db.membership.findMany({
       where: { organizationId: session.organizationId },
       include: { user: { select: { email: true, name: true, lastLoginAt: true } } },
       orderBy: { createdAt: 'asc' },
     }),
     db.organization.findUniqueOrThrow({ where: { id: session.organizationId } }),
+    db.invitation.findMany({
+      where: {
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+        OR: [{ organizationId: session.organizationId }, { invitedById: session.id }],
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
   ])
 
   return (
@@ -58,14 +69,43 @@ export default async function TeamPage() {
         </ul>
       </Card>
 
-      <Card className="p-5">
-        <p className="text-[13px] font-medium">Weitere Personen aufnehmen</p>
-        <p className="mt-1 text-[13px] text-ink-muted">
-          Einladungen per E-Mail sind noch nicht eingebaut. Bis dahin: Die Person registriert sich unter{' '}
-          <code className="rounded bg-surface-muted px-1.5 py-0.5 text-[12px]">/register</code>, danach lässt
-          sich ihre Mitgliedschaft direkt in der Datenbank auf diesen Arbeitsbereich umhängen.
-        </p>
-      </Card>
+      {offeneEinladungen.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Offene Einladungen"
+            description="Noch nicht eingelöst. Der Link wird aus Sicherheitsgründen nicht erneut angezeigt."
+          />
+          <ul className="divide-y divide-border">
+            {offeneEinladungen.map((einladung) => (
+              <li key={einladung.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium">{einladung.email}</p>
+                  <p className="truncate text-[12px] text-ink-subtle">
+                    {einladung.organizationId ? 'Ins eigene Team' : 'Eigener Arbeitsbereich'} · gültig bis{' '}
+                    {einladung.expiresAt.toLocaleDateString('de-DE')}
+                  </p>
+                </div>
+                <form action={ziehZurueckAction}>
+                  <input type="hidden" name="id" value={einladung.id} />
+                  <Button type="submit" variant="ghost" size="sm">
+                    Zurückziehen
+                  </Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {hasRole(session, 'ADMIN') ? (
+        <Einladen />
+      ) : (
+        <Card className="p-5">
+          <p className="text-[13px] text-ink-muted">
+            Personen einladen darf, wer Verwaltungsrechte in diesem Arbeitsbereich hat.
+          </p>
+        </Card>
+      )}
     </div>
   )
 }

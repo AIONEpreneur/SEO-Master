@@ -79,6 +79,10 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
 
   if (!session || session.expiresAt < new Date()) return null
 
+  // Eine Sperre wirkt sofort, auch auf bestehende Sitzungen. Sonst könnte
+  // eine gesperrte Person bis zum Ablauf des Cookies weiterarbeiten.
+  if (session.user.suspendedAt) return null
+
   const membership = session.user.memberships[0]
   if (!membership) return null
 

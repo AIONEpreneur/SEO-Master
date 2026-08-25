@@ -22,6 +22,9 @@ model User {
   name         String?
   passwordHash String
   isSuperAdmin Boolean   @default(false)
+  // Gesperrte Konten können sich nicht anmelden; bestehende Sitzungen werden
+  // beim Sperren verworfen.
+  suspendedAt  DateTime?
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -29,6 +32,7 @@ model User {
   memberships Membership[]
   sessions    Session[]
   auditLogs   AuditLog[]
+  invitations Invitation[] @relation("EingeladenVon")
 
   @@map("users")
 }
@@ -67,6 +71,7 @@ model Organization {
   auditLogs         AuditLog[]
   usage             UsageRecord[]
   keywordResearches KeywordResearch[]
+  invitations       Invitation[]
 
   @@map("organizations")
 }
@@ -84,6 +89,48 @@ model Membership {
   @@unique([userId, organizationId])
   @@index([organizationId])
   @@map("memberships")
+}
+
+/**
+ * Einladung in die Anwendung.
+ * Zwei Fälle, bewusst in einem Modell:
+ * - organizationId gesetzt: Aufnahme ins bestehende Team.
+ * - organizationId leer:    eigener Arbeitsbereich, der beim Annehmen
+ * angelegt wird. Das ist der Kundenfall – die
+ * Kundin sieht danach ausschliesslich ihre eigenen
+ * Projekte, Analysen und Berichte.
+ * Der Code steht in der Einladungs-URL und ist damit ein Schlüssel. Gespeichert
+ * wird deshalb nur sein Hash, genau wie bei den Sitzungen. Der Klartext ist
+ * einmal beim Erzeugen sichtbar; danach lässt sich die Einladung neu ausstellen,
+ * was die alte ungültig macht.
+ */
+model Invitation {
+  id       String @id @default(cuid())
+  email    String
+  codeHash String @unique
+  role     Role   @default(MEMBER)
+
+  // Leer = beim Annehmen wird ein eigener Arbeitsbereich angelegt.
+  organizationId      String?
+  // Name des anzulegenden Arbeitsbereichs; nur im Kundenfall belegt.
+  newOrganizationName String?
+  // Tarif und Startguthaben des neuen Arbeitsbereichs.
+  plan                Plan    @default(FREE)
+  credits             Int     @default(0)
+
+  invitedById    String?
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  acceptedUserId String?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User?         @relation("EingeladenVon", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([organizationId])
+  @@map("invitations")
 }
 
 enum Role {
@@ -146,7 +193,6 @@ enum Provider {
   PAGESPEED
   /**
    * Nicht mehr in Verwendung.
-   *
    * Der Search-Console-Anschluss wurde entfernt. Der Wert bleibt stehen, weil
    * das Entfernen eines Enum-Werts eine Änderung am Datentyp ist, die bei
    * jedem verbliebenen Verweis fehlschlägt – für einen ungenutzten Wert ein

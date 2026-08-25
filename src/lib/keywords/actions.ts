@@ -10,6 +10,7 @@ import { DataForSeoClient, type KeywordEintrag } from '@/lib/connectors/datafors
 import type { DataForSeoSecret } from '@/lib/connectors/credentials'
 import { ConnectorError } from '@/lib/connectors/http'
 import { fuehreZusammen, fasseZusammen } from './research'
+import { reichtGuthaben, guthabenHinweis } from '@/lib/billing/guthaben'
 
 /**
  * Grundgebühr einer Recherche in Credits (1 Credit = 1 US-Cent).
@@ -51,8 +52,8 @@ export async function startKeywordResearchAction(
   }
 
   const organization = await db.organization.findUniqueOrThrow({ where: { id: session.organizationId } })
-  if (organization.plan !== 'INTERNAL' && organization.credits <= 0) {
-    return { error: 'Das Guthaben ist aufgebraucht. Bitte aufladen, um weitere Recherchen zu starten.' }
+  if (!reichtGuthaben(organization, 'recherche')) {
+    return { error: guthabenHinweis(organization, 'recherche') }
   }
 
   const client = new DataForSeoClient(secret)
