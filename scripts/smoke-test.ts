@@ -24,6 +24,8 @@ import {
 } from '../src/lib/keywords/research'
 import { deckungsgrad, enthaeltBegriff, grundform, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
 import { beurteile, begriffsBefund, istZuAllgemein, messbare } from '../src/lib/analysis/keyword-pruefung'
+import { beurteileKanonisch, kanonischerBefund, kanonischeNote } from '../src/lib/analysis/kanonisch'
+import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
 import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
 import { normalizeProfile } from '../src/lib/connectors/apify'
 import { buildDeterministicReport, sortFindings } from '../src/lib/analysis/report'
@@ -592,6 +594,108 @@ function main() {
   check(
     'Stattdessen der Hinweis auf die Eingabe',
     serpOhneNachfrage.findings.some((f) => f.id === 'keyword-ohne-nachfrage'),
+  )
+
+  section('Canonical wird gegen die ausgelieferte Adresse geprüft')
+
+  // Der Fall von erfolgreiches-onlinebusiness.de: ausgeliefert ohne www,
+  // Canonical zeigt auf www. Beide Adressen antworten mit 200.
+  const wwwFall = beurteileKanonisch({
+    canonical: 'https://www.erfolgreiches-onlinebusiness.de/',
+    url: 'https://erfolgreiches-onlinebusiness.de/',
+  })
+  check('www-Abweichung wird erkannt', wwwFall.art === 'anderer-host')
+  check('Sie wird als www-Variante benannt', wwwFall.art === 'anderer-host' && wwwFall.nurWww)
+  check(
+    'Der Befund nennt beide Adressen',
+    /www\.erfolgreiches-onlinebusiness\.de/.test(kanonischerBefund(wwwFall)?.why ?? '') &&
+      /301/.test(kanonischerBefund(wwwFall)?.action ?? ''),
+  )
+
+  check(
+    'Gleiche Adresse gilt als stimmig',
+    beurteileKanonisch({ canonical: 'https://beispiel.de/seite', url: 'https://beispiel.de/seite' }).art ===
+      'stimmig',
+  )
+  check(
+    'Schrägstrich am Ende ist kein Unterschied',
+    beurteileKanonisch({ canonical: 'https://beispiel.de/seite/', url: 'https://beispiel.de/seite' }).art ===
+      'stimmig',
+    'Google wertet beide Schreibweisen gleich',
+  )
+  check(
+    'Relatives Canonical wird gegen die Seite aufgelöst',
+    beurteileKanonisch({ canonical: '/seite', url: 'https://beispiel.de/seite' }).art === 'stimmig',
+  )
+  check(
+    'Nach Weiterleitung zählt die Endadresse',
+    beurteileKanonisch({
+      canonical: 'https://beispiel.de/ziel',
+      url: 'https://beispiel.de/start',
+      finalUrl: 'https://beispiel.de/ziel',
+    }).art === 'stimmig',
+    'sonst würde jede Weiterleitung als Fehler gemeldet',
+  )
+  check(
+    'Verweis auf eine andere Seite wird nicht als Fehler behauptet',
+    /gewollt/.test(
+      kanonischerBefund(beurteileKanonisch({ canonical: '/andere', url: 'https://beispiel.de/seite' }))?.why ?? '',
+    ),
+    'die Konsolidierung kann Absicht sein',
+  )
+  check('Fehlendes Canonical erzeugt einen Hinweis', beurteileKanonisch({ canonical: null, url: 'https://beispiel.de/' }).art === 'fehlt')
+  check('Stimmiges Canonical erzeugt keinen Befund', kanonischerBefund({ art: 'stimmig', wert: 'x' }) === null)
+  check(
+    'Stimmig bekommt die volle Note, Host-Abweichung nicht',
+    kanonischeNote({ art: 'stimmig', wert: 'x' }) === 10 && kanonischeNote(wwwFall) < 5,
+  )
+
+  section('Technische Prüfpunkte der OnPage-API')
+
+  // Belegt an der echten Antwort für erfolgreiches-onlinebusiness.de:
+  // beide Flags sind gesetzt und bedeuten "in Ordnung".
+  check(
+    'Flags, bei denen true gut ist, erzeugen keinen Mangel',
+    leseChecks({ is_https: true, has_html_doctype: true }).length === 0,
+    'sonst stünde ein fehlerfreier Zustand als Fehler im Bericht',
+  )
+  check('Unbekannte Flags werden übergangen', leseChecks({ irgendwas_neues: true }).length === 0)
+  check('Nicht gesetzte Flags erzeugen nichts', leseChecks({ is_5xx_code: false }).length === 0)
+  check('Fehlende Antwort erzeugt nichts', leseChecks(null).length === 0)
+
+  const maengel = leseChecks({
+    is_https: true,
+    is_5xx_code: true,
+    no_content_encoding: true,
+    no_favicon: true,
+    title_too_long: true,
+  })
+  check('Echte Mängel werden erkannt', maengel.length === 3, maengel.map((m) => m.schluessel).join(', '))
+  check(
+    'Was wir selbst messen, kommt nicht doppelt',
+    !maengel.some((m) => m.schluessel === 'title_too_long'),
+    'Title, H1, Description und Bild-Alt prüft die eigene Auswertung',
+  )
+  check('Ein Serverfehler gilt als kritisch', maengel.some((m) => m.schluessel === 'is_5xx_code' && m.severity === 'critical'))
+  check('Ein fehlendes Favicon nicht', maengel.some((m) => m.schluessel === 'no_favicon' && m.severity !== 'critical'))
+  check(
+    'Schwere Mängel drücken die Note stärker',
+    checkNote(leseChecks({ is_5xx_code: true })) < checkNote(leseChecks({ no_favicon: true })),
+  )
+  check('Ohne Mängel volle Note', checkNote([]) === 10)
+  check(
+    'Befunde tragen sprechende Kennungen',
+    checkBefunde(maengel).every((f) => f.id.startsWith('onpage-') && !f.id.includes('_')),
+  )
+  check('Jeder Befund nennt eine Handlung', checkBefunde(maengel).every((f) => f.action.length > 20))
+
+  // Ohne Abruf darf kein Wert entstehen – wie bei den Platzierungen.
+  const ohneAbruf = analyzeSeo({ signals: strong.signals })
+  const pruefpunkte = ohneAbruf.criteria.find((c) => c.key === 'onpage-checks')
+  check(
+    'Ohne Abruf sind die Prüfpunkte nicht bewertbar',
+    pruefpunkte?.status === 'unknown',
+    'eine fehlende Messung darf keine schlechte Note erzeugen',
   )
 
   section('Bericht')

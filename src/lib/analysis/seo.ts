@@ -4,6 +4,8 @@ import { weightedScore, scoreLabel, statusFor } from './types'
 import type { PageSpeedResult } from '@/lib/connectors/pagespeed'
 import type { BacklinksSummaryResult, DomainRankResult } from '@/lib/connectors/dataforseo'
 import { deckungsgrad, enthaeltBegriff } from './begriffe'
+import { beurteileKanonisch, kanonischeNote, kanonischerHinweis, kanonischerBefund } from './kanonisch'
+import { leseChecks, checkBefunde, checkNote } from './onpage-checks'
 
 /**
  * SEO-Bewertung nach dem Framework:
@@ -15,6 +17,8 @@ export function analyzeSeo(input: {
   backlinks?: BacklinksSummaryResult | null
   domainRank?: DomainRankResult | null
   primaryKeyword?: string | null
+  /** `checks`-Objekt aus der OnPage-API; fehlt, wenn der Abruf nicht lief. */
+  onPageChecks?: Record<string, boolean> | null
 }): ModuleResult {
   const { signals: s, pagespeed, backlinks, domainRank } = input
   const findings: Finding[] = []
@@ -189,6 +193,51 @@ export function analyzeSeo(input: {
       })
     }
     technical.push({ key: 'url', label: 'URL-Struktur', score, weight: 1, detail, status: statusFor(score) })
+  }
+
+  // Canonical
+  {
+    const urteil = beurteileKanonisch({ canonical: s.canonical, url: s.url, finalUrl: s.finalUrl })
+    const befund = kanonischerBefund(urteil)
+    if (befund) findings.push(befund)
+    const score = kanonischeNote(urteil)
+    technical.push({
+      key: 'canonical',
+      label: 'Canonical-Tag',
+      score,
+      weight: 2,
+      detail: kanonischerHinweis(urteil),
+      status: statusFor(score),
+    })
+  }
+
+  // Technische Mängel aus der OnPage-API
+  {
+    if (input.onPageChecks) {
+      const maengel = leseChecks(input.onPageChecks)
+      findings.push(...checkBefunde(maengel))
+      const score = checkNote(maengel)
+      technical.push({
+        key: 'onpage-checks',
+        label: 'Technische Prüfpunkte',
+        score,
+        weight: 2,
+        detail:
+          maengel.length === 0
+            ? 'Keiner der geprüften technischen Punkte ist auffällig.'
+            : `${maengel.length} auffällige${maengel.length === 1 ? 'r Punkt' : ' Punkte'}: ${maengel.map((m) => m.title).join(', ')}.`,
+        status: statusFor(score),
+      })
+    } else {
+      technical.push({
+        key: 'onpage-checks',
+        label: 'Technische Prüfpunkte',
+        score: 0,
+        weight: 2,
+        detail: 'Nicht geprüft: Die technische Abfrage bei DataForSEO lief nicht.',
+        status: 'unknown',
+      })
+    }
   }
 
   // Strukturierte Daten

@@ -274,6 +274,7 @@ export async function runAnalysis(params: {
   let domainRank = null
   let rankedKeywords = null
   let llmMentions = null
+  let onPageChecks: Record<string, boolean> | null = null
   let begriffsUrteile: BegriffsUrteil[] = []
   let begriffsAlternativen: Array<{ begriff: string; volumen: number }> = []
   const serps: Array<{ keyword: string; result: any }> = []
@@ -302,6 +303,20 @@ export async function runAnalysis(params: {
           providersUsed.add('DataForSEO')
         } catch (error) {
           skipped.push({ module: 'Backlink-Profil', reason: message(error) })
+        }
+      })(),
+    )
+
+    collectors.push(
+      (async () => {
+        try {
+          // Liefert fertige technische Prüfpunkte zur geprüften Adresse.
+          const seite = await dfs.instantPage(targetUrl)
+          onPageChecks = seite?.items?.[0]?.checks ?? null
+          raw.onPage = seite
+          providersUsed.add('DataForSEO')
+        } catch (error) {
+          skipped.push({ module: 'Technische Prüfpunkte', reason: message(error) })
         }
       })(),
     )
@@ -433,7 +448,9 @@ export async function runAnalysis(params: {
   const paa = serps.flatMap((s) => extractPeopleAlsoAsk(s.result))
 
   if (modules.includes('SEO')) {
-    moduleResults.push(analyzeSeo({ signals, pagespeed: psiResult, backlinks, domainRank, primaryKeyword }))
+    moduleResults.push(
+      analyzeSeo({ signals, pagespeed: psiResult, backlinks, domainRank, primaryKeyword, onPageChecks }),
+    )
   }
   if (modules.includes('AEO')) {
     moduleResults.push(analyzeAeo({ signals, serp: serps[0]?.result ?? null, peopleAlsoAsk: [...new Set(paa)] }))
