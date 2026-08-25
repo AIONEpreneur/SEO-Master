@@ -32,7 +32,18 @@ export type PageSignals = {
   text: string
   first100Words: string
 
-  images: { total: number; withAlt: number; lazy: number }
+  images: {
+    total: number
+    /** Bilder mit beschreibendem Alt-Text. */
+    withAlt: number
+    /** Bilder mit alt="" – korrekt gekennzeichnet als schmückend, kein Mangel. */
+    decorative: number
+    /** Bilder ganz ohne alt-Attribut – nur das ist ein Mangel. */
+    withoutAlt: number
+    /** Dateinamen der Bilder ohne alt, damit der Befund nachprüfbar ist. */
+    missingAltSources: string[]
+    lazy: number
+  }
   links: { internal: number; external: number; genericAnchors: number; externalDomains: string[] }
 
   schemaTypes: string[]
@@ -312,16 +323,46 @@ function analyzeLinks($: cheerio.CheerioAPI, host: string | null) {
   return { internal, external, genericAnchors, externalDomains: [...externalDomains] }
 }
 
+/**
+ * Bilder zählen – mit dem Unterschied, auf den es ankommt.
+ *
+ * Ein leeres alt="" ist kein Versäumnis, sondern die vorgeschriebene
+ * Kennzeichnung für ein rein schmückendes Bild: Screenreader überspringen es
+ * dann, statt einen Dateinamen vorzulesen. Wer das als Mangel meldet,
+ * verlangt eine Verschlechterung.
+ *
+ * Ein Mangel ist nur das ganz fehlende alt-Attribut. Und weil eine Behauptung
+ * über fremde Bilder nachprüfbar sein muss, werden die betroffenen Quellen
+ * mitgeführt – der Bericht nennt sie dann beim Namen.
+ */
 function analyzeImages($: cheerio.CheerioAPI) {
   const imgs = $('img')
   let withAlt = 0
+  let decorative = 0
   let lazy = 0
+  const missingAltSources: string[] = []
+
   imgs.each((_, el) => {
     const alt = $(el).attr('alt')
-    if (alt && alt.trim().length > 2) withAlt++
+    if (alt === undefined) {
+      const quelle = $(el).attr('src') ?? $(el).attr('data-src') ?? ''
+      missingAltSources.push(quelle.split('/').pop() || quelle || '(ohne src)')
+    } else if (alt.trim().length > 0) {
+      withAlt++
+    } else {
+      decorative++
+    }
     if ($(el).attr('loading') === 'lazy' || $(el).attr('data-src')) lazy++
   })
-  return { total: imgs.length, withAlt, lazy }
+
+  return {
+    total: imgs.length,
+    withAlt,
+    decorative,
+    withoutAlt: missingAltSources.length,
+    missingAltSources: missingAltSources.slice(0, 8),
+    lazy,
+  }
 }
 
 function analyzeLists($: cheerio.CheerioAPI) {

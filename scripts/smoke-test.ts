@@ -22,7 +22,7 @@ import { analyzeSocial } from '../src/lib/analysis/social'
 import {
   fuehreZusammen, fasseZusammen, leseVerlauf, lohnendeBegriffe, vergleichsform,
 } from '../src/lib/keywords/research'
-import { deckungsgrad, enthaeltBegriff, grundform, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
+import { deckungsgrad, enthaeltBegriff, grundform, teileMarke, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
 import { beurteile, begriffsBefund, istZuAllgemein, messbare } from '../src/lib/analysis/keyword-pruefung'
 import { beurteileKanonisch, kanonischerBefund, kanonischeNote } from '../src/lib/analysis/kanonisch'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
@@ -604,6 +604,96 @@ function main() {
   check(
     'Stattdessen der Hinweis auf die Eingabe',
     serpOhneNachfrage.findings.some((f) => f.id === 'keyword-ohne-nachfrage'),
+  )
+
+  section('Markenzusatz im Title zählt nicht gegen die Aussage')
+
+  // Der echte Title von kirstenbiema.com/blog/was-kostet-claude/: 75 Zeichen
+  // gesamt, 59 ohne den Namen. Abgeschnitten wird der Name, nicht die Aussage.
+  const claudeTitle = 'Was kostet Claude AI 2026? Preise in Euro, netto und brutto | Kirsten Biema'
+  const geteilt = teileMarke(claudeTitle)
+  check('Der Markenzusatz wird abgetrennt', geteilt.marke === 'Kirsten Biema')
+  check('Die Aussage bleibt vollständig', geteilt.kern.length === 59, `${geteilt.kern.length} Zeichen`)
+  check('Der Title misst insgesamt 75 Zeichen', claudeTitle.length === 75)
+
+  const mitMarke = analyzeSeo({
+    signals: { ...strong.signals, title: claudeTitle, titleLength: claudeTitle.length },
+  })
+  check(
+    'Kein Befund "Title zu lang"',
+    !mitMarke.findings.some((f) => f.id === 'seo-title-long'),
+    'die Aussage steht bei Zeichen 1–59 und wird nicht abgeschnitten',
+  )
+  const titelWert = mitMarke.criteria.find((c) => c.key === 'title')
+  check('Der Title wird trotzdem bewertet', (titelWert?.score ?? 0) >= 7, titelWert?.detail)
+  check('Die Begründung nennt beide Längen', /75 Zeichen/.test(titelWert?.detail ?? '') && /59/.test(titelWert?.detail ?? ''))
+
+  // Gegenprobe: Ist die Aussage selbst zu lang, bleibt der Befund.
+  const langeAussage =
+    'Was kostet Claude AI 2026 und welcher Tarif lohnt sich für Selbstständige wirklich | Kirsten Biema'
+  const zuLang = analyzeSeo({ signals: { ...strong.signals, title: langeAussage, titleLength: langeAussage.length } })
+  check(
+    'Zu lange Aussage wird weiterhin gemeldet',
+    zuLang.findings.some((f) => f.id === 'seo-title-long'),
+  )
+  check(
+    'Der Befund sagt, dass der Markenzusatz bleiben darf',
+    /Markenzusatz kann bleiben/.test(zuLang.findings.find((f) => f.id === 'seo-title-long')?.action ?? ''),
+  )
+  check(
+    'Ein Gedankenstrich mitten im Satz gilt nicht als Marke',
+    teileMarke('Preise vergleichen – Euro, netto und brutto im Überblick').marke === null,
+    'sonst würde die halbe Aussage als Markenname gelten',
+  )
+
+  section('Leeres alt="" ist kein Mangel')
+
+  const bildSeite = extractSignals({
+    url: 'https://beispiel.de/artikel',
+    html: `<html><head><title>Test</title></head><body>
+      <img src="/img/header.png" alt="Preistabelle für Claude">
+      <img src="/img/trenner.svg" alt="">
+      <img src="/img/screenshot.png">
+    </body></html>`,
+  })
+  check('Alle drei Bilder gezählt', bildSeite.images.total === 3)
+  check('Eines mit beschreibendem Alt-Text', bildSeite.images.withAlt === 1)
+  check(
+    'Das leere alt="" gilt als schmückend, nicht als Lücke',
+    bildSeite.images.decorative === 1,
+    'alt="" ist die vorgeschriebene Kennzeichnung, kein Versäumnis',
+  )
+  check('Nur das fehlende Attribut ist ein Mangel', bildSeite.images.withoutAlt === 1)
+  check(
+    'Der Befund nennt die Datei',
+    bildSeite.images.missingAltSources.includes('screenshot.png'),
+    bildSeite.images.missingAltSources.join(', '),
+  )
+
+  const bildBefund = analyzeSeo({ signals: bildSeite }).findings.find((f) => f.id === 'seo-alt-texts')
+  check('Genau ein Bild wird gemeldet', /^1 Bild ohne/.test(bildBefund?.title ?? ''), bildBefund?.title)
+  check('Die Datei steht im Befund', /screenshot\.png/.test(bildBefund?.action ?? ''))
+  check(
+    'Der Befund erklärt, dass alt="" richtig sein kann',
+    /ausdrücklich richtig/.test(bildBefund?.action ?? ''),
+    'sonst wird eine korrekte Auszeichnung "repariert"',
+  )
+
+  const alleVersorgt = extractSignals({
+    url: 'https://beispiel.de/a',
+    html: '<html><head><title>T</title></head><body><img src="a.png" alt="Ein Bild"><img src="b.png" alt=""></body></html>',
+  })
+  check(
+    'Sind alle Bilder versorgt, entsteht kein Befund',
+    !analyzeSeo({ signals: alleVersorgt }).findings.some((f) => f.id === 'seo-alt-texts'),
+  )
+  check(
+    'Kurzer Alt-Text zählt als Alt-Text',
+    extractSignals({
+      url: 'https://beispiel.de/a',
+      html: '<html><head><title>T</title></head><body><img src="a.png" alt="KI"></body></html>',
+    }).images.withAlt === 1,
+    'die alte Regel verlangte mehr als zwei Zeichen',
   )
 
   section('AEO wird nicht hinter das Ranking gestellt')

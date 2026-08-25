@@ -203,3 +203,33 @@ export function tragenderBegriff(quelle: string | null | undefined, maxWoerter =
   if (woerter.length === 0) return null
   return woerter.slice(0, maxWoerter).join(' ')
 }
+
+/** Trennzeichen, mit denen Seiten ihren Markennamen an den Title hängen. */
+const MARKENTRENNER = /\s[|\u2013\u2014\u2022\u00b7]\s/
+
+/**
+ * Zerlegt einen Title in Aussage und Markenzusatz.
+ *
+ * Google kürzt den Title von hinten. Steht hinten der Markenname, geht die
+ * Aussage nicht verloren – abgeschnitten wird der Name. Die Länge der
+ * Aussage ist deshalb die Grösse, die zählt, nicht die Gesamtlänge.
+ *
+ * Getrennt wird nur am letzten Trenner und nur, wenn hinten wirklich ein
+ * kurzer Zusatz steht. "Preise in Euro, netto und brutto" darf nicht als
+ * Marke gelten, bloss weil ein Gedankenstrich davorsteht.
+ */
+export function teileMarke(title: string): { kern: string; marke: string | null } {
+  const treffer = [...title.matchAll(new RegExp(MARKENTRENNER, 'g'))]
+  const letzter = treffer[treffer.length - 1]
+  if (!letzter || letzter.index === undefined) return { kern: title.trim(), marke: null }
+
+  const kern = title.slice(0, letzter.index).trim()
+  const marke = title.slice(letzter.index + letzter[0].length).trim()
+
+  // Ein Markenzusatz ist kurz und besteht aus wenigen Wörtern. Alles andere
+  // ist Teil der Aussage.
+  const istMarke = marke.length > 0 && marke.length <= 30 && marke.split(/\s+/).length <= 4
+  if (!istMarke || kern.length === 0) return { kern: title.trim(), marke: null }
+
+  return { kern, marke }
+}

@@ -3,7 +3,7 @@ import type { Criterion, Finding, ModuleResult } from './types'
 import { weightedScore, scoreLabel, statusFor } from './types'
 import type { PageSpeedResult } from '@/lib/connectors/pagespeed'
 import type { BacklinksSummaryResult, DomainRankResult } from '@/lib/connectors/dataforseo'
-import { deckungsgrad, enthaeltBegriff } from './begriffe'
+import { deckungsgrad, enthaeltBegriff, teileMarke } from './begriffe'
 import { beurteileKanonisch, kanonischeNote, kanonischerHinweis, kanonischerBefund } from './kanonisch'
 import { leseChecks, checkBefunde, checkNote } from './onpage-checks'
 
@@ -58,18 +58,30 @@ export function analyzeSeo(input: {
         evidence: s.title,
       })
     } else if (len > 65) {
-      score = 5
-      detail = `${len} Zeichen – wird in der Suche abgeschnitten.`
-      findings.push({
-        id: 'seo-title-long',
-        severity: 'quickwin',
-        title: `Title mit ${len} Zeichen zu lang`,
-        why: 'Google kürzt ab etwa 60 Zeichen; der hintere Teil wird nicht gelesen.',
-        action: `Title auf 50–60 Zeichen kürzen und das Hauptkeyword nach vorne ziehen. Aktuell: "${s.title}"`,
-        effort: 'gering',
-        impact: 'mittel',
-        evidence: s.title,
-      })
+      // Google kürzt von hinten. Steht hinten der Markenname, geht die
+      // Aussage nicht verloren – dann ist die Gesamtlänge kein Mangel.
+      const { kern, marke } = teileMarke(s.title)
+      if (marke && kern.length <= 60) {
+        score = keyword && deckungsgrad(s.title, keyword) >= 0.67 ? 9 : 7
+        detail = `${len} Zeichen, ohne den Markenzusatz "${marke}" nur ${kern.length} – abgeschnitten wird der Name, nicht die Aussage.`
+      } else {
+        score = 5
+        detail = marke
+          ? `${len} Zeichen, auch ohne den Markenzusatz noch ${kern.length} – die Aussage selbst wird abgeschnitten.`
+          : `${len} Zeichen – wird in der Suche abgeschnitten.`
+        findings.push({
+          id: 'seo-title-long',
+          severity: 'quickwin',
+          title: `Title mit ${marke ? `${kern.length} Zeichen Aussage` : `${len} Zeichen`} zu lang`,
+          why: marke
+            ? `Google kürzt ab etwa 60 Zeichen von hinten. Der Markenzusatz "${marke}" darf dabei wegfallen – hier reicht aber schon die Aussage selbst über die Grenze hinaus.`
+            : 'Google kürzt ab etwa 60 Zeichen; der hintere Teil wird nicht gelesen.',
+          action: `Die Aussage auf 50–60 Zeichen kürzen und das Hauptkeyword nach vorne ziehen${marke ? ' – der Markenzusatz kann bleiben' : ''}. Aktuell: "${s.title}"`,
+          effort: 'gering',
+          impact: 'mittel',
+          evidence: s.title,
+        })
+      }
     } else {
       score = keyword && deckungsgrad(s.title, keyword) >= 0.67 ? 9 : 7
       detail = `${len} Zeichen, im optimalen Bereich.`
@@ -307,19 +319,30 @@ export function analyzeSeo(input: {
 
   // Bilder
   {
-    const { total, withAlt } = s.images
-    const ratio = total === 0 ? 1 : withAlt / total
+    const { total, withAlt, decorative, withoutAlt, missingAltSources } = s.images
+    // alt="" ist die korrekte Kennzeichnung eines schmückenden Bildes und
+    // zählt deshalb als versorgt, nicht als Lücke.
+    const versorgt = withAlt + decorative
+    const ratio = total === 0 ? 1 : versorgt / total
     const score = total === 0 ? 5 : clamp(Math.round(ratio * 10))
-    const detail = total === 0 ? 'Keine Bilder auf der Seite.' : `${withAlt} von ${total} Bildern mit Alt-Text (${Math.round(ratio * 100)} %).`
-    if (total > 0 && ratio < 0.7) {
+    const detail =
+      total === 0
+        ? 'Keine Bilder auf der Seite.'
+        : `${withAlt} von ${total} Bildern mit Alt-Text` +
+          (decorative > 0 ? `, ${decorative} als schmückend gekennzeichnet (alt="")` : '') +
+          (withoutAlt > 0 ? `, ${withoutAlt} ohne alt-Attribut` : '') +
+          '.'
+    if (withoutAlt > 0) {
+      const benannt = missingAltSources.join(', ')
       findings.push({
         id: 'seo-alt-texts',
         severity: 'quickwin',
-        title: `${total - withAlt} Bilder ohne Alt-Text`,
-        why: 'Alt-Texte sind Ranking-Signal, Grundlage der Bildersuche und Voraussetzung für Barrierefreiheit.',
-        action: 'Jedes inhaltlich relevante Bild mit einem beschreibenden Alt-Text versehen (nicht nur Keywords aneinanderreihen).',
+        title: `${withoutAlt} ${withoutAlt === 1 ? 'Bild' : 'Bilder'} ohne alt-Attribut`,
+        why: 'Alt-Texte sind Ranking-Signal, Grundlage der Bildersuche und Voraussetzung für Barrierefreiheit. Gemeint sind nur Bilder ganz ohne alt-Attribut – ein leeres alt="" ist die korrekte Kennzeichnung für ein schmückendes Bild und steht hier nicht zur Debatte.',
+        action: `Diese${withoutAlt === 1 ? 's Bild' : ' Bilder'} beschreiben: ${benannt || 'siehe Quelltext'}. Trägt das Bild keine Aussage, stattdessen alt="" setzen – das ist ausdrücklich richtig.`,
         effort: 'gering',
         impact: 'mittel',
+        evidence: benannt || undefined,
       })
     }
     technical.push({ key: 'images', label: 'Bild-Optimierung', score, weight: 1, detail, status: statusFor(score) })
