@@ -34,6 +34,7 @@ import { verwaltetEigeneZugaenge, siehtAbrechnung, verbleibendeAnalysen } from '
 import { hasRole } from '../src/lib/auth/session'
 import { vergleiche, verlaufsSatz } from '../src/lib/analysis/verlauf'
 import { zulaessigeAdresse } from '../src/lib/schnellcheck'
+import { waehleSeiten, WEBSITE_UMFANG } from '../src/lib/analysis/seiten'
 import { csvVon, dateiname } from '../src/app/api/export/route'
 import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
@@ -1604,6 +1605,83 @@ function main() {
     'Die Automatik wird nur vom Worker eingebunden',
     autoNutzer.length === 1 && autoNutzer[0] === 'src/worker/index.ts',
     autoNutzer.join(', ') || 'keine',
+  )
+
+  section('Die Website-Analyse waehlt die richtigen Seiten')
+
+  const auswahl = waehleSeiten({
+    startUrl: 'https://ecamm.de/',
+    gefunden: [
+      { url: 'https://ecamm.de/' },
+      { url: 'https://ecamm.de/blog/streaming-setup' },
+      { url: 'https://ecamm.de/vergleich/ecamm-vs-obs' },
+      { url: 'https://ecamm.de/preise' },
+      { url: 'https://www.ecamm.de/preise/' },
+      { url: 'https://ecamm.de/preise?utm_source=newsletter' },
+      { url: 'https://ecamm.de/impressum' },
+      { url: 'https://ecamm.de/datenschutz' },
+      { url: 'https://ecamm.de/wp-admin/edit.php' },
+      { url: 'https://ecamm.de/bild.png' },
+      { url: 'https://ecamm.de/feed/' },
+      { url: 'https://anderedomain.de/blog' },
+      { url: 'https://ecamm.de/blog/tag/audio' },
+      { url: 'mailto:info@ecamm.de' },
+    ],
+  })
+  check('Die Startseite selbst ist nicht dabei', !auswahl.some((u) => u === 'https://ecamm.de'))
+  check('Fremde Domains bleiben draussen', !auswahl.some((u) => u.includes('anderedomain')))
+  check(
+    'Blog- und Vergleichsseiten stehen vorn',
+    /\/blog\//.test(auswahl[0] ?? '') || /\/vergleich\//.test(auswahl[0] ?? ''),
+    auswahl.slice(0, 2).join(', '),
+  )
+  check(
+    'www, Schraegstrich und utm-Anhang sind dieselbe Seite',
+    auswahl.filter((u) => u.includes('/preise')).length === 1,
+    'sonst wuerde eine Seite dreifach gelesen und dreifach bezahlt',
+  )
+  check(
+    'Impressum, Datenschutz, Verwaltung und Dateien bleiben draussen',
+    !auswahl.some((u) => /impressum|datenschutz|wp-admin|\.png|\/feed/.test(u)),
+    'dort steht kein Inhalt, ueber den eine Website gefunden wird',
+  )
+  check('Schlagwort-Archive zaehlen nicht als Inhalt', !auswahl.some((u) => u.includes('/tag/')))
+  check(
+    'Die Grenze haelt',
+    waehleSeiten({
+      startUrl: 'https://beispiel.de/',
+      gefunden: Array.from({ length: 400 }, (_, i) => ({ url: `https://beispiel.de/seite-${i}` })),
+    }).length === WEBSITE_UMFANG - 1,
+    `hoechstens ${WEBSITE_UMFANG} Seiten je Lauf, Startseite eingerechnet`,
+  )
+  check('Eine kaputte Startadresse liefert leer statt zu werfen', waehleSeiten({ startUrl: 'kaputt', gefunden: [] }).length === 0)
+
+  const runQuelle = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'run.ts'), 'utf8')
+  check(
+    'Ohne Firecrawl wird der Umfang als Luecke ausgewiesen',
+    /Ohne Firecrawl-Zugangsdaten wird nur die eingegebene Seite gelesen/.test(runQuelle),
+    'eine fehlende Messung darf nicht wie eine vollstaendige aussehen',
+  )
+  check(
+    'Der Umfang steht im Ergebnis',
+    /pages: 1 \+ seiten\.length/.test(runQuelle),
+    'meta.scope traegt die echte Seitenzahl',
+  )
+  check(
+    'Jede Unterseite wird eingepreist',
+    /operation: 'unterseiten'/.test(runQuelle) && /seitenCent = seiten\.length/.test(runQuelle),
+  )
+  check(
+    'Markt-Daten werden je Domain einmal erhoben, nicht je Seite',
+    runQuelle.indexOf('Weitere Seiten werden gelesen') > runQuelle.indexOf('await Promise.all(collectors)'),
+    'sonst kostete die Website-Analyse das 25-fache an DataForSEO',
+  )
+
+  const autoQuelle2 = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'auto-pruefung.ts'), 'utf8')
+  check(
+    'Die Automatik uebernimmt den Umfang des letzten Handlaufs',
+    /letzter\?\.pageLimit \?\? 1/.test(autoQuelle2),
+    'wer die Website einmal vollstaendig prueft, bekommt sie monatlich vollstaendig',
   )
 
   section('Bericht')

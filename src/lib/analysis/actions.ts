@@ -8,6 +8,7 @@ import { requireSession, requireRole } from '@/lib/auth/session'
 import { enqueueAnalysis, analysisQueue } from '@/lib/queue'
 import { availableProviders } from '@/lib/connectors/credentials'
 import { reichtGuthaben, guthabenHinweis } from '@/lib/billing/guthaben'
+import { WEBSITE_UMFANG } from '@/lib/analysis/seiten'
 import { siehtAbrechnung } from '@/lib/billing/zugaenge'
 import { detectPlatform } from '@/lib/connectors/apify'
 import type { ModuleKey } from './run'
@@ -38,6 +39,9 @@ export async function startAnalysisAction(_prev: StartState, formData: FormData)
     seedKeywords: splitList(formData.get('seedKeywords')),
     competitorDomains: splitList(formData.get('competitorDomains')).map(stripToDomain),
   })
+
+  // Umfang: nur die eingegebene Seite oder die Website mit Unterseiten.
+  const websiteUmfang = String(formData.get('umfang') ?? 'seite') === 'website'
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message }
@@ -78,6 +82,7 @@ export async function startAnalysisAction(_prev: StartState, formData: FormData)
       currentStep: 'In Warteschlange',
       locationCode,
       languageCode,
+      pageLimit: targetKind === 'WEBSITE' && websiteUmfang ? WEBSITE_UMFANG : 1,
       seedKeywords: parsed.data.seedKeywords?.filter(Boolean) ?? [],
       competitorDomains: parsed.data.competitorDomains?.filter(Boolean) ?? [],
     },
@@ -93,6 +98,7 @@ export async function startAnalysisAction(_prev: StartState, formData: FormData)
     languageCode,
     seedKeywords: parsed.data.seedKeywords?.filter(Boolean),
     competitorDomains: parsed.data.competitorDomains?.filter(Boolean),
+    pageLimit: targetKind === 'WEBSITE' && websiteUmfang ? WEBSITE_UMFANG : 1,
   })
 
   await db.analysis.update({ where: { id: analysis.id }, data: { jobId: String(job.id) } })
@@ -191,6 +197,7 @@ export async function restartAnalysisAction(formData: FormData) {
       languageCode: alt.languageCode,
       seedKeywords: alt.seedKeywords,
       competitorDomains: alt.competitorDomains,
+      pageLimit: alt.pageLimit,
     },
   })
 
@@ -204,6 +211,7 @@ export async function restartAnalysisAction(formData: FormData) {
     languageCode: alt.languageCode,
     seedKeywords: alt.seedKeywords,
     competitorDomains: alt.competitorDomains,
+    pageLimit: alt.pageLimit,
   })
 
   await db.analysis.update({ where: { id: neu.id }, data: { jobId: String(job.id) } })

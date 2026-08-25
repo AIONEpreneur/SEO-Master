@@ -26,7 +26,7 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
     where: { id, organizationId: session.organizationId },
     include: {
       reports: { orderBy: { createdAt: 'desc' }, take: 1 },
-      project: { select: { name: true, id: true } },
+      project: { select: { name: true, id: true, autoPruefung: true } },
     },
   })
 
@@ -317,6 +317,82 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
                   ))}
                 </ul>
               )}
+            </Card>
+          )}
+
+          {result.pages && result.pages.length > 0 && (
+            <Card>
+              <CardHeader
+                title={`Seitenübersicht — ${result.pages.length + 1} Seiten gelesen`}
+                description="Jede Seite nach denselben Regeln bewertet, schwächste zuerst. Die Bausteine im Detail beziehen sich auf die eingegebene Seite."
+              />
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="border-b border-border text-left text-[12px] text-ink-subtle">
+                      <th className="px-5 py-2 font-medium">Seite</th>
+                      <th className="px-2 py-2 font-medium">SEO</th>
+                      <th className="px-2 py-2 font-medium">AEO</th>
+                      <th className="px-2 py-2 font-medium">GEO</th>
+                      <th className="px-5 py-2 font-medium">Grösste Baustelle</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {result.pages.map((seite) => (
+                      <tr key={seite.url}>
+                        <td className="max-w-[260px] truncate px-5 py-2.5">
+                          <a href={seite.url} target="_blank" rel="noreferrer" className="hover:underline">
+                            {seite.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                          </a>
+                        </td>
+                        {[seite.scores.seo, seite.scores.aeo, seite.scores.geo].map((wert, i) => (
+                          <td key={i} className="px-2 py-2.5">
+                            <ScoreBadge score={wert} size="sm" />
+                          </td>
+                        ))}
+                        <td className="max-w-[320px] truncate px-5 py-2.5 text-ink-muted">
+                          {seite.befunde[0]?.title ?? '–'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {result.seitenMuster && result.seitenMuster.length > 0 && (
+                <div className="border-t border-border px-5 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-wider text-ink-subtle">
+                    Zieht sich durch die Website
+                  </p>
+                  <ul className="mt-2 space-y-1.5">
+                    {result.seitenMuster.map((muster) => (
+                      <li key={muster.id} className="flex items-center gap-2 text-[13px]">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" />
+                        <span className="min-w-0 flex-1 truncate">{muster.bezeichnung}</span>
+                        <span className="shrink-0 text-[12px] tabular-nums text-ink-subtle">
+                          {muster.laeufe} von {result.pages?.length} Seiten
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-[12px] text-ink-subtle">
+                    Eine gemeinsame Ursache — einmal in der Vorlage beheben statt Seite für Seite.
+                  </p>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Wo die Wiederholung wohnt, gehört dorthin, wo man sie sucht. */}
+          {analysis.project && !analysis.project.autoPruefung && !session.nurAnsicht && (
+            <Card className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+              <RotateCw size={15} className="shrink-0 text-ink-subtle" />
+              <p className="min-w-0 flex-1 text-[13px] text-ink-muted">
+                Diese Analyse monatlich wiederholen? Der Schalter „Monatliche Prüfung" steht beim Projekt
+                „{analysis.project.name}" — der Verlauf oben entsteht dann von selbst.
+              </p>
+              <Link href="/projects" className="shrink-0 text-[13px] font-medium text-brand hover:underline">
+                Zum Projekt
+              </Link>
             </Card>
           )}
 

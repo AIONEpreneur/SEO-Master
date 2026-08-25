@@ -14,6 +14,7 @@ export type AnalysisJobData = {
   languageCode: string
   seedKeywords?: string[]
   competitorDomains?: string[]
+  pageLimit?: number
 }
 
 /**

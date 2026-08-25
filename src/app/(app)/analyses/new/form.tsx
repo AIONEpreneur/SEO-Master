@@ -72,6 +72,7 @@ export function NewAnalysisForm({
   const [state, action, pending] = useActionState<StartState, FormData>(startAnalysisAction, {})
   const [selected, setSelected] = useState<string[]>(['SEO', 'AEO', 'GEO'])
   const [url, setUrl] = useState('')
+  const [umfang, setUmfang] = useState<'seite' | 'website'>('seite')
   const [market, setMarket] = useState(2276)
 
   const isSocial = /instagram\.|linkedin\.|tiktok\.|youtube\.|facebook\.|x\.com|twitter\./i.test(url)
@@ -122,6 +123,42 @@ export function NewAnalysisForm({
               Website-Adresse oder Profil-Link bei Instagram, LinkedIn, TikTok, YouTube, Facebook oder X.
             </p>
           </div>
+
+          {!isSocial && (
+            <div>
+              <Label>Umfang</Label>
+              <input type="hidden" name="umfang" value={umfang} />
+              <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    {
+                      wert: 'seite' as const,
+                      titel: 'Nur diese Seite',
+                      text: 'Schnell und gezielt — die eingegebene Adresse im Detail.',
+                    },
+                    {
+                      wert: 'website' as const,
+                      titel: 'Gesamte Website',
+                      text: 'Liest bis zu 25 Seiten der Domain mit — Blog, Unterseiten, Vergleiche. Dauert entsprechend länger.',
+                    },
+                  ]
+                ).map((option) => (
+                  <button
+                    key={option.wert}
+                    type="button"
+                    onClick={() => setUmfang(option.wert)}
+                    className={cn(
+                      'rounded-lg border px-3.5 py-3 text-left transition-colors',
+                      umfang === option.wert ? 'border-brand bg-brand-subtle' : 'border-border hover:border-border-strong',
+                    )}
+                  >
+                    <span className="block text-[13px] font-medium">{option.titel}</span>
+                    <span className="mt-0.5 block text-[12px] leading-snug text-ink-subtle">{option.text}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {isSocial && (
             <div className="flex gap-2.5 rounded-lg bg-brand-subtle px-3 py-2.5">

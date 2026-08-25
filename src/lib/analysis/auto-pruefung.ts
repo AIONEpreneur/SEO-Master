@@ -60,6 +60,15 @@ export async function starteFaelligePruefungen(jetzt = new Date()): Promise<Auto
       continue
     }
 
+    // Der Umfang folgt dem letzten Lauf derselben Adresse: Wer die Website
+    // einmal vollständig geprüft hat, bekommt sie auch monatlich vollständig.
+    const letzter = await db.analysis.findFirst({
+      where: { organizationId: projekt.organizationId, targetUrl: projekt.url, status: 'COMPLETED' },
+      orderBy: { createdAt: 'desc' },
+      select: { pageLimit: true },
+    })
+    const pageLimit = letzter?.pageLimit ?? 1
+
     const analyse = await db.analysis.create({
       data: {
         organizationId: projekt.organizationId,
@@ -69,6 +78,7 @@ export async function starteFaelligePruefungen(jetzt = new Date()): Promise<Auto
         targetKind: projekt.kind,
         modules: AUTO_MODULE,
         status: 'QUEUED',
+        pageLimit,
         locationCode: projekt.locationCode,
         languageCode: projekt.languageCode,
         seedKeywords: [],
@@ -83,6 +93,7 @@ export async function starteFaelligePruefungen(jetzt = new Date()): Promise<Auto
       modules: AUTO_MODULE,
       locationCode: projekt.locationCode,
       languageCode: projekt.languageCode,
+      pageLimit,
     })
 
     await db.project.update({ where: { id: projekt.id }, data: { autoZuletzt: jetzt } })

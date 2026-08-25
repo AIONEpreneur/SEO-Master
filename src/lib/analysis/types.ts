@@ -71,6 +71,20 @@ export type AnalysisResult = {
   modules: ModuleResult[]
   /** Über alle Bausteine zusammengeführte Prioritätenliste. */
   priorities: Finding[]
+  /**
+   * Weitere gelesene Seiten der Website, schwächste zuerst. Jede wurde nach
+   * denselben Regeln bewertet wie die Hauptseite – nur ohne die Markt-Daten
+   * (Platzierungen, Backlinks), die je Domain einmal erhoben werden.
+   */
+  pages?: Array<{
+    url: string
+    titel: string | null
+    scores: { seo: number; aeo: number; geo: number }
+    schnitt: number
+    befunde: Array<{ id: string; title: string; severity: Severity }>
+  }>
+  /** Befundarten, die auf mehreren gelesenen Seiten auftreten. */
+  seitenMuster?: Array<{ id: string; bezeichnung: string; severity: Severity; laeufe: number }>
   executiveSummary: string | null
 }
 

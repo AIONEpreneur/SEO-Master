@@ -89,6 +89,9 @@ Schreibe den Bericht in Markdown, mit genau dieser Gliederung:
 ## Gesamtbewertung
 Eine Tabelle mit den Bewertungen je Disziplin und einer knappen Einordnung in einem Wort.
 
+## Seitenübersicht
+Nur wenn das Ergebnis unter "pages" weitere Seiten enthält: eine Tabelle (Pfad, SEO, AEO, GEO, grösste Baustelle), schwächste zuerst, danach die Muster aus "seitenMuster" als das, was sich durch die Website zieht – eine Ursache, einmal beheben. Ohne "pages" entfällt der Abschnitt ersatzlos.
+
 ## Befunde je Disziplin
 Für jede vorliegende Disziplin ein Abschnitt: was gemessen wurde, was das bedeutet. Nutze die Kriterienwerte, erfinde nichts dazu.
 
@@ -220,6 +223,35 @@ export function buildDeterministicReport(result: AnalysisResult): string {
     lines.push(`| **Gesamt** | **${result.scores.overall.toFixed(1)}/10** | |`)
   }
   lines.push('')
+
+  if (result.pages && result.pages.length > 0) {
+    lines.push('## Seitenübersicht', '')
+    lines.push(
+      'Jede weitere Seite wurde nach denselben Regeln bewertet wie die Hauptseite – ohne die Markt-Daten, die je Domain einmal erhoben werden. Schwächste zuerst.',
+      '',
+    )
+    lines.push('| Seite | SEO | AEO | GEO | Grösste Baustelle |')
+    lines.push('|---|---|---|---|---|')
+    for (const seite of result.pages) {
+      const pfad = seite.url.replace(/^https?:\/\/[^/]+/, '') || '/'
+      lines.push(
+        `| ${pfad} | ${seite.scores.seo.toFixed(1)} | ${seite.scores.aeo.toFixed(1)} | ${seite.scores.geo.toFixed(1)} | ${seite.befunde[0]?.title ?? '–'} |`,
+      )
+    }
+    lines.push('')
+
+    if (result.seitenMuster && result.seitenMuster.length > 0) {
+      lines.push('### Was sich durch die Website zieht', '')
+      lines.push(
+        'Diese Befundarten treten auf mehreren Seiten auf. Sie haben eine gemeinsame Ursache (Vorlage, Arbeitsweise) und lassen sich einmal für alle Seiten beheben:',
+        '',
+      )
+      for (const muster of result.seitenMuster) {
+        lines.push(`- ${muster.bezeichnung} — auf ${muster.laeufe} von ${result.pages.length} Seiten`)
+      }
+      lines.push('')
+    }
+  }
 
   for (const m of result.modules) {
     lines.push(`## ${moduleName(m.module)} — ${m.score.toFixed(1)}/10`, '')

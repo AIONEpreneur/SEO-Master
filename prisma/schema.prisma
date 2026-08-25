@@ -337,6 +337,9 @@ model Analysis {
   languageCode      String   @default("de")
   seedKeywords      String[]
   competitorDomains String[]
+  // Wie viele Seiten der Lauf höchstens liest. 1 = nur die eingegebene
+  // Adresse; mehr = Website-Analyse mit Unterseiten.
+  pageLimit         Int      @default(1)
 
   scoreSeo     Float?
   scoreAeo     Float?

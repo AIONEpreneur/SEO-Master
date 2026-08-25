@@ -11,6 +11,8 @@ import { analyzeGeo, parseRobots } from './geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from './serp'
 import { analyzeCompetitors, type CompetitorProfile } from './competitors'
 import { analyzeSocial } from './social'
+import { waehleSeiten, seitenErgebnis, type SeitenErgebnis } from './seiten'
+import { wiederkehrendeBefunde } from './wiederkehrend'
 import { tragenderBegriff, wortfolge } from './begriffe'
 import { beurteile, messbare, begriffsBefund, VOLUMEN_SCHWELLE, type BegriffsUrteil } from './keyword-pruefung'
 import { generateReport, sortFindings } from './report'
@@ -54,6 +56,8 @@ export async function runAnalysis(params: {
   languageCode: string
   seedKeywords?: string[]
   competitorDomains?: string[]
+  /** Höchstzahl gelesener Seiten; 1 = nur die eingegebene Adresse. */
+  pageLimit?: number
   onStep?: StepUpdate
 }): Promise<{ result: AnalysisResult; report: { markdown: string; summary: string }; raw: Record<string, unknown> }> {
   const { analysisId, organizationId, targetUrl, targetKind, modules, locationCode, languageCode } = params
@@ -442,6 +446,62 @@ export async function runAnalysis(params: {
 
   await Promise.all(collectors)
 
+  // --- Phase 2b: Weitere Seiten der Website --------------------------------
+  //
+  // Läuft nach den Markt-Erhebungen, denn die gelten je Domain und werden
+  // nicht je Seite wiederholt. Jede Unterseite bekommt dieselbe
+  // Seitenbewertung wie die Hauptseite (SEO/AEO/GEO-Struktur) – nur eben
+  // ohne die Domain-Daten, die schon erhoben sind.
+  const seitenLimit = Math.max(1, params.pageLimit ?? 1)
+  let seiten: SeitenErgebnis[] = []
+  let seitenFehler = 0
+
+  if (seitenLimit > 1 && firecrawl) {
+    await step('Weitere Seiten werden gelesen', 55)
+    try {
+      const gefunden = await firecrawl.map(targetUrl, 200)
+      const adressen = waehleSeiten({ startUrl: targetUrl, gefunden, limit: seitenLimit })
+      raw.seitenauswahl = { gefunden: gefunden.length, gewaehlt: adressen.length }
+
+      // Gebündelt zu vieren: schnell genug, ohne die Zielseite zu fluten.
+      for (let i = 0; i < adressen.length; i += 4) {
+        const gruppe = adressen.slice(i, i + 4)
+        const ergebnisse = await Promise.all(
+          gruppe.map(async (adresse) => {
+            try {
+              const geladen = await firecrawl.scrape(adresse)
+              const seitenHtml = geladen?.rawHtml ?? geladen?.html
+              if (!seitenHtml) return null
+              const s = extractSignals({ url: adresse, html: seitenHtml, renderedText: geladen?.markdown ?? null })
+              return seitenErgebnis({
+                url: adresse,
+                signals: s,
+                seo: analyzeSeo({ signals: s }),
+                aeo: analyzeAeo({ signals: s, serp: null, peopleAlsoAsk: [] }),
+                geo: analyzeGeo({ signals: s, backlinks: null, llmMentions: null, robotsTxt: robots }),
+              })
+            } catch {
+              return null
+            }
+          }),
+        )
+        seitenFehler += ergebnisse.filter((e) => e === null).length
+        seiten.push(...ergebnisse.filter((e): e is SeitenErgebnis => e !== null))
+        await step('Weitere Seiten werden gelesen', 55 + Math.round(((i + 4) / adressen.length) * 4))
+      }
+
+      // Schwächste zuerst: Dort liegt die Arbeit.
+      seiten.sort((a, b) => a.schnitt - b.schnitt)
+    } catch (error) {
+      skipped.push({ module: 'Website-Umfang', reason: message(error) })
+    }
+  } else if (seitenLimit > 1 && !firecrawl) {
+    skipped.push({
+      module: 'Website-Umfang',
+      reason: 'Ohne Firecrawl-Zugangsdaten wird nur die eingegebene Seite gelesen.',
+    })
+  }
+
   // --- Phase 3: Bewerten ----------------------------------------------------
   await step('Bewertung läuft', 60)
 
@@ -562,6 +622,25 @@ export async function runAnalysis(params: {
     keyword: { value: primaryKeyword, source: keywordQuelle },
   })
 
+  if (seiten.length > 0) {
+    result.pages = seiten
+    // Dieselbe Musterlogik wie auf der Übersicht – nur über Seiten statt
+    // über Läufe: Was auf vielen Seiten auftritt, ist ein Website-Problem
+    // mit einer Ursache, kein Einzelfall.
+    result.seitenMuster = wiederkehrendeBefunde(
+      seiten.map((seite) => ({ modules: [{ findings: seite.befunde }] })),
+      { mindestens: 2, hoechstens: 6 },
+    )
+    result.meta.scope = {
+      pages: 1 + seiten.length,
+      note:
+        `${1 + seiten.length} Seiten derselben Domain. Die Bausteine im Detail beziehen sich auf die ` +
+        `eingegebene Seite; jede weitere Seite wurde nach denselben Regeln bewertet (ohne Markt-Daten, ` +
+        `die je Domain einmal erhoben werden).` +
+        (seitenFehler > 0 ? ` ${seitenFehler} Seite${seitenFehler === 1 ? '' : 'n'} liess${seitenFehler === 1 ? '' : 'en'} sich nicht laden.` : ''),
+    }
+  }
+
   const report = await generateReport(result, anthropicSecret?.apiKey ?? null)
   if (anthropicSecret) providersUsed.add('Anthropic')
   result.executiveSummary = report.summary
@@ -574,7 +653,24 @@ export async function runAnalysis(params: {
   // die keine Kosten je Aufruf ausweisen (Berichtstext, Seitenabruf).
   const dfsCent = dfs && dfs.totalCost > 0 ? Math.ceil(dfs.totalCost * 100) : 0
   const grundgebuehr = anthropicSecret ? GRUNDGEBUEHR_MIT_BERICHT : GRUNDGEBUEHR
-  const gesamtCent = dfsCent + grundgebuehr
+  // Jede Unterseite ist ein zusätzlicher Firecrawl-Abruf; der pauschale Cent
+  // je Seite hält die Website-Analyse im Guthaben sichtbar, statt sie als
+  // kostenlos erscheinen zu lassen.
+  const seitenCent = seiten.length
+  const gesamtCent = dfsCent + grundgebuehr + seitenCent
+
+  if (seitenCent > 0) {
+    await db.usageRecord.create({
+      data: {
+        organizationId,
+        provider: 'FIRECRAWL' as Provider,
+        operation: 'unterseiten',
+        units: seiten.length,
+        costCredits: seitenCent,
+        analysisId,
+      },
+    })
+  }
 
   if (dfsCent > 0) {
     await db.usageRecord.create({
