@@ -1,29 +1,39 @@
 #!/bin/sh
 # Ausser-Haus-Kopie der Datenbanksicherungen einrichten.
 #
+# Ziel kann ein zweiter Server sein oder ein Hosting-Konto mit SFTP-Zugang
+# (bei Hostinger: SSH-Zugriff im hPanel aktivieren; Port meist 65002).
+#
 # Aufruf auf dem App-Server (einmalig):
-#   sh /home/seomaster/app/deploy/kopie-einrichten.sh benutzer@ZIEL-IP
+#   sh /home/seomaster/app/deploy/kopie-einrichten.sh BENUTZER@HOST PORT
+# Beispiele:
+#   sh deploy/kopie-einrichten.sh root@203.0.113.10          # zweiter Server
+#   sh deploy/kopie-einrichten.sh u123456@145.14.0.10 65002  # Hostinger-Hosting
 #
 # Danach schiebt der Server jede Nacht um 3:30 Uhr – eine halbe Stunde nach
-# der Sicherung – alle Sicherungsdateien auf den Zielserver. Dort bleiben sie
-# 30 Tage, dann räumen sie sich selbst weg.
+# der Sicherung – die Sicherungsdateien auf das Ziel. Dort bleiben sie
+# 30 Tage.
 #
 # Der ENCRYPTION_KEY steckt nicht in den Sicherungen. Er gehört in den
-# Passwortmanager – NICHT auf den Zielserver. Wer nur die Kopien erbeutet,
-# kann die verschlüsselten Zugangsdaten darin nicht lesen.
+# Passwortmanager – NICHT auf das Ziel. Wer nur die Kopien erbeutet, kann
+# die verschlüsselten Zugangsdaten darin nicht lesen.
 
 set -e
 
-# Das Ziel kommt als Argument, nicht über eine Rückfrage: In Web-Terminals
-# schlägt read ohne TTY fehl, ein Argument funktioniert überall.
+# Ziel und Port kommen als Argumente, nicht über eine Rückfrage: In
+# Web-Terminals schlägt read ohne TTY fehl, Argumente funktionieren überall.
 ZIEL="$(printf '%s' "${1:-}" | tr -d '[:space:]\r')"
+PORT="$(printf '%s' "${2:-22}" | tr -d '[:space:]\r')"
 if [ -z "$ZIEL" ]; then
-  echo "✗ Bitte das Ziel angeben, z. B.:  sh deploy/kopie-einrichten.sh root@203.0.113.10" >&2
+  echo "✗ Bitte das Ziel angeben, z. B.:  sh deploy/kopie-einrichten.sh u123456@145.14.0.10 65002" >&2
   exit 1
 fi
 case "$ZIEL" in
   *@*) : ;;
-  *) echo "✗ Das Ziel braucht die Form benutzer@adresse (z. B. root@203.0.113.10)." >&2; exit 1 ;;
+  *) echo "✗ Das Ziel braucht die Form benutzer@adresse." >&2; exit 1 ;;
+esac
+case "$PORT" in
+  ''|*[!0-9]*) echo "✗ Der Port muss eine Zahl sein (bei Hostinger-Hosting: 65002)." >&2; exit 1 ;;
 esac
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -33,30 +43,44 @@ ZIELPFAD="seomaster-sicherungen"
 
 mkdir -p "$BACKUP_DIR" "$HOME/.ssh"
 
-# Eigener Schlüssel nur für die Kopie: Er darf auf dem Zielserver liegen,
-# ohne dass damit irgendetwas anderes erreichbar wird.
+# Eigener Schlüssel nur für die Kopie: Er darf auf dem Ziel liegen, ohne dass
+# damit irgendetwas anderes erreichbar wird.
 if [ ! -f "$SCHLUESSEL" ]; then
   ssh-keygen -t ed25519 -N '' -f "$SCHLUESSEL" -C 'seomaster-sicherungskopie' >/dev/null
   echo "✓ Schlüssel für die Übertragung erzeugt."
 fi
 
-echo "→ Schlüssel wird auf $ZIEL hinterlegt – dafür einmal das Passwort des Zielservers eingeben:"
-ssh-copy-id -i "$SCHLUESSEL.pub" "$ZIEL"
+echo "→ Schlüssel wird auf $ZIEL hinterlegt – dafür einmal das Passwort des Ziels eingeben:"
+ssh-copy-id -i "$SCHLUESSEL.pub" -p "$PORT" "$ZIEL"
 
-ssh -i "$SCHLUESSEL" -o BatchMode=yes "$ZIEL" "mkdir -p $ZIELPFAD"
-echo "✓ Verbindung steht, Zielordner $ZIELPFAD ist angelegt."
+# Was kann das Ziel? Ein Server hat rsync; ein Hosting-Konto oft nur den
+# Dateizugang. Beides funktioniert – der Lauf wählt den passenden Weg.
+if ssh -i "$SCHLUESSEL" -p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$ZIEL" 'command -v rsync' >/dev/null 2>&1; then
+  MODUS="rsync"
+  ssh -i "$SCHLUESSEL" -p "$PORT" -o BatchMode=yes "$ZIEL" "mkdir -p $ZIELPFAD"
+else
+  MODUS="sftp"
+fi
+echo "✓ Verbindung steht (Übertragung per $MODUS)."
+
+KONF="$HOME/.seomaster-kopie.conf"
+cat > "$KONF" <<KONFENDE
+ZIEL='$ZIEL'
+PORT='$PORT'
+MODUS='$MODUS'
+SCHLUESSEL='$SCHLUESSEL'
+BACKUP_DIR='$BACKUP_DIR'
+ZIELPFAD='$ZIELPFAD'
+KONFENDE
+chmod 600 "$KONF"
 
 # Probelauf sofort, nicht erst um 3:30 Uhr: Ein Fehler soll jetzt auffallen.
-rsync -az -e "ssh -i $SCHLUESSEL -o BatchMode=yes" "$BACKUP_DIR/" "$ZIEL:$ZIELPFAD/"
-echo "✓ Probelauf: vorhandene Sicherungen sind übertragen."
+sh "$APP_DIR/deploy/kopie-lauf.sh"
 
-KOPIE_CMD="rsync -az -e 'ssh -i $SCHLUESSEL -o BatchMode=yes' '$BACKUP_DIR/' '$ZIEL:$ZIELPFAD/' && ssh -i $SCHLUESSEL -o BatchMode=yes $ZIEL \"find $ZIELPFAD -name 'seomaster_*.sql.gz' -mtime +30 -delete\""
-CRON="30 3 * * * $KOPIE_CMD >> $HOME/kopie.log 2>&1"
-
-if crontab -l 2>/dev/null | grep -qF "seomaster-kopie"; then
+if crontab -l 2>/dev/null | grep -qF "kopie-lauf.sh"; then
   echo "✓ Der nächtliche Auftrag besteht bereits."
 else
-  ( crontab -l 2>/dev/null; echo "$CRON" ) | crontab -
+  ( crontab -l 2>/dev/null; echo "30 3 * * * sh $APP_DIR/deploy/kopie-lauf.sh >> $HOME/kopie.log 2>&1" ) | crontab -
   echo "✓ Nächtliche Übertragung um 3:30 Uhr eingerichtet."
 fi
 

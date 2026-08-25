@@ -1687,21 +1687,36 @@ function main() {
   section('Die Ausser-Haus-Kopie ist vorbereitet')
 
   const kopieSkript = readFileSync(join(dir, '..', '..', 'deploy', 'kopie-einrichten.sh'), 'utf8')
+  const kopieLauf = readFileSync(join(dir, '..', '..', 'deploy', 'kopie-lauf.sh'), 'utf8')
   check(
-    'Das Ziel kommt als Argument, nicht ueber eine Rueckfrage',
+    'Ziel und Port kommen als Argumente, nicht ueber eine Rueckfrage',
     // Auf den Befehl pruefen, nicht auf das Wort: Der Kommentar im Skript
     // erklaert genau diesen Grund und enthaelt das Wort selbst.
-    /\$\{1:-\}/.test(kopieSkript) && !/^\s*read\s/m.test(kopieSkript),
+    /\$\{1:-\}/.test(kopieSkript) && /\$\{2:-22\}/.test(kopieSkript) && !/^\s*read\s/m.test(kopieSkript),
     'in Web-Terminals schlaegt read ohne TTY fehl – das war schon einmal der Fehler',
   )
   check('Ein eigener Schluessel nur fuer die Kopie', /seomaster-kopie/.test(kopieSkript))
-  check('Der Probelauf passiert sofort, nicht erst nachts', kopieSkript.indexOf('Probelauf') < kopieSkript.indexOf('crontab'))
-  check('Alte Kopien raeumen sich auf dem Ziel selbst weg', /-mtime \+30 -delete/.test(kopieSkript))
+  check(
+    'Das Skript erkennt selbst, ob das Ziel rsync kann oder nur SFTP',
+    /command -v rsync/.test(kopieSkript) && /MODUS="sftp"/.test(kopieSkript),
+    'ein Hosting-Konto hat oft nur den Dateizugang',
+  )
+  check('Der Probelauf passiert sofort, nicht erst nachts', kopieSkript.indexOf('kopie-lauf.sh') < kopieSkript.indexOf('crontab'))
+  check('Der Auftrag wird nicht doppelt eingerichtet', /grep -qF "kopie-lauf\.sh"/.test(kopieSkript))
   check(
     'Das Skript warnt, dass der ENCRYPTION_KEY nirgends auf die Server gehoert',
     /ENCRYPTION_KEY/.test(kopieSkript) && /Passwortmanager/.test(kopieSkript),
   )
-  check('Der Auftrag wird nicht doppelt eingerichtet', /grep -qF "seomaster-kopie"/.test(kopieSkript))
+  check('Alte Kopien raeumen sich per rsync-Weg selbst weg', /-mtime \+30 -delete/.test(kopieLauf))
+  check(
+    'Im SFTP-Weg ersetzt der Dateiname das fehlende find',
+    /date -d '30 days ago'/.test(kopieLauf) && /seomaster_\[0-9\]/.test(kopieLauf),
+    'auf einem reinen Dateizugang gibt es keine Werkzeuge auf dem Ziel',
+  )
+  check(
+    'Die Konfiguration ist nur fuer den Besitzer lesbar',
+    /chmod 600 "\$KONF"/.test(kopieSkript),
+  )
 
   section('Bericht')
   const result: AnalysisResult = {
