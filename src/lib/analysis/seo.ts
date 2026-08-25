@@ -3,7 +3,7 @@ import type { Criterion, Finding, ModuleResult } from './types'
 import { weightedScore, scoreLabel, statusFor } from './types'
 import type { PageSpeedResult } from '@/lib/connectors/pagespeed'
 import type { BacklinksSummaryResult, DomainRankResult } from '@/lib/connectors/dataforseo'
-import { enthaeltBegriff } from './begriffe'
+import { deckungsgrad, enthaeltBegriff } from './begriffe'
 
 /**
  * SEO-Bewertung nach dem Framework:
@@ -67,7 +67,7 @@ export function analyzeSeo(input: {
         evidence: s.title,
       })
     } else {
-      score = keyword && enthaeltBegriff(s.title, keyword) ? 9 : 7
+      score = keyword && deckungsgrad(s.title, keyword) >= 0.67 ? 9 : 7
       detail = `${len} Zeichen, im optimalen Bereich.`
     }
     technical.push({ key: 'title', label: 'Title-Tag', score, weight: 3, detail, status: statusFor(score) })
@@ -140,7 +140,7 @@ export function analyzeSeo(input: {
       })
     } else {
       const sameAsTitle = s.title && s.h1[0].toLowerCase().trim() === s.title.toLowerCase().trim()
-      score = sameAsTitle ? 6 : keyword && enthaeltBegriff(s.h1[0], keyword) ? 9 : 7
+      score = sameAsTitle ? 6 : keyword && deckungsgrad(s.h1[0] ?? null, keyword) >= 0.67 ? 9 : 7
       detail = sameAsTitle
         ? 'Genau ein H1, aber wortgleich mit dem Title – ungenutztes Potenzial.'
         : `Genau ein H1: "${s.h1[0].slice(0, 80)}"`
@@ -318,15 +318,23 @@ export function analyzeSeo(input: {
         status: 'unknown',
       })
     } else {
-      // Vergleich über die Wortfolge, nicht über den Rohtext: "Online-Business"
-      // und "online business" sind dieselbe Suchanfrage. Der Vergleich auf
-      // Zeichenebene meldete hier ein fehlendes Keyword an drei Stellen, an
-      // denen es tatsächlich stand – und daraus wurde eine Sofortmassnahme.
+      // Gemessen wird die inhaltliche Deckung, nicht die wörtliche Übereinstimmung.
+      //
+      // Zwei Fehlbefunde derselben Art führten hierher: "Online-Business" galt
+      // nicht als "online business", und "Solopreneurinnen" nicht als
+      // "Solopreneure". Beide Male meldete der Bericht ein fehlendes
+      // Hauptkeyword an Stellen, an denen es wörtlich stand – und machte
+      // daraus eine Sofortmassnahme.
+      //
+      // Zwei Drittel der tragenden Wörter genügen. Wer "KI-Beratung für
+      // Solopreneurinnen ab 40" schreibt, hat "ki-beratung solopreneure"
+      // untergebracht, auch wenn keine Zeichenkette übereinstimmt.
+      const gedeckt = (text: string | null) => deckungsgrad(text, keyword) >= 0.67
       const spots = {
-        Title: enthaeltBegriff(s.title, keyword),
-        H1: enthaeltBegriff(s.h1[0], keyword),
-        'erste 100 Wörter': enthaeltBegriff(s.first100Words, keyword),
-        'Meta Description': enthaeltBegriff(s.metaDescription, keyword),
+        Title: gedeckt(s.title),
+        H1: gedeckt(s.h1[0] ?? null),
+        'erste 100 Wörter': gedeckt(s.first100Words),
+        'Meta Description': gedeckt(s.metaDescription),
       }
       const hits = Object.values(spots).filter(Boolean).length
       const score = clamp(hits * 2.5)

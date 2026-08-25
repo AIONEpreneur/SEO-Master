@@ -83,6 +83,52 @@ const FUELLWOERTER = new Set([
 ])
 
 /**
+ * Deutsche Grundform eines Wortes, so weit es ohne Wörterbuch geht.
+ *
+ * Der Anlass: Auf einer Seite standen Title und H1 wörtlich
+ * "KI-Beratung für Solopreneurinnen ab 40", geprüft wurde gegen
+ * "ki-beratung solopreneure" – und die Auswertung meldete, das Hauptkeyword
+ * fehle an beiden Stellen. Ein Vergleich, der "Solopreneurinnen" und
+ * "Solopreneure" für verschiedene Dinge hält, misst die Schreibweise, nicht
+ * die Sache.
+ *
+ * Zwei Schritte, in dieser Reihenfolge:
+ *
+ *   1. Weibliche Formen: "-innen" und "-in" fallen weg. Das ist im Deutschen
+ *      der häufigste Grund, warum dasselbe Wort zweimal verschieden aussieht,
+ *      und es betrifft ausgerechnet Berufs- und Rollenbezeichnungen – also
+ *      genau die Wörter, um die es bei einer Positionierung geht.
+ *   2. Beugungsendungen: -ern, -em, -er, -en, -es, -e.
+ *
+ * Bewusst NICHT dabei: das blosse "-n" und "-s". Sie würden "beratung" zu
+ * "beratun" verkürzen, während "beratungen" zu "beratung" wird – aus einem
+ * Wort würden zwei. Ebenso wenig werden Verbformen zusammengeführt
+ * ("kostet"/"kosten"); dafür bräuchte es ein Wörterbuch, und bei Suchbegriffen
+ * überwiegen ohnehin die Hauptwörter.
+ *
+ * Die Mindestlänge von vier Zeichen im Rest schützt kurze Wörter davor,
+ * zerlegt zu werden.
+ */
+export function grundform(wort: string): string {
+  let w = wort
+    .toLowerCase()
+    .replace(/ä/g, 'a')
+    .replace(/ö/g, 'o')
+    .replace(/ü/g, 'u')
+    .replace(/ß/g, 'ss')
+
+  if (w.length > 7 && w.endsWith('innen')) w = w.slice(0, -5)
+  else if (w.length > 4 && w.endsWith('in')) w = w.slice(0, -2)
+
+  for (const endung of ['ern', 'em', 'er', 'en', 'es', 'e']) {
+    if (w.endsWith(endung) && w.length - endung.length >= 4) {
+      return w.slice(0, -endung.length)
+    }
+  }
+  return w
+}
+
+/**
  * Wie viel einer Suchanfrage steht auf der Seite? Ein Wert zwischen 0 und 1.
  *
  * Für die Frage "behandelt die Seite dieses Thema" ist der Vergleich auf die
@@ -90,11 +136,8 @@ const FUELLWOERTER = new Set([
  * Seite "Was kostet KI-Beratung?" liest, hat die Antwort gefunden – die
  * Wortfolge stimmt trotzdem nicht überein.
  *
- * Deshalb wird je Inhaltswort geprüft, ob die Seite ein Wort mit demselben
- * Anfang enthält. Fünf Zeichen sind der Kompromiss: Sie führen "kosten" und
- * "kostet" zusammen, ohne "beratung" und "berühren" zu verwechseln. Eine
- * richtige Grundformreduktion wäre genauer, bräuchte aber ein Wörterbuch für
- * jede Sprache, in der die Anwendung eingesetzt wird.
+ * Deshalb wird je Inhaltswort verglichen, ob die Seite dasselbe Wort in
+ * irgendeiner Beugungsform enthält – über die Grundform oben.
  *
  * Füllwörter zählen nicht mit – sie stehen auf jeder Seite und würden jede
  * Anfrage als abgedeckt erscheinen lassen.
@@ -107,18 +150,31 @@ export function deckungsgrad(text: string | null | undefined, begriff: string): 
     .filter((w) => w.length >= 2 && !istFuellwort(w))
   if (inhaltswoerter.length === 0) return 0
 
-  const seitenwoerter = new Set(wortfolge(text).split(' '))
-  const stammLaenge = 5
-
+  const seitenstaemme = [...new Set(wortfolge(text).split(' ').map(grundform))]
   const gefunden = inhaltswoerter.filter((wort) => {
-    const stamm = wort.slice(0, stammLaenge)
-    for (const seitenwort of seitenwoerter) {
-      if (seitenwort.startsWith(stamm)) return true
-    }
-    return false
+    const gesucht = grundform(wort)
+    return seitenstaemme.some((vorhanden) => stimmenUeberein(gesucht, vorhanden))
   })
-
   return gefunden.length / inhaltswoerter.length
+}
+
+/**
+ * Zwei Grundformen als dasselbe Wort werten.
+ *
+ * Die Regeln oben fassen Hauptwörter zusammen, aber keine Verbformen:
+ * "kosten" wird zu "kost", "kostet" bleibt stehen. Für die Frage, ob eine
+ * Seite ein Thema behandelt, ist das zu streng – wer "was kostet KI-Beratung"
+ * schreibt, beantwortet "ki beratung kosten".
+ *
+ * Deshalb gilt zusätzlich: Ist die eine Form der Anfang der anderen, zählt es
+ * als Treffer. Die Untergrenze von vier Zeichen ist entscheidend – ohne sie
+ * fände "ki" jedes Wort, das mit diesen beiden Buchstaben beginnt, von
+ * "Kinder" bis "Kiste".
+ */
+function stimmenUeberein(a: string, b: string): boolean {
+  if (a === b) return true
+  const [kurz, lang] = a.length <= b.length ? [a, b] : [b, a]
+  return kurz.length >= 4 && lang.startsWith(kurz)
 }
 
 export function istFuellwort(wort: string): boolean {

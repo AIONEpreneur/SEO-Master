@@ -11,7 +11,8 @@ import { analyzeGeo, parseRobots } from './geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from './serp'
 import { analyzeCompetitors, type CompetitorProfile } from './competitors'
 import { analyzeSocial } from './social'
-import { tragenderBegriff } from './begriffe'
+import { tragenderBegriff, wortfolge } from './begriffe'
+import { beurteile, messbare, begriffsBefund, VOLUMEN_SCHWELLE, type BegriffsUrteil } from './keyword-pruefung'
 import { generateReport, sortFindings } from './report'
 import type { AnalysisResult, ModuleResult } from './types'
 import type { Provider } from '@prisma/client'
@@ -273,6 +274,8 @@ export async function runAnalysis(params: {
   let domainRank = null
   let rankedKeywords = null
   let llmMentions = null
+  let begriffsUrteile: BegriffsUrteil[] = []
+  let begriffsAlternativen: Array<{ begriff: string; volumen: number }> = []
   const serps: Array<{ keyword: string; result: any }> = []
 
   // Die Erhebungen sind voneinander unabhängig und laufen deshalb parallel.
@@ -316,6 +319,62 @@ export async function runAnalysis(params: {
     )
 
     if (modules.includes('SERP')) {
+      // Vorprüfung: Wird überhaupt gesucht, was hier geprüft werden soll?
+      //
+      // Sie läuft vor allen Platzierungsabfragen und nicht nebenher, weil ihr
+      // Ergebnis darüber entscheidet, welche Begriffe abgefragt werden. Für
+      // einen Begriff ohne Nachfrage ist die Platzierung nicht nur
+      // uninteressant, sondern irreführend – und die Abfrage kostet zusätzlich
+      // Geld.
+      await step('Suchbegriffe werden geprüft', 26)
+      try {
+        const volumina = await dfs.searchVolume({
+          keywords: keywordsToCheck,
+          locationCode,
+          languageCode,
+        })
+        const karte = new Map(
+          volumina.map((v) => [wortfolge(v.keyword ?? ''), v.search_volume ?? null] as const),
+        )
+        begriffsUrteile = beurteile(keywordsToCheck, karte)
+        raw.begriffsUrteile = begriffsUrteile
+        providersUsed.add('DataForSEO')
+
+        // Nur wenn tatsächlich etwas untauglich war, nach Alternativen suchen.
+        // Sonst wäre es ein Aufruf für einen Hinweis, den niemand braucht.
+        const untauglich = begriffsUrteile.filter((u) => u.urteil !== 'messbar')
+        if (untauglich.length > 0) {
+          const ausgangspunkt =
+            begriffsUrteile.find((u) => u.urteil === 'messbar')?.begriff ??
+            tragenderBegriff(signals.h1[0]) ??
+            tragenderBegriff(signals.title)
+
+          if (ausgangspunkt) {
+            try {
+              const vorschlaege = await dfs.keywordSuggestions({
+                keyword: ausgangspunkt,
+                locationCode,
+                languageCode,
+                limit: 40,
+              })
+              begriffsAlternativen = (vorschlaege?.items ?? [])
+                .map((i) => ({
+                  begriff: i.keyword ?? '',
+                  volumen: i.keyword_info?.search_volume ?? 0,
+                }))
+                .filter((a) => a.begriff && a.volumen >= VOLUMEN_SCHWELLE * 5)
+                .sort((a, b) => b.volumen - a.volumen)
+                .slice(0, 8)
+            } catch {
+              // Ohne Alternativen bleibt der Hinweis trotzdem richtig.
+            }
+          }
+        }
+      } catch (error) {
+        skipped.push({ module: 'Suchvolumen-Prüfung', reason: message(error) })
+        begriffsUrteile = beurteile(keywordsToCheck, null)
+      }
+
       collectors.push(
         (async () => {
           try {
@@ -331,7 +390,7 @@ export async function runAnalysis(params: {
       // Suchergebnisse nacheinander abrufen, um das Anfragelimit nicht zu reissen.
       collectors.push(
         (async () => {
-          for (const keyword of keywordsToCheck) {
+          for (const keyword of messbare(begriffsUrteile)) {
             try {
               const result = await dfs.serpOrganic({ keyword, locationCode, languageCode, depth: 20 })
               serps.push({ keyword, result })
@@ -386,7 +445,9 @@ export async function runAnalysis(params: {
     if (!dfs || !domain) {
       skipped.push({ module: 'SERP', reason: 'Ohne DataForSEO-Zugangsdaten nicht möglich' })
     } else {
-      moduleResults.push(analyzeSerp({ domain, serps, rankedKeywords, domainRank }))
+      moduleResults.push(
+        analyzeSerp({ domain, serps, rankedKeywords, domainRank, begriffsUrteile, begriffsAlternativen }),
+      )
     }
   }
 

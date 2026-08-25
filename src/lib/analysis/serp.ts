@@ -1,6 +1,7 @@
 import type { Criterion, Finding, ModuleResult } from './types'
 import { weightedScore, scoreLabel, statusFor } from './types'
 import type { SerpResult, SerpItem, RankedKeywordsResult, DomainRankResult } from '@/lib/connectors/dataforseo'
+import { begriffsBefund, type BegriffsUrteil } from './keyword-pruefung'
 
 /**
  * SERP-Analyse: Wo steht die Domain tatsächlich, und wie sieht das Umfeld aus,
@@ -11,8 +12,13 @@ export function analyzeSerp(input: {
   serps: Array<{ keyword: string; result: SerpResult | null }>
   rankedKeywords?: RankedKeywordsResult | null
   domainRank?: DomainRankResult | null
+  /** Vorprüfung der eingegebenen Begriffe: Wird danach überhaupt gesucht? */
+  begriffsUrteile?: BegriffsUrteil[]
+  begriffsAlternativen?: Array<{ begriff: string; volumen: number }>
 }): ModuleResult {
   const { domain, serps, rankedKeywords, domainRank } = input
+  const begriffsUrteile = input.begriffsUrteile ?? []
+  const untauglich = begriffsUrteile.filter((u) => u.urteil === 'ohne-volumen' || u.urteil === 'zu-allgemein')
   const findings: Finding[] = []
   const criteria: Criterion[] = []
 
@@ -34,16 +40,42 @@ export function analyzeSerp(input: {
   const top10 = ranked.filter((p) => (p.position ?? 99) <= 10)
   const top3 = ranked.filter((p) => (p.position ?? 99) <= 3)
 
+  // Ein Hinweis auf untaugliche Eingaben, kein Mangel der Website.
+  {
+    const hinweis = begriffsBefund(begriffsUrteile, input.begriffsAlternativen ?? [])
+    if (hinweis) findings.push(hinweis)
+  }
+
   // --- Platzierungen --------------------------------------------------------
   {
-    const score =
+    // Ohne einen einzigen tatsächlich gesuchten Begriff gibt es keine Note.
+    //
+    // Genau hier entstand ein Wert von 1,8, der wie ein Urteil über die
+    // Website aussah, tatsächlich aber die Eingabe beschrieb: Vier von fünf
+    // Begriffen hatten kein messbares Suchvolumen, das Ergebnis konnte nur
+    // null sein. Eine Note, die aus der Eingabe folgt statt aus einer Messung,
+    // ist schlimmer als keine – sie wird wie ein Befund behandelt.
+    const nichtsMessbares =
+      begriffsUrteile.length > 0 && untauglich.length === begriffsUrteile.length
+
+    if (nichtsMessbares) {
+      criteria.push({
+        key: 'positions',
+        label: 'Platzierungen',
+        score: 0,
+        weight: 40,
+        detail: `Nicht bewertbar: Für keinen der ${begriffsUrteile.length} geprüften Begriffe liegt ein nennenswertes Suchvolumen vor. Eine Platzierung dafür wäre ohne Aussage.`,
+        status: 'unknown',
+      })
+    } else {
+      const score =
       positions.length === 0
         ? 0
         : clamp((top3.length * 10 + (top10.length - top3.length) * 7 + (ranked.length - top10.length) * 3) / positions.length)
     const detail =
       positions.length === 0
         ? 'Keine Keywords zur Prüfung angegeben – ohne Suchbegriffe lässt sich die Platzierung nicht messen.'
-        : `${ranked.length} von ${positions.length} geprüften Keywords platziert, davon ${top10.length} in den Top 10 und ${top3.length} in den Top 3.`
+        : `${ranked.length} von ${positions.length} tatsächlich gesuchten Keywords platziert, davon ${top10.length} in den Top 10 und ${top3.length} in den Top 3.${untauglich.length ? ` (${untauglich.length} eingegebene Begriffe blieben aussen vor, weil sie nicht gesucht werden.)` : ''}`
 
     if (ranked.length === 0 && positions.length > 0) {
       findings.push({
@@ -66,7 +98,8 @@ export function analyzeSerp(input: {
         impact: 'hoch',
       })
     }
-    criteria.push({ key: 'positions', label: 'Platzierungen', score, weight: 40, detail, status: positions.length ? statusFor(score) : 'unknown' })
+      criteria.push({ key: 'positions', label: 'Platzierungen', score, weight: 40, detail, status: positions.length ? statusFor(score) : 'unknown' })
+    }
   }
 
   // --- SERP-Features: Wer besetzt die Antwortflächen? ----------------------

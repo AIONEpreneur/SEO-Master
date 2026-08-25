@@ -17,12 +17,13 @@ import { extractSignals } from '../src/lib/analysis/extract'
 import { analyzeSeo } from '../src/lib/analysis/seo'
 import { analyzeAeo } from '../src/lib/analysis/aeo'
 import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
-import { extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
+import { analyzeSerp, extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
 import { analyzeSocial } from '../src/lib/analysis/social'
 import {
   fuehreZusammen, fasseZusammen, leseVerlauf, lohnendeBegriffe, vergleichsform,
 } from '../src/lib/keywords/research'
-import { deckungsgrad, enthaeltBegriff, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
+import { deckungsgrad, enthaeltBegriff, grundform, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
+import { beurteile, begriffsBefund, istZuAllgemein, messbare } from '../src/lib/analysis/keyword-pruefung'
 import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
 import { normalizeProfile } from '../src/lib/connectors/apify'
 import { buildDeterministicReport, sortFindings } from '../src/lib/analysis/report'
@@ -473,6 +474,125 @@ function main() {
       )
     }
   }
+
+  // --- Wortformen -----------------------------------------------------------
+  //
+  // Zweiter Fehlbefund derselben Art: Title und H1 lauteten wörtlich
+  // "KI-Beratung für Solopreneurinnen ab 40", geprüft wurde gegen
+  // "ki-beratung solopreneure" – und der Bericht meldete, das Hauptkeyword
+  // fehle an beiden Stellen.
+  section('Weibliche und gebeugte Formen gelten als dasselbe Wort')
+
+  check('Solopreneurinnen und Solopreneure', grundform('Solopreneurinnen') === grundform('Solopreneure'),
+    `${grundform('Solopreneurinnen')} / ${grundform('Solopreneure')}`)
+  check('Beraterin und Berater', grundform('Beraterin') === grundform('Berater'))
+  check('Beratung bleibt Beratung', grundform('Beratung') === 'beratung', grundform('Beratung'))
+  check('Beratungen wird zu Beratung', grundform('Beratungen') === 'beratung', grundform('Beratungen'))
+  check('Umlaute werden aufgelöst', grundform('Übersicht') === 'ubersicht', grundform('Übersicht'))
+  check('Kurze Wörter bleiben unangetastet', grundform('ki') === 'ki')
+
+  const echterTitle = 'KI-Beratung für Solopreneurinnen ab 40'
+  check(
+    'Das Hauptkeyword gilt als platziert',
+    deckungsgrad(echterTitle, 'ki-beratung solopreneure') === 1,
+    `${deckungsgrad(echterTitle, 'ki-beratung solopreneure')}`,
+  )
+  check(
+    'Ein fremdes Thema aber nicht',
+    deckungsgrad(echterTitle, 'buchhaltung für handwerker') < 0.4,
+  )
+  check(
+    'Kurze Wörter finden nicht wahllos',
+    deckungsgrad('Kinder in der Kiste', 'ki beratung') < 0.6,
+    '"ki" darf nicht in "Kinder" treffen',
+  )
+
+  // --- Suchvolumen vor Bewertung --------------------------------------------
+  //
+  // Der teuerste Fehler, den dieses Werkzeug machen kann: eine Note, die aus
+  // der Eingabe folgt statt aus einer Messung. Ein SERP-Wert von 1,8 sah aus
+  // wie ein Urteil über die Website – tatsächlich hatten vier von fünf
+  // eingegebenen Begriffen kein messbares Suchvolumen.
+  section('Begriffe ohne Nachfrage erzeugen keine Note')
+
+  check('Einzelnes Kurzwort gilt als zu allgemein', istZuAllgemein('KI'))
+  check('Auch in anderer Schreibweise', istZuAllgemein(' ai '))
+  check('Zwei Wörter nicht', !istZuAllgemein('ki beratung'))
+  check('Längeres Einzelwort nicht', !istZuAllgemein('solopreneur'))
+
+  const volumen = new Map<string, number | null>([
+    ['ki beratung', 2400],
+    ['ki beratung solopreneure', null],
+    ['solopreneure', 720],
+    ['nischenwort', 4],
+  ])
+  const urteile = beurteile(
+    ['KI-Beratung', 'KI-Beratung Solopreneure', 'Solopreneure', 'KI', 'Nischenwort'],
+    volumen,
+  )
+
+  check('Gesuchter Begriff gilt als messbar', urteile[0].urteil === 'messbar', `${urteile[0].volumen}`)
+  check('Begriff ohne Volumen wird aussortiert', urteile[1].urteil === 'ohne-volumen')
+  check('Kurzwort wird als zu allgemein aussortiert', urteile[3].urteil === 'zu-allgemein')
+  check('Vier Suchen im Monat zählen nicht als Nachfrage', urteile[4].urteil === 'ohne-volumen', 'Schwelle liegt bei 10')
+  check(
+    'Nur messbare Begriffe werden abgefragt',
+    messbare(urteile).length === 2,
+    `${messbare(urteile).join(', ')}`,
+  )
+  check(
+    'Grossschreibung stört die Zuordnung nicht',
+    urteile[2].volumen === 720,
+    'die Eingabe kam als "Solopreneure", das Volumen als "solopreneure"',
+  )
+
+  const befund = begriffsBefund(urteile, [
+    { begriff: 'notebooklm kosten', volumen: 1600 },
+    { begriff: 'ki agent erstellen', volumen: 1900 },
+  ])
+  check('Ein Befund über die Eingabe entsteht', Boolean(befund))
+  check('Er ist kein Mangel, sondern ein Hebel', befund?.severity === 'quickwin')
+  check('Er nennt Alternativen mit Volumen', /notebooklm kosten/.test(befund?.why ?? ''))
+  check(
+    'Er erklärt Positionierungswörter',
+    /Positionierungswörter/.test(befund?.action ?? ''),
+    'sie gehören auf die Seite, taugen aber nicht als Messgrösse',
+  )
+
+  const alleUntauglich = beurteile(['KI', 'AI'], new Map())
+  const ohneAlternativen = begriffsBefund(alleUntauglich, [])
+  check(
+    'Ohne Alternativen bleibt der Hinweis ehrlich',
+    /kein Suchmarkt/.test(ohneAlternativen?.why ?? ''),
+  )
+  check(
+    'Sind alle untauglich, sagt der Titel das',
+    /Keiner der geprüften Begriffe/.test(ohneAlternativen?.title ?? ''),
+  )
+  check('Nichts Messbares bleibt übrig', messbare(alleUntauglich).length === 0)
+
+  // Die eigentliche Sperre: Aus untauglichen Begriffen darf keine Zahl werden.
+  const serpOhneNachfrage = analyzeSerp({
+    domain: 'beispiel.de',
+    serps: [],
+    begriffsUrteile: alleUntauglich,
+    begriffsAlternativen: [],
+  })
+  const platzierungen = serpOhneNachfrage.criteria.find((c) => c.key === 'positions')
+  check(
+    'Platzierungen sind nicht bewertbar statt schlecht bewertet',
+    platzierungen?.status === 'unknown',
+    platzierungen?.detail?.slice(0, 60),
+  )
+  check(
+    'Kein Sofortbefund "nirgends platziert"',
+    !serpOhneNachfrage.findings.some((f) => f.id === 'serp-not-ranking'),
+    'die Website steht hier nicht zur Debatte, die Eingabe schon',
+  )
+  check(
+    'Stattdessen der Hinweis auf die Eingabe',
+    serpOhneNachfrage.findings.some((f) => f.id === 'keyword-ohne-nachfrage'),
+  )
 
   section('Bericht')
   const result: AnalysisResult = {

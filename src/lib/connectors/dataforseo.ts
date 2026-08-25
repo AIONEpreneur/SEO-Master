@@ -282,6 +282,26 @@ export class DataForSeoClient {
     return result[0] ?? null
   }
 
+  /**
+   * Suchvolumen zu konkreten Begriffen.
+   *
+   * Der günstigste und wichtigste Aufruf im ganzen Werkzeug: Er beantwortet,
+   * ob ein Begriff überhaupt gesucht wird. Ohne diese Vorprüfung bewertet die
+   * Analyse Platzierungen für Wörter, nach denen niemand sucht – und die
+   * Bewertung ist dann eine Eigenschaft der Eingabe, kein Befund über die
+   * Website.
+   */
+  async searchVolume(params: { keywords: string[]; locationCode: number; languageCode: string }) {
+    const result = await this.post<SearchVolumeResult>('/keywords_data/google_ads/search_volume/live', [
+      {
+        keywords: params.keywords.slice(0, 700).map((k) => k.toLowerCase()),
+        location_code: params.locationCode,
+        language_code: params.languageCode,
+      },
+    ])
+    return result ?? []
+  }
+
   /** Backlink-Profil einer Domain. */
   async backlinksSummary(target: string) {
     const result = await this.post<BacklinksSummaryResult>('/backlinks/summary/live', [
@@ -441,6 +461,13 @@ export type KeywordIdeasResult = {
 /** Bei "Ähnliche Suchanfragen" liegen dieselben Felder eine Ebene tiefer. */
 export type RelatedKeywordsResult = {
   items?: Array<{ keyword_data?: KeywordEintrag }>
+}
+
+export type SearchVolumeResult = {
+  keyword?: string
+  search_volume?: number | null
+  competition_level?: string
+  cpc?: number | null
 }
 
 export type BacklinksSummaryResult = {
