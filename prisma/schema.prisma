@@ -106,23 +106,30 @@ enum Plan {
 // ---------------------------------------------------------------------------
 
 model Credential {
-  id             String    @id @default(cuid())
-  organizationId String
-  provider       Provider
-  label          String
+  id              String    @id @default(cuid())
+  organizationId  String
+  provider        Provider
+  label           String
   // Chiffrat des JSON-Secrets. Klartext verlässt niemals den Server und wird
   // nie an den Browser ausgeliefert – die UI sieht ausschliesslich `hint`.
-  ciphertext     String
-  iv             String
-  authTag        String
-  keyVersion     Int       @default(1)
-  hint           String?
-  isActive       Boolean   @default(true)
-  lastCheckedAt  DateTime?
-  lastCheckOk    Boolean?
-  lastCheckError String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  ciphertext      String
+  iv              String
+  authTag         String
+  keyVersion      Int       @default(1)
+  hint            String?
+  isActive        Boolean   @default(true)
+  lastCheckedAt   DateTime?
+  lastCheckOk     Boolean?
+  lastCheckError  String?
+  /**
+   * Was die erfolgreiche Prüfung ergeben hat – etwa die verbundenen
+   * Search-Console-Properties oder das Restguthaben. Bei Search Console ist
+   * das die wichtigste Angabe überhaupt: Ohne sie ist nicht erkennbar, für
+   * welche Seiten gezählte Daten vorliegen und für welche nicht.
+   */
+  lastCheckDetail String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 

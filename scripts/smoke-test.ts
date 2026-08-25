@@ -453,7 +453,12 @@ function main() {
       'https://beispiel.de/blog/artikel',
     ) === 'https://beispiel.de/blog/',
   )
-  check('Fremde Domain findet nichts', findeProperty(properties, 'https://fremd.de/x') === null)
+  check(
+    'Fremde Domain findet nichts',
+    findeProperty(properties, 'https://fremd.de/x') === null,
+    'für Seiten, die einem nicht gehören, gibt es diese Daten nicht',
+  )
+  check('Leere Propertyliste findet nichts', findeProperty([], 'https://beispiel.de/') === null)
   check('Unbrauchbare Adresse findet nichts', findeProperty(properties, 'kein-url') === null)
 
   // Search Console hinkt zwei bis drei Tage hinterher. Wer bis heute abfragt,

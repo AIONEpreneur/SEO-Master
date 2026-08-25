@@ -47,34 +47,63 @@ seo-master@seo-master-123456.iam.gserviceaccount.com
 
 ---
 
-## Teil 2: Der Search Console Zugriff geben
+## Teil 2: Deinen Properties Zugriff geben
+
+> **Wichtig vorweg — die Frage, die sich hier zuerst stellt:**
+>
+> Search Console kennt **ausschliesslich deine eigenen Seiten**. Sie ist kein
+> öffentlicher Dienst, der über jede Website Auskunft gibt — sie zeigt nur,
+> was Google über Seiten weiss, für die du selbst freigeschaltet bist.
+>
+> Für eine Wettbewerberseite gibt es diese Zahlen nicht, und es kann sie nicht
+> geben. Das ist keine Einschränkung dieser Anwendung, sondern die Natur der
+> Sache: Niemand ausser der Betreiberin sieht diese Daten.
+>
+> Analysierst du eine fremde Seite, entfällt der Baustein einfach. Der Bericht
+> sagt das ausdrücklich und bewertet wie bisher mit Hochrechnungen.
+
+**Was du also freischaltest:** jede Property, die dir gehört und für die du
+gezählte Zahlen willst. Das sind heute vielleicht zwei oder drei — deine
+Hauptseite, ein Projekt, ein Blog. Jede einmal, danach nie wieder.
+
+Für jede dieser Properties:
 
 **6.** Öffne https://search.google.com/search-console und wähle oben links
-deine Property aus.
+die Property aus.
 
 **7.** Links unten: **Einstellungen** › **Nutzer und Berechtigungen** ›
 **Nutzer hinzufügen**
 
-- E-Mail-Adresse: die aus Schritt 5
+- E-Mail-Adresse: die aus Schritt 5 (für alle Properties dieselbe)
 - Berechtigung: **Vollständig** oder **Eingeschränkt** — beides genügt
 - **Hinzufügen**
 
+**8.** Nächste Property auswählen, Schritt 7 wiederholen. Fertig.
+
 > Ohne diesen Schritt bleibt das Dienstkonto gültig, sieht aber nichts. Die
 > Prüfung im Tresor sagt dann genau das.
+
+### Und wenn du für Kundinnen arbeitest?
+
+Dann bittest du die Kundin, dieselbe E-Mail-Adresse in **ihrer** Search
+Console als Nutzerin hinzuzufügen — Schritt 7, einmal, bei ihr. Danach liefert
+die Analyse auch für ihre Seite gezählte Zahlen. Sie kann den Zugriff jederzeit
+wieder entziehen.
 
 ---
 
 ## Teil 3: In SEO-Master eintragen
 
-**8.** Öffne die heruntergeladene JSON-Datei mit einem beliebigen
+**9.** Öffne die heruntergeladene JSON-Datei mit einem beliebigen
 Texteditor (Doppelklick genügt meist) und markiere **den gesamten Inhalt** —
 von der ersten geschweiften Klammer bis zur letzten.
 
-**9.** In SEO-Master: **Datentresor** › **Google Search Console** ›
+**10.** In SEO-Master: **Datentresor** › **Google Search Console** ›
 **Eintragen**. Den Inhalt in das grosse Feld einfügen und speichern.
 
-**10.** Auf **Prüfen** klicken. Es sollte grün werden. Falls nicht, sagt die
-Meldung, woran es liegt.
+**11.** Auf **Prüfen** klicken. Es sollte grün werden — und darunter erscheint
+die Liste der verbundenen Properties. Genau für diese Seiten gibt es künftig
+gezählte Zahlen, für alle anderen nicht.
 
 Danach ist bei jeder neuen Analyse der Baustein **Search Console** vorausgewählt.
 
@@ -89,6 +118,11 @@ Suchanfrage, über die die Seite tatsächlich am häufigsten gefunden wird.
 **Die Schätzung steht nicht mehr allein.** Wo gezählte Klicks vorliegen,
 stehen sie zuerst — und wenn die Hochrechnung um mehr als das Doppelte
 abweicht, steht das ausdrücklich dabei.
+
+**Nur für deine eigenen Seiten.** Analysierst du eine fremde Seite, entfällt
+der Baustein und der Bericht weist das aus. Die übrigen Bausteine — SEO, AEO,
+GEO, SERP, Wettbewerb — arbeiten unverändert weiter und funktionieren für jede
+beliebige Adresse.
 
 **Drei Befunde, die es vorher nicht geben konnte:**
 

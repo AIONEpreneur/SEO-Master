@@ -260,13 +260,33 @@ export async function runAnalysis(params: {
     await step('Search Console wird abgefragt', 22)
     try {
       const gsc = new SearchConsoleClient(gscSecret)
-      const property = findeProperty(await gsc.sites(), targetUrl)
+      const verfuegbar = await gsc.sites()
+      const property = findeProperty(verfuegbar, targetUrl)
 
       if (!property) {
+        // Zwei völlig verschiedene Fälle, die sich nicht gleich anfühlen dürfen:
+        //
+        //   a) Es ist gar nicht die eigene Seite. Search Console kennt
+        //      ausschliesslich Properties, für die man selbst freigeschaltet
+        //      ist – für eine Wettbewerberseite gibt es diese Daten nicht und
+        //      kann es sie nicht geben. Das ist kein Fehler und darf nicht so
+        //      klingen.
+        //   b) Es ist die eigene Seite, aber die Freigabe fehlt. Nur dann ist
+        //      ein Hinweis auf die Einstellungen sinnvoll.
+        //
+        // Unterschieden wird über die Domain: Liegt eine Property auf
+        // derselben Domain, war es wohl Fall b.
+        const eigeneDomain = domain
+          ? verfuegbar.some((p) => p.replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, '') === domain)
+          : false
+
         skipped.push({
           module: 'Search Console',
-          reason:
-            'Das Dienstkonto hat auf keine Property Zugriff, die zu dieser Adresse passt. In der Search Console unter Einstellungen › Nutzer und Berechtigungen prüfen.',
+          reason: eigeneDomain
+            ? `Für diese Adresse liegt keine passende Property vor, obwohl ${domain} in der Search Console geführt wird. Vermutlich ist es eine URL-Präfix-Property mit anderem Pfad oder Protokoll.`
+            : verfuegbar.length > 0
+              ? `Diese Adresse gehört zu keiner eigenen Search-Console-Property – gezählte Suchdaten gibt es nur für Seiten, für die man selbst freigeschaltet ist. Bewertet wird deshalb mit Hochrechnungen. Verbunden sind: ${verfuegbar.slice(0, 5).join(', ')}${verfuegbar.length > 5 ? ` und ${verfuegbar.length - 5} weitere` : ''}.`
+              : 'Das Dienstkonto hat auf keine einzige Property Zugriff. In der Search Console unter Einstellungen › Nutzer und Berechtigungen die E-Mail-Adresse des Dienstkontos hinzufügen.',
         })
       } else {
         const spanne = zeitraum(90)

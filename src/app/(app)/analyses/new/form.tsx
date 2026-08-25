@@ -41,7 +41,7 @@ const MODULES = [
   {
     key: 'SEARCH_CONSOLE',
     label: 'Search Console',
-    description: 'Echte Klicks statt Schätzungen',
+    description: 'Gezählte Klicks — nur für eigene Seiten',
     icon: BarChart3,
     requires: ['SEARCH_CONSOLE'] as Provider[],
   },

@@ -20,6 +20,7 @@ export default async function VaultPage() {
       lastCheckedAt: true,
       lastCheckOk: true,
       lastCheckError: true,
+      lastCheckDetail: true,
       updatedAt: true,
     },
   })

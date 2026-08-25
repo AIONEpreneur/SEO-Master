@@ -156,6 +156,10 @@ export async function testCredentialAction(formData: FormData) {
 
   let ok = false
   let error: string | null = null
+  // Was die Prüfung ergeben hat, wenn sie geklappt hat. Bei Search Console
+  // ist das die entscheidende Angabe: für welche Seiten überhaupt gezählte
+  // Daten vorliegen.
+  let detail: string | null = null
 
   try {
     switch (provider) {
@@ -164,6 +168,9 @@ export async function testCredentialAction(formData: FormData) {
         if (!secret) throw new Error('Keine Zugangsdaten hinterlegt')
         const result = await new DataForSeoClient(secret).verify()
         ok = result.ok
+        if (typeof result.balance === 'number') {
+          detail = `Restguthaben ${result.balance.toFixed(2)} USD`
+        }
         break
       }
       case 'FIRECRAWL': {
@@ -196,8 +203,9 @@ export async function testCredentialAction(formData: FormData) {
         if (!secret) throw new Error('Kein Dienstkonto hinterlegt')
         // verify() meldet ausdrücklich, wenn das Konto gültig ist, aber auf
         // keine Property Zugriff hat – der häufigste Stolperstein.
-        await new SearchConsoleClient(secret).verify()
+        const result = await new SearchConsoleClient(secret).verify()
         ok = true
+        detail = `${result.sites.length} ${result.sites.length === 1 ? 'Property' : 'Properties'}: ${result.sites.join(', ')}`
         break
       }
       case 'PAGESPEED': {
@@ -220,7 +228,7 @@ export async function testCredentialAction(formData: FormData) {
 
   await db.credential.updateMany({
     where: { organizationId: session.organizationId, provider },
-    data: { lastCheckedAt: new Date(), lastCheckOk: ok, lastCheckError: error },
+    data: { lastCheckedAt: new Date(), lastCheckOk: ok, lastCheckError: error, lastCheckDetail: detail },
   })
 
   revalidatePath('/settings/vault')

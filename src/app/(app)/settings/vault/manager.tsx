@@ -16,6 +16,7 @@ type Credential = {
   lastCheckedAt: Date | null
   lastCheckOk: boolean | null
   lastCheckError: string | null
+  lastCheckDetail: string | null
   updatedAt: Date
 }
 
@@ -179,6 +180,21 @@ export function VaultManager({
                     </form>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/*
+              Was die Prüfung ergeben hat – bei Search Console die Liste der
+              verbundenen Properties. Ohne sie ist nicht erkennbar, für welche
+              Seiten gezählte Daten vorliegen: Search Console kennt
+              ausschliesslich eigene Properties, für fremde Seiten gibt es
+              diese Zahlen nicht.
+            */}
+            {stored?.lastCheckOk && stored.lastCheckDetail && (
+              <div className="border-b border-border px-5 py-3">
+                <p className="text-[12px] text-ink-muted">
+                  <span className="font-medium text-ink">Verbunden:</span> {stored.lastCheckDetail}
+                </p>
               </div>
             )}
 
