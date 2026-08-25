@@ -24,12 +24,6 @@ import {
 } from '../src/lib/keywords/research'
 import { deckungsgrad, enthaeltBegriff, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
 import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
-import {
-  analyzeSearchConsole, knappVorbei, normalisiereZeilen, ungenutzteEinblendungen,
-  unbehandelteBegriffe, type SucheZeile,
-} from '../src/lib/analysis/search-console'
-import { findeProperty, zeitraum, istDienstkonto } from '../src/lib/connectors/search-console'
-import { pruefeZustand, signiereZustand } from '../src/lib/connectors/google-oauth'
 import { normalizeProfile } from '../src/lib/connectors/apify'
 import { buildDeterministicReport, sortFindings } from '../src/lib/analysis/report'
 import type { AnalysisResult, ModuleResult } from '../src/lib/analysis/types'
@@ -436,165 +430,6 @@ function main() {
     ),
   )
 
-  // --- Search Console -------------------------------------------------------
-  //
-  // Der Grund für diesen Anschluss: Alle anderen Quellen schätzen. Auf einer
-  // realen Seite standen 35 geschätzten Besuchen 277 gezählte gegenüber.
-  section('Search Console: Property und Zeitraum')
-
-  const properties = ['https://beispiel.de/blog/', 'sc-domain:beispiel.de', 'https://andere.de/']
-  check(
-    'Domain-Property hat Vorrang',
-    findeProperty(properties, 'https://www.beispiel.de/blog/artikel') === 'sc-domain:beispiel.de',
-  )
-  check(
-    'Sonst gewinnt das längste passende Präfix',
-    findeProperty(
-      ['https://beispiel.de/', 'https://beispiel.de/blog/'],
-      'https://beispiel.de/blog/artikel',
-    ) === 'https://beispiel.de/blog/',
-  )
-  check(
-    'Fremde Domain findet nichts',
-    findeProperty(properties, 'https://fremd.de/x') === null,
-    'für Seiten, die einem nicht gehören, gibt es diese Daten nicht',
-  )
-  check('Leere Propertyliste findet nichts', findeProperty([], 'https://beispiel.de/') === null)
-  check('Unbrauchbare Adresse findet nichts', findeProperty(properties, 'kein-url') === null)
-
-  // Search Console hinkt zwei bis drei Tage hinterher. Wer bis heute abfragt,
-  // liest für die letzten Tage einen Einbruch, den es nicht gibt.
-  const spanne = zeitraum(90, new Date('2026-08-24T00:00:00Z'))
-  check('Ende liegt drei Tage zurück', spanne.endDate === '2026-08-21', spanne.endDate)
-  check('Start liegt 90 Tage davor', spanne.startDate === '2026-05-23', spanne.startDate)
-
-  section('Search Console: Befunde entstehen aus gezählten Werten')
-
-  const sucheZeilen: SucheZeile[] = normalisiereZeilen([
-    // Seite eins, viele Einblendungen, kaum Klicks: ein Snippet-Problem.
-    { keys: ['ki beratung solopreneure'], clicks: 4, impressions: 900, ctr: 0.0044, position: 3.2 },
-    // Knapp hinter Seite eins.
-    { keys: ['ki beratung kosten'], clicks: 1, impressions: 420, ctr: 0.0024, position: 13.4 },
-    // Nachfrage, die die Seite gar nicht behandelt.
-    { keys: ['ki tools für steuerberater'], clicks: 0, impressions: 260, ctr: 0, position: 18.1 },
-    // Gesunde Zeile: darf keinen Befund auslösen.
-    { keys: ['kirsten biema'], clicks: 140, impressions: 300, ctr: 0.4667, position: 1.1 },
-    // Zu wenig Einblendungen für eine Aussage.
-    { keys: ['zufall'], clicks: 0, impressions: 12, ctr: 0, position: 2.0 },
-  ])
-
-  check('Klickrate wird als Prozentwert geführt', sucheZeilen[0].ctr === 46.7, `${sucheZeilen[0].ctr}`)
-  check('Nach Klicks sortiert', sucheZeilen[0].begriff === 'kirsten biema')
-
-  const verschenkt = ungenutzteEinblendungen(sucheZeilen)
-  check('Auffällig niedrige Klickrate wird erkannt', verschenkt.some((z) => z.begriff === 'ki beratung solopreneure'))
-  check('Gute Zeile bleibt unbehelligt', !verschenkt.some((z) => z.begriff === 'kirsten biema'))
-  check(
-    'Wenige Einblendungen gelten nicht als Befund',
-    !verschenkt.some((z) => z.begriff === 'zufall'),
-    'unter 100 Einblendungen ist die Klickrate Zufall',
-  )
-  check(
-    'Schlecht platzierte Anfragen sind kein Snippet-Problem',
-    !verschenkt.some((z) => z.position > 10),
-    'auf Platz 18 ist eine niedrige Klickrate normal',
-  )
-
-  const knapp = knappVorbei(sucheZeilen)
-  check('Position 11 bis 20 wird erkannt', knapp.some((z) => z.begriff === 'ki beratung kosten'))
-  check('Seite eins gehört nicht dazu', !knapp.some((z) => z.position <= 10))
-
-  const luecken = unbehandelteBegriffe(sucheZeilen, 'KI-Beratung für Solopreneure. Was kostet KI-Beratung?')
-  check('Unbehandelte Nachfrage wird erkannt', luecken.some((z) => z.begriff === 'ki tools für steuerberater'))
-  check(
-    'Was auf der Seite steht, gilt nicht als Lücke',
-    !luecken.some((z) => z.begriff === 'ki beratung kosten'),
-    'trotz Bindestrichschreibweise auf der Seite gefunden',
-  )
-
-  const gsc = analyzeSearchConsole({
-    daten: {
-      property: 'sc-domain:beispiel.de',
-      zeitraum: { von: '2026-05-23', bis: '2026-08-21' },
-      seite: { klicks: 145, einblendungen: 1892, ctr: 7.7, position: 6.4 },
-      begriffe: sucheZeilen,
-    },
-    seitentext: 'KI-Beratung für Solopreneure. Was kostet KI-Beratung?',
-  })
-  check('Modul liefert eine Bewertung', gsc.score > 0 && gsc.score <= 10, `${gsc.score.toFixed(1)}/10`)
-  check('Drei Befunde entstehen', gsc.findings.length === 3, `${gsc.findings.length}`)
-  check(
-    'Jeder Befund nennt eine konkrete Suchanfrage',
-    gsc.findings.every((f) => /„/.test(f.why)),
-  )
-  check(
-    'Der Klick-Befund nennt gezählte Werte',
-    /145 Klicks bei 1892 Einblendungen/.test(
-      gsc.criteria.find((c) => c.key === 'klicks')?.detail ?? '',
-    ),
-    gsc.criteria.find((c) => c.key === 'klicks')?.detail?.slice(0, 46),
-  )
-
-  // Der wichtigste Fall überhaupt: viel gesehen, nie geklickt.
-  const nieGeklickt = analyzeSearchConsole({
-    daten: {
-      property: 'sc-domain:beispiel.de',
-      zeitraum: { von: '2026-05-23', bis: '2026-08-21' },
-      seite: { klicks: 0, einblendungen: 640, ctr: 0, position: 8.2 },
-      begriffe: normalisiereZeilen([
-        { keys: ['ki beratung'], clicks: 0, impressions: 640, ctr: 0, position: 8.2 },
-      ]),
-    },
-    seitentext: 'KI-Beratung für Solopreneure',
-  })
-  check(
-    'Einblendungen ohne Klicks sind ein Sofortbefund',
-    nieGeklickt.findings.find((f) => f.id === 'gsc-keine-klicks')?.severity === 'critical',
-  )
-
-  // --- Google-Anmeldung -----------------------------------------------------
-  //
-  // Der Rückweg von Google kommt von einer fremden Seite. Ohne Absicherung
-  // könnte jemand einen manipulierten Rückweg auslösen und fremde
-  // Zugangsdaten in einen anderen Arbeitsbereich schreiben lassen.
-  section('Der Rückweg von Google lässt sich nicht fälschen')
-
-  const zustand = signiereZustand('org_abc123')
-  check('Eigener Zustand wird angenommen', pruefeZustand(zustand)?.organizationId === 'org_abc123')
-
-  const [daten, unterschrift] = zustand.split('.')
-  check(
-    'Veränderte Daten werden abgewiesen',
-    pruefeZustand(`${Buffer.from(JSON.stringify({ o: 'org_fremd', n: 'x', e: Date.now() + 60000 }), 'utf8').toString('base64url')}.${unterschrift}`) === null,
-    'sonst liesse sich ein fremder Arbeitsbereich unterschieben',
-  )
-  check('Veränderte Unterschrift wird abgewiesen', pruefeZustand(`${daten}.aaaa`) === null)
-  check('Zustand ohne Unterschrift wird abgewiesen', pruefeZustand(daten) === null)
-  check('Leerer Zustand wird abgewiesen', pruefeZustand('') === null)
-
-  const abgelaufen = (() => {
-    // Ein Zustand, dessen Ablauf in der Vergangenheit liegt, muss auch mit
-    // gültiger Unterschrift scheitern – sonst wäre ein abgefangener Rückweg
-    // unbegrenzt wiederverwendbar.
-    const inhalt = Buffer.from(JSON.stringify({ o: 'org_abc123', n: 'x', e: Date.now() - 1000 }), 'utf8').toString('base64url')
-    const echt = signiereZustand('org_abc123')
-    return `${inhalt}.${echt.split('.')[1]}`
-  })()
-  check('Abgelaufener Zustand wird abgewiesen', pruefeZustand(abgelaufen) === null)
-
-  check(
-    'Zwei Aufrufe ergeben verschiedene Zustände',
-    signiereZustand('org_abc123') !== signiereZustand('org_abc123'),
-    'die Zufallszahl verhindert Wiederverwendung',
-  )
-
-  section('Beide Zugangsformen werden unterschieden')
-
-  check(
-    'Dienstkonto wird erkannt',
-    istDienstkonto({ client_email: 'a@b.iam.gserviceaccount.com', private_key: '-----BEGIN' }),
-  )
-  check('Anmeldung wird nicht für ein Dienstkonto gehalten', !istDienstkonto({ refresh_token: '1//abc' }))
 
   // --- Umgebungsvariablen erreichen die Container ---------------------------
   //
@@ -651,7 +486,7 @@ function main() {
       providersUsed: [],
       skipped: [{ module: 'DataForSEO-Daten', reason: 'Im Test keine Zugangsdaten hinterlegt' }],
       scope: { pages: 1, note: 'Eine Seite. Andere Seiten der Domain wurden nicht gelesen.' },
-      keyword: { value: 'ki beratung solopreneure', source: 'vorgegeben' },
+      keyword: { value: 'ki beratung solopreneure', source: 'vorgegeben' as const },
     },
     scores: {
       seo: strong.modules[0].score,

@@ -7,6 +7,8 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
   APIFY: 'Apify',
   ANTHROPIC: 'Anthropic',
   PAGESPEED: 'PageSpeed Insights',
+  // Nicht mehr in Verwendung; der Enum-Wert bleibt aus Gründen der
+  // Verträglichkeit bestehen und braucht deshalb weiterhin eine Beschriftung.
   SEARCH_CONSOLE: 'Search Console',
 }
 

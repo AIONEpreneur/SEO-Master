@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
-import { Globe, Search, Bot, Sparkles, Swords, Info, BarChart3 } from 'lucide-react'
+import { Globe, Search, Bot, Sparkles, Swords, Info } from 'lucide-react'
 import { startAnalysisAction, type StartState } from '@/lib/analysis/actions'
 import { Button, Card, CardHeader, Input, Label, Select } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
@@ -39,13 +39,6 @@ const MODULES = [
     requires: ['DATAFORSEO'] as Provider[],
   },
   {
-    key: 'SEARCH_CONSOLE',
-    label: 'Search Console',
-    description: 'Gezählte Klicks — nur für eigene Seiten',
-    icon: BarChart3,
-    requires: ['SEARCH_CONSOLE'] as Provider[],
-  },
-  {
     key: 'COMPETITORS',
     label: 'Wettbewerb',
     description: 'Vergleich und Keyword-Lücken',
@@ -70,9 +63,7 @@ export function NewAnalysisForm({
   providers: Record<Provider, boolean>
 }) {
   const [state, action, pending] = useActionState<StartState, FormData>(startAnalysisAction, {})
-  const [selected, setSelected] = useState<string[]>(
-    providers.SEARCH_CONSOLE ? ['SEO', 'AEO', 'GEO', 'SEARCH_CONSOLE'] : ['SEO', 'AEO', 'GEO'],
-  )
+  const [selected, setSelected] = useState<string[]>(['SEO', 'AEO', 'GEO'])
   const [url, setUrl] = useState('')
   const [market, setMarket] = useState(2276)
 

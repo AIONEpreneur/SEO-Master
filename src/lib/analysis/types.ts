@@ -31,7 +31,7 @@ export type Criterion = {
 }
 
 export type ModuleResult = {
-  module: 'SEO' | 'AEO' | 'GEO' | 'SERP' | 'COMPETITORS' | 'SOCIAL' | 'SEARCH_CONSOLE'
+  module: 'SEO' | 'AEO' | 'GEO' | 'SERP' | 'COMPETITORS' | 'SOCIAL'
   score: number
   label: string
   criteria: Criterion[]
@@ -59,7 +59,7 @@ export type AnalysisResult = {
      */
     scope: { pages: number; note: string }
     /** Das geprüfte Hauptkeyword und woher es stammt. */
-    keyword: { value: string | null; source: 'vorgegeben' | 'gemessen' | 'abgeleitet' | 'keines' }
+    keyword: { value: string | null; source: 'vorgegeben' | 'abgeleitet' | 'keines' }
   }
   scores: {
     seo: number | null

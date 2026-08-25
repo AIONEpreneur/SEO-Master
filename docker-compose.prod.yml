@@ -63,13 +63,6 @@ services:
       APIFY_TOKEN: ${APIFY_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
-      # Google: Dienstkonto und der OAuth-Client für "Mit Google verbinden".
-      # Sie müssen hier stehen, sonst erreichen sie den Container nicht –
-      # ein Eintrag in der .env allein genügt nicht, weil diese Datei die
-      # Variablen einzeln durchreicht.
-      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
-      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
-      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -94,13 +87,6 @@ services:
       APIFY_TOKEN: ${APIFY_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
-      # Google: Dienstkonto und der OAuth-Client für "Mit Google verbinden".
-      # Sie müssen hier stehen, sonst erreichen sie den Container nicht –
-      # ein Eintrag in der .env allein genügt nicht, weil diese Datei die
-      # Variablen einzeln durchreicht.
-      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
-      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
-      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

@@ -30,17 +30,6 @@ const schema = z.object({
   APIFY_TOKEN: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   PAGESPEED_API_KEY: z.string().optional(),
-  /** Die JSON-Datei eines Google-Dienstkontos, in einer Zeile. */
-  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(),
-  /**
-   * OAuth-Client für den Knopf "Mit Google verbinden".
-   *
-   * Anders als die Anbieterschlüssel gehören diese beiden nicht einer
-   * Organisation, sondern der Installation: Sie identifizieren diese
-   * Anwendung gegenüber Google. Deshalb Umgebungsvariablen und nicht Tresor.
-   */
-  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
-  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
 })
 
 let cached: z.infer<typeof schema> | null = null

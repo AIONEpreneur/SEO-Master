@@ -29,7 +29,7 @@ export default async function DashboardPage() {
   ])
 
   const missingProviders = Object.entries(providers)
-    .filter(([key, ready]) => !ready && key !== 'SEARCH_CONSOLE')
+    .filter(([, ready]) => !ready)
     .map(([key]) => providerLabel(key as Parameters<typeof providerLabel>[0]))
 
   return (

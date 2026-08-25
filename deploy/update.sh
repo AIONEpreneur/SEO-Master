@@ -64,19 +64,4 @@ if [ -n "$DOMAIN" ]; then
   done
 fi
 
-# Zustand der wahlfreien Anschlüsse zeigen.
-#
-# Ein fehlender Eintrag in der .env führt sonst zu einem Merkmal, das in der
-# Anwendung schlicht nicht auftaucht – ohne Fehlermeldung, ohne Hinweis.
-schritt "Zustand"
-zeige() {
-  if grep -q "^$1=." "$ZIEL/.env" 2>/dev/null; then
-    printf "  %s✓%s %s\n" "$GRUEN" "$AUS" "$2"
-  else
-    printf "  %s·%s %s %s(nicht eingerichtet)%s\n" "$GRAU" "$AUS" "$2" "$GRAU" "$AUS"
-  fi
-}
-zeige GOOGLE_OAUTH_CLIENT_ID 'Knopf "Mit Google verbinden"'
-zeige GOOGLE_SERVICE_ACCOUNT_JSON 'Google-Dienstkonto über Umgebungsvariable'
-
 printf "\n%sFertig. Seite im Browser neu laden (Strg+Umschalt+R).%s\n\n" "$GRUEN" "$AUS"

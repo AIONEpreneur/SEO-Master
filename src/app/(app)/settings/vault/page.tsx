@@ -1,17 +1,11 @@
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { env } from '@/lib/env'
-import { oauthKonfiguriert } from '@/lib/connectors/google-oauth'
 import { VaultManager } from './manager'
 
 export const dynamic = 'force-dynamic'
 
-export default async function VaultPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ google?: string }>
-}) {
-  const { google } = await searchParams
+export default async function VaultPage() {
   const session = await requireSession()
   const credentials = await db.credential.findMany({
     where: { organizationId: session.organizationId },
@@ -40,7 +34,6 @@ export default async function VaultPage({
     APIFY: Boolean(e.APIFY_TOKEN),
     ANTHROPIC: Boolean(e.ANTHROPIC_API_KEY),
     PAGESPEED: Boolean(e.PAGESPEED_API_KEY),
-    SEARCH_CONSOLE: Boolean(e.GOOGLE_SERVICE_ACCOUNT_JSON),
   }
 
   return (
@@ -56,8 +49,6 @@ export default async function VaultPage({
         credentials={credentials}
         fromEnv={fromEnv}
         canEdit={session.role === 'OWNER' || session.role === 'ADMIN'}
-        googleBereit={oauthKonfiguriert()}
-        googleMeldung={google}
       />
     </div>
   )

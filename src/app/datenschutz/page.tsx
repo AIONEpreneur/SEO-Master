@@ -9,11 +9,7 @@ export const metadata: Metadata = {
 /**
  * Datenschutzerklärung.
  *
- * Sie ist aus zwei Gründen nötig: In Deutschland für jede öffentlich
- * erreichbare Seite, und für die Google-Verifizierung des Anmelde-Knopfes.
- * Google verlangt eine öffentlich abrufbare Adresse auf derselben Domain, die
- * ausdrücklich beschreibt, was mit den Google-Daten geschieht — ohne sie wird
- * der Antrag abgewiesen.
+ * In Deutschland für jede öffentlich erreichbare Seite verpflichtend.
  *
  * Die Passagen in eckigen Klammern muss Kirsten ergänzen; sie stehen
  * bewusst sichtbar da, statt erfunden zu werden.
@@ -64,45 +60,6 @@ export default function DatenschutzSeite() {
         gespeichert. Der Schlüssel liegt ausserhalb der Datenbank; der Klartext
         wird nach dem Speichern nicht mehr angezeigt und verlässt den Server
         nicht.
-      </p>
-
-      <h2>Verbindung mit Google Search Console</h2>
-      <p>
-        Wer die Verbindung zu Google Search Console herstellt, erteilt
-        ausschliesslich die Berechtigung
-        <code>https://www.googleapis.com/auth/webmasters.readonly</code>. Damit
-        werden ausgelesen: die Liste der Properties, auf die das verbundene
-        Google-Konto Zugriff hat, sowie je Property und Seite die
-        Suchanfragen, Einblendungen, Klicks, Klickraten und durchschnittlichen
-        Positionen.
-      </p>
-      <p>
-        <strong>Diese Berechtigung erlaubt ausschliesslich Lesezugriff auf
-        Search Console.</strong> Es besteht kein Zugriff auf E-Mails,
-        Kalender, Kontakte, Dateien oder andere Google-Dienste. Es werden keine
-        Daten in das Google-Konto geschrieben.
-      </p>
-      <p>
-        Gespeichert wird ein Zugangs-Token, das in derselben verschlüsselten
-        Form abgelegt wird wie die übrigen Zugangsdaten. Die abgerufenen
-        Suchdaten werden als Bestandteil des jeweiligen Analyseergebnisses
-        gespeichert. Eine Weitergabe an Dritte findet nicht statt; sie werden
-        weder für Werbung noch zum Training von Modellen verwendet.
-      </p>
-      <p>
-        Die Verbindung lässt sich jederzeit beenden: im Datentresor über
-        „Löschen" — dabei wird der Zugriff zugleich bei Google zurückgegeben —
-        oder im eigenen Google-Konto unter Sicherheit, Drittanbieter-Apps.
-        Rechtsgrundlage ist Artikel 6 Absatz 1 Buchstabe a DSGVO
-        (Einwilligung), widerruflich für die Zukunft.
-      </p>
-      <p>
-        Die Verwendung von Daten aus Google-APIs richtet sich nach der{' '}
-        <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">
-          Google API Services User Data Policy
-        </a>{' '}
-        einschliesslich der Anforderungen zur eingeschränkten Verwendung
-        (Limited Use).
       </p>
 
       <h2>Weitere Dienste in der Analyse</h2>

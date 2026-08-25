@@ -144,6 +144,14 @@ enum Provider {
   APIFY
   ANTHROPIC
   PAGESPEED
+  /**
+   * Nicht mehr in Verwendung.
+   *
+   * Der Search-Console-Anschluss wurde entfernt. Der Wert bleibt stehen, weil
+   * das Entfernen eines Enum-Werts eine Änderung am Datentyp ist, die bei
+   * jedem verbliebenen Verweis fehlschlägt – für einen ungenutzten Wert ein
+   * unnötiges Risiko beim Einspielen auf einem laufenden Server.
+   */
   SEARCH_CONSOLE
 }
 
