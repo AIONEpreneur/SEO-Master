@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, FolderKanban, ScanSearch, FileText, Users2,
-  KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp, Coins,
+  KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp, Coins, ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { logoutAction } from '@/lib/auth/actions'
@@ -39,6 +39,16 @@ const NAVIGATION = [
     ],
   },
 ]
+
+/**
+ * Nur für den Betrieb der Instanz. Wird ausschliesslich eingeblendet, wenn das
+ * Konto die Betriebsverwaltung hat – eine Kundin soll nicht einmal sehen, dass
+ * es diesen Bereich gibt.
+ */
+const BETRIEB = {
+  label: 'Betrieb',
+  items: [{ href: '/admin', label: 'Betriebsübersicht', icon: ShieldCheck }],
+}
 
 export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme }) {
   const pathname = usePathname()
@@ -77,7 +87,7 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          {NAVIGATION.map((group) => (
+          {[...NAVIGATION, ...(session.isSuperAdmin ? [BETRIEB] : [])].map((group) => (
             <div key={group.label} className="mb-5">
               <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                 {group.label}

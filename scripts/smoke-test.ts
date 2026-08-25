@@ -28,6 +28,7 @@ import { beurteileKanonisch, kanonischerBefund, kanonischeNote } from '../src/li
 import { bezeichnung, wiederkehrendeBefunde } from '../src/lib/analysis/wiederkehrend'
 import { VERWENDETE_ANBIETER } from '../src/lib/connectors/credentials'
 import { reichtGuthaben, guthabenHinweis, KOSTEN_ANALYSE } from '../src/lib/billing/guthaben'
+import { MINUTEN_JE_ANALYSE } from '../src/lib/admin/kennzahlen'
 import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
 import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
@@ -925,10 +926,17 @@ function main() {
     'updateMany', 'delete', 'deleteMany', 'upsert', 'aggregate', 'count', 'groupBy',
   ]
 
+  // Ausgenommen ist allein die Betriebsverwaltung: Sie fragt bewusst über alle
+  // Arbeitsbereiche. Damit diese Ausnahme keine Lücke wird, prüft der Abschnitt
+  // weiter unten, dass jede ihrer Seiten und Aktionen requireSuperAdmin
+  // aufruft – und dass die Auswertung nirgends sonst benutzt wird.
+  const istBetrieb = (pfad: string) => /(^|\/)(src\/lib\/admin|src\/app\/\(app\)\/admin)\//.test(pfad)
+
   const quelldateien = execSync("find src/app src/lib -name '*.ts' -o -name '*.tsx'", { encoding: 'utf8' })
     .trim()
     .split('\n')
     .filter(Boolean)
+    .filter((datei) => !istBetrieb(datei))
 
   const ungeschuetzt: string[] = []
   for (const datei of quelldateien) {
@@ -1014,6 +1022,97 @@ function main() {
     'Eine Sperre wirkt auch auf bestehende Sitzungen',
     /session\.user\.suspendedAt/.test(sitzungsQuelltext),
     'sonst arbeitet die gesperrte Person bis zum Ablauf des Cookies weiter',
+  )
+
+  section('Die Betriebsübersicht sieht nicht in fremde Arbeit')
+
+  // Zugesagt ist: keine geprüften Adressen, keine Suchbegriffe. Diese Prüfung
+  // liest den Quelltext aller Admin-Seiten – eine später ergänzte Spalte
+  // würde die Zusage still brechen.
+  const adminDateien = execSync("find 'src/app/(app)/admin' src/lib/admin -name '*.ts' -o -name '*.tsx'", {
+    encoding: 'utf8',
+  })
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+
+  const verraeter: string[] = []
+  for (const datei of adminDateien) {
+    const quelle = readFileSync(join(dir, '..', '..', datei), 'utf8')
+    // Auf die Auswahl beschränkt: In Kommentaren dürfen die Felder vorkommen,
+    // sie stehen dort ja gerade als das, was nicht gelesen wird.
+    const ohneKommentare = quelle.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+    for (const feld of ['targetUrl', 'seedKeywords', 'competitorDomains', 'rawData']) {
+      if (new RegExp(`${feld}:\\s*true`).test(ohneKommentare)) verraeter.push(`${datei}: ${feld}`)
+    }
+  }
+  check(
+    'Keine Adressen und keine Suchbegriffe in der Betriebsübersicht',
+    verraeter.length === 0,
+    verraeter.length > 0 ? verraeter.join(' · ') : `${adminDateien.length} Dateien geprüft`,
+  )
+
+  // Die Ausnahme von der Mandantenprüfung gilt nur, weil jede Admin-Seite
+  // bewacht ist. Ohne diese Prüfung wäre die Ausnahme eine Hintertür.
+  const adminSeiten = execSync("find 'src/app/(app)/admin' -name 'page.tsx'", { encoding: 'utf8' })
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+  const unbewacht = adminSeiten.filter(
+    (seite) => !/await requireSuperAdmin\(\)/.test(readFileSync(join(dir, '..', '..', seite), 'utf8')),
+  )
+  check(
+    'Jede Seite der Betriebsübersicht ist bewacht',
+    adminSeiten.length > 0 && unbewacht.length === 0,
+    unbewacht.length > 0 ? unbewacht.join(', ') : `${adminSeiten.length} Seiten`,
+  )
+
+  const nutzerDerAuswertung = execSync(
+    "grep -rl 'lib/admin/kennzahlen' src || true",
+    { encoding: 'utf8' },
+  )
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+  check(
+    'Die betriebsweite Auswertung wird nur in der Betriebsübersicht benutzt',
+    nutzerDerAuswertung.every((datei) => istBetrieb(datei)),
+    nutzerDerAuswertung.join(', ') || 'keine',
+  )
+
+  const wacheQuelltext = readFileSync(join(dir, '..', '..', 'src', 'lib', 'admin', 'wache.ts'), 'utf8')
+  check(
+    'Die Betriebsverwaltung hängt an isSuperAdmin, nicht an der Rolle',
+    /isSuperAdmin/.test(wacheQuelltext) && !/hasRole|requireRole/.test(wacheQuelltext),
+    'eine Kundin ist in ihrem Bereich Inhaberin – das darf hier nichts bedeuten',
+  )
+
+  const adminAktionen = readFileSync(join(dir, '..', '..', 'src', 'lib', 'admin', 'actions.ts'), 'utf8')
+  const aktionen = adminAktionen.match(/export async function \w+Action/g) ?? []
+  const wachen = adminAktionen.match(/await requireSuperAdmin\(\)/g) ?? []
+  check(
+    'Jede Admin-Aktion prüft die Berechtigung selbst',
+    aktionen.length > 0 && wachen.length === aktionen.length,
+    `${aktionen.length} Aktionen, ${wachen.length} Prüfungen — eine Server-Aktion ist ein öffentlicher Endpunkt`,
+  )
+  check(
+    'Das Zurücksetzen beendet alle Sitzungen',
+    /db\.session\.deleteMany\({ where: { userId } }\)/.test(adminAktionen),
+  )
+  check(
+    'Das eigene Konto lässt sich nicht sperren',
+    /userId === admin\.id/.test(adminAktionen),
+    'sonst sperrt sich die Verwaltung selbst aus',
+  )
+
+  const uebersicht = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'admin', 'page.tsx'),
+    'utf8',
+  )
+  check(
+    'Die Zeitersparnis wird als Schätzung ausgewiesen',
+    /Geschätzt, nicht gemessen/.test(uebersicht),
+    `${MINUTEN_JE_ANALYSE} Minuten je Analyse – eine Annahme, keine Messung`,
   )
 
   section('Bericht')
