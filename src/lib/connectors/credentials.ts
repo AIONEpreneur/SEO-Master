@@ -55,20 +55,30 @@ function fallbackFromEnv<T extends SecretShape>(provider: Provider): T | null {
   }
 }
 
+/**
+ * Die Anbieter, die die Anwendung tatsächlich benutzt.
+ *
+ * Bewusst nicht der vollständige Provider-Enum: SEARCH_CONSOLE steht dort noch
+ * drin, weil bestehende Datenbankzeilen den Wert kennen, wird aber nirgends
+ * mehr abgefragt. Stand er hier mit, meldete die Übersicht dauerhaft einen
+ * fehlenden Anbieter, den man gar nicht mehr einrichten kann.
+ */
+export const VERWENDETE_ANBIETER = [
+  'DATAFORSEO',
+  'FIRECRAWL',
+  'APIFY',
+  'ANTHROPIC',
+  'PAGESPEED',
+] as const satisfies readonly Provider[]
+
+export type VerwendeterAnbieter = (typeof VERWENDETE_ANBIETER)[number]
+
 /** Welche Anbieter sind für diese Organisation einsatzbereit? */
-export async function availableProviders(organizationId: string): Promise<Record<Provider, boolean>> {
-  const providers: Provider[] = [
-    'DATAFORSEO',
-    'FIRECRAWL',
-    'APIFY',
-    'ANTHROPIC',
-    'PAGESPEED',
-    // Nicht mehr in Verwendung, hier aber nötig, damit der Rückgabewert alle
-    // Enum-Werte abdeckt.
-    'SEARCH_CONSOLE',
-  ]
+export async function availableProviders(
+  organizationId: string,
+): Promise<Record<VerwendeterAnbieter, boolean>> {
   const entries = await Promise.all(
-    providers.map(async (p) => [p, (await resolveSecret(organizationId, p)) !== null] as const),
+    VERWENDETE_ANBIETER.map(async (p) => [p, (await resolveSecret(organizationId, p)) !== null] as const),
   )
-  return Object.fromEntries(entries) as Record<Provider, boolean>
+  return Object.fromEntries(entries) as Record<VerwendeterAnbieter, boolean>
 }

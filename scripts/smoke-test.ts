@@ -25,6 +25,8 @@ import {
 import { deckungsgrad, enthaeltBegriff, grundform, teileMarke, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
 import { beurteile, begriffsBefund, istZuAllgemein, messbare } from '../src/lib/analysis/keyword-pruefung'
 import { beurteileKanonisch, kanonischerBefund, kanonischeNote } from '../src/lib/analysis/kanonisch'
+import { bezeichnung, wiederkehrendeBefunde } from '../src/lib/analysis/wiederkehrend'
+import { VERWENDETE_ANBIETER } from '../src/lib/connectors/credentials'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
 import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
 import { normalizeProfile } from '../src/lib/connectors/apify'
@@ -825,6 +827,84 @@ function main() {
     'Ohne Abruf sind die Prüfpunkte nicht bewertbar',
     pruefpunkte?.status === 'unknown',
     'eine fehlende Messung darf keine schlechte Note erzeugen',
+  )
+
+  section('Search Console taucht nirgends mehr auf')
+
+  // Der Enum-Wert bleibt in der Datenbank bestehen, damit alte Zeilen lesbar
+  // sind. Stand er aber in der Anbieterliste, meldete die Übersicht dauerhaft
+  // einen fehlenden Anbieter, den man gar nicht mehr einrichten kann.
+  check(
+    'Die Anbieterliste kennt Search Console nicht mehr',
+    !(VERWENDETE_ANBIETER as readonly string[]).includes('SEARCH_CONSOLE'),
+    VERWENDETE_ANBIETER.join(', '),
+  )
+  check('Fünf Anbieter sind in Verwendung', VERWENDETE_ANBIETER.length === 5)
+
+  const tresorQuelltext = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'settings', 'vault', 'manager.tsx'),
+    'utf8',
+  )
+  check('Der Datentresor bietet Search Console nicht an', !/SEARCH_CONSOLE/.test(tresorQuelltext))
+
+  section('Muster statt Durchschnitt')
+
+  // Ein Durchschnitt über verschiedene Websites ist ohne Aussage. Gezählt wird
+  // deshalb, welche Art Mangel wiederkehrt.
+  check(
+    'Messwerte im Titel weichen einem Auslassungszeichen',
+    bezeichnung('Title mit 75 Zeichen zu lang') === 'Title mit … Zeichen zu lang',
+    'sonst gälte die 75 für alle Läufe, in denen der Befund auftrat',
+  )
+  check(
+    'Eine führende Anzahl fällt ganz weg',
+    bezeichnung('3 Bilder ohne alt-Attribut') === 'Bilder ohne alt-Attribut',
+  )
+  check(
+    'Titel ohne Zahlen bleiben unverändert',
+    bezeichnung('Kein Canonical-Tag auf dieser Seite') === 'Kein Canonical-Tag auf dieser Seite',
+  )
+
+  const lauf = (befunde: Array<[string, string, string]>) => ({
+    modules: [{ findings: befunde.map(([id, title, severity]) => ({ id, title, severity })) }],
+  })
+
+  const muster = wiederkehrendeBefunde([
+    lauf([
+      ['seo-alt-texts', '3 Bilder ohne alt-Attribut', 'quickwin'],
+      ['seo-title-long', 'Title mit 75 Zeichen zu lang', 'quickwin'],
+      ['seo-alt-texts', '3 Bilder ohne alt-Attribut', 'quickwin'],
+    ]),
+    lauf([
+      ['seo-alt-texts', '1 Bild ohne alt-Attribut', 'quickwin'],
+      ['seo-no-https', 'Seite läuft ohne HTTPS', 'critical'],
+    ]),
+    lauf([['seo-alt-texts', '7 Bilder ohne alt-Attribut', 'quickwin']]),
+  ])
+
+  check('Der häufigste Befund steht vorn', muster[0]?.id === 'seo-alt-texts', `${muster[0]?.laeufe} Läufe`)
+  check(
+    'Doppelt im selben Lauf zählt einmal',
+    muster[0]?.laeufe === 3,
+    'drei Läufe, nicht vier Vorkommen',
+  )
+  check(
+    'Die Bezeichnung trägt keine Zahl aus einem einzelnen Lauf',
+    muster[0]?.bezeichnung === 'Bilder ohne alt-Attribut',
+  )
+  check(
+    'Einzelvorkommen bleiben draussen',
+    !muster.some((m) => m.id === 'seo-no-https'),
+    'ein einmaliger Befund ist kein Muster',
+  )
+  check('Ohne Läufe entsteht nichts', wiederkehrendeBefunde([]).length === 0)
+  check('Kaputte Ergebnisse werfen nicht', wiederkehrendeBefunde([null, {}, { modules: 'x' }]).length === 0)
+  check(
+    'Die schwerere Einstufung gewinnt',
+    wiederkehrendeBefunde([
+      lauf([['seo-stale', 'Inhalt veraltet', 'longterm']]),
+      lauf([['seo-stale', 'Inhalt veraltet', 'critical']]),
+    ])[0]?.severity === 'critical',
   )
 
   section('Bericht')

@@ -1,18 +1,20 @@
 import Link from 'next/link'
-import { ScanSearch, KeyRound, AlertTriangle, FileText, FolderKanban, Gauge, Coins } from 'lucide-react'
+import { ScanSearch, KeyRound, AlertTriangle, FileText, FolderKanban, Globe, Coins, Repeat } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { availableProviders } from '@/lib/connectors/credentials'
 import { providerLabel } from '@/lib/connectors/labels'
-import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, ScoreRing, StatusPill } from '@/components/ui'
+import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
+import { cn } from '@/lib/utils/cn'
 import { Onboarding } from '@/components/onboarding'
+import { wiederkehrendeBefunde } from '@/lib/analysis/wiederkehrend'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
   const session = await requireSession()
 
-  const [analyses, projectCount, completedCount, providers, avgScores] = await Promise.all([
+  const [analyses, projectCount, completedCount, providers, geprueft, letzteErgebnisse] = await Promise.all([
     db.analysis.findMany({
       where: { organizationId: session.organizationId },
       orderBy: { createdAt: 'desc' },
@@ -22,11 +24,22 @@ export default async function DashboardPage() {
     db.project.count({ where: { organizationId: session.organizationId, isArchived: false } }),
     db.analysis.count({ where: { organizationId: session.organizationId, status: 'COMPLETED' } }),
     availableProviders(session.organizationId),
-    db.analysis.aggregate({
+    // Wie viele verschiedene Adressen geprüft wurden. Eine Zahl, die auch dann
+    // stimmt, wenn die geprüften Seiten nichts miteinander zu tun haben.
+    db.analysis.findMany({
       where: { organizationId: session.organizationId, status: 'COMPLETED' },
-      _avg: { scoreSeo: true, scoreAeo: true, scoreGeo: true, scoreOverall: true },
+      select: { targetUrl: true },
+      distinct: ['targetUrl'],
+    }),
+    db.analysis.findMany({
+      where: { organizationId: session.organizationId, status: 'COMPLETED' },
+      orderBy: { createdAt: 'desc' },
+      take: 15,
+      select: { result: true },
     }),
   ])
+
+  const muster = wiederkehrendeBefunde(letzteErgebnisse.map((a) => a.result))
 
   const missingProviders = Object.entries(providers)
     .filter(([, ready]) => !ready)
@@ -56,7 +69,9 @@ export default async function DashboardPage() {
         <Card className="flex flex-wrap items-center gap-x-3 gap-y-2 border-warn/30 bg-warn-subtle px-4 py-3">
           <AlertTriangle size={16} className="shrink-0 text-warn" />
           <p className="min-w-0 flex-1 text-[13px]">
-            <span className="font-medium">{missingProviders.length} Anbieter fehlen</span>
+            <span className="font-medium">
+              {missingProviders.length === 1 ? '1 Anbieter fehlt' : `${missingProviders.length} Anbieter fehlen`}
+            </span>
             <span className="text-ink-muted"> — {missingProviders.join(', ')}. Die Analyse läuft trotzdem und weist die Lücken aus.</span>
           </p>
           <Link href="/settings/vault" className="inline-flex shrink-0 items-center gap-1.5 text-[13px] font-medium text-brand hover:underline">
@@ -70,10 +85,9 @@ export default async function DashboardPage() {
         <Metric icon={<FileText size={15} />} label="Analysen" value={String(completedCount)} />
         <Metric icon={<FolderKanban size={15} />} label="Projekte" value={String(projectCount)} />
         <Metric
-          icon={<Gauge size={15} />}
-          label="Ø Gesamtbewertung"
-          value={avgScores._avg.scoreOverall ? `${avgScores._avg.scoreOverall.toFixed(1).replace('.', ',')}` : '–'}
-          zusatz={avgScores._avg.scoreOverall ? 'von 10' : undefined}
+          icon={<Globe size={15} />}
+          label="Geprüfte Adressen"
+          value={String(geprueft.length)}
         />
         <Metric
           icon={<Coins size={15} />}
@@ -82,16 +96,41 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {completedCount > 0 && (
+      {/* Kein Durchschnitt über alle Läufe: Wer eine starke und eine schwache
+          Seite prüft, bekommt eine mittlere Zahl, die für keine von beiden
+          gilt. Was über verschiedene Seiten hinweg trägt, ist das Muster. */}
+      {muster.length > 0 && (
         <Card className="p-5">
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-            Durchschnitt über alle Läufe
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            <ScoreRing score={avgScores._avg.scoreSeo} label="SEO" />
-            <ScoreRing score={avgScores._avg.scoreAeo} label="AEO" />
-            <ScoreRing score={avgScores._avg.scoreGeo} label="GEO" />
+          <div className="mb-4 flex items-center gap-2">
+            <Repeat size={14} className="text-ink-subtle" />
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+              Was immer wieder auftaucht
+            </p>
           </div>
+          <ul className="space-y-2.5">
+            {muster.map((befund) => (
+              <li key={befund.id} className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 shrink-0 rounded-full',
+                    befund.severity === 'critical'
+                      ? 'bg-bad'
+                      : befund.severity === 'quickwin'
+                        ? 'bg-warn'
+                        : 'bg-ink-subtle',
+                  )}
+                />
+                <span className="min-w-0 flex-1 truncate text-[13px]">{befund.bezeichnung}</span>
+                <span className="shrink-0 text-[12px] tabular-nums text-ink-subtle">
+                  {befund.laeufe} von {letzteErgebnisse.length}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-[12px] text-ink-subtle">
+            Über die letzten {letzteErgebnisse.length} Läufe. Pro Lauf zählt jede Art einmal — das zeigt, was
+            sich durch deine Seiten zieht, nicht wie viele Bilder gerade fehlen.
+          </p>
         </Card>
       )}
 

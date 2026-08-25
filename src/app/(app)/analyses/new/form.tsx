@@ -5,7 +5,7 @@ import { Globe, Search, Bot, Sparkles, Swords, Info } from 'lucide-react'
 import { startAnalysisAction, type StartState } from '@/lib/analysis/actions'
 import { Button, Card, CardHeader, Input, Label, Select } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
-import type { Provider } from '@prisma/client'
+import type { VerwendeterAnbieter } from '@/lib/connectors/credentials'
 
 type Project = { id: string; name: string; url: string; locationCode: number; languageCode: string }
 
@@ -15,35 +15,35 @@ const MODULES = [
     label: 'SEO',
     description: 'Technik, Inhalt, Keywords, E-E-A-T',
     icon: Search,
-    requires: [] as Provider[],
+    requires: [] as VerwendeterAnbieter[],
   },
   {
     key: 'AEO',
     label: 'AEO',
     description: 'Antwortboxen, FAQ-Struktur, Sprachsuche',
     icon: Bot,
-    requires: [] as Provider[],
+    requires: [] as VerwendeterAnbieter[],
   },
   {
     key: 'GEO',
     label: 'GEO',
     description: 'Sichtbarkeit in ChatGPT, Perplexity & Co.',
     icon: Sparkles,
-    requires: [] as Provider[],
+    requires: [] as VerwendeterAnbieter[],
   },
   {
     key: 'SERP',
     label: 'SERP',
     description: 'Tatsächliche Platzierungen und SERP-Elemente',
     icon: Globe,
-    requires: ['DATAFORSEO'] as Provider[],
+    requires: ['DATAFORSEO'] as VerwendeterAnbieter[],
   },
   {
     key: 'COMPETITORS',
     label: 'Wettbewerb',
     description: 'Vergleich und Keyword-Lücken',
     icon: Swords,
-    requires: ['DATAFORSEO'] as Provider[],
+    requires: ['DATAFORSEO'] as VerwendeterAnbieter[],
   },
 ]
 
@@ -60,7 +60,7 @@ export function NewAnalysisForm({
   providers,
 }: {
   projects: Project[]
-  providers: Record<Provider, boolean>
+  providers: Record<VerwendeterAnbieter, boolean>
 }) {
   const [state, action, pending] = useActionState<StartState, FormData>(startAnalysisAction, {})
   const [selected, setSelected] = useState<string[]>(['SEO', 'AEO', 'GEO'])
