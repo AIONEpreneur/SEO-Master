@@ -1,5 +1,6 @@
 import { createSign } from 'node:crypto'
 import { request, ConnectorError } from './http'
+import { frischesToken, type OAuthSecret } from './google-oauth'
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const BASE = 'https://searchconsole.googleapis.com/webmasters/v3'
@@ -34,12 +35,24 @@ export type ServiceAccountSecret = {
  * OAuth der richtige Weg – dann bringt jede Kundin ihr eigenes Google-Konto
  * mit, statt ein Dienstkonto in ihrer Search Console freizuschalten.
  */
+/** Beide Wege, auf denen ein Zugang entstehen kann. */
+export type SearchConsoleSecret = ServiceAccountSecret | OAuthSecret
+
+export function istDienstkonto(secret: SearchConsoleSecret): secret is ServiceAccountSecret {
+  return 'private_key' in secret && 'client_email' in secret
+}
+
 export class SearchConsoleClient {
-  private secret: ServiceAccountSecret
+  private secret: SearchConsoleSecret
   private token: { value: string; expires: number } | null = null
 
-  constructor(secret: ServiceAccountSecret) {
+  constructor(secret: SearchConsoleSecret) {
     this.secret = secret
+  }
+
+  /** Wie die Verbindung zustande kam – für Anzeige und Fehlermeldungen. */
+  get art(): 'dienstkonto' | 'anmeldung' {
+    return istDienstkonto(this.secret) ? 'dienstkonto' : 'anmeldung'
   }
 
   /**
@@ -56,9 +69,18 @@ export class SearchConsoleClient {
     const jetzt = Math.floor(Date.now() / 1000)
     if (this.token && this.token.expires > jetzt + 60) return this.token.value
 
+    // Bei der Anmeldung über Google gibt es keinen Schlüssel zu signieren –
+    // der Dauerzugang wird gegen ein frisches Zugriffstoken getauscht.
+    if (!istDienstkonto(this.secret)) {
+      const { token, gueltigBis } = await frischesToken(this.secret.refresh_token)
+      this.token = { value: token, expires: gueltigBis }
+      return token
+    }
+
     const kopf = { alg: 'RS256', typ: 'JWT' }
+    const dienstkonto = this.secret
     const inhalt = {
-      iss: this.secret.client_email,
+      iss: dienstkonto.client_email,
       scope: SCOPE,
       aud: TOKEN_URL,
       iat: jetzt,
@@ -74,7 +96,7 @@ export class SearchConsoleClient {
       // Der Schlüssel steht in der JSON-Datei mit "\n" als zwei Zeichen. Wer
       // ihn über ein Formular einträgt, hat ihn oft schon aufgelöst – beide
       // Formen müssen funktionieren.
-      signatur = signer.sign(this.secret.private_key.replace(/\\n/g, '\n'), 'base64url')
+      signatur = signer.sign(dienstkonto.private_key.replace(/\\n/g, '\n'), 'base64url')
     } catch {
       throw new ConnectorError(
         'Search Console',
@@ -135,7 +157,9 @@ export class SearchConsoleClient {
     if (sites.length === 0) {
       throw new ConnectorError(
         'Search Console',
-        'Das Dienstkonto ist gültig, hat aber auf keine Property Zugriff. In der Search Console unter Einstellungen › Nutzer und Berechtigungen die E-Mail-Adresse des Dienstkontos hinzufügen.',
+        this.art === 'dienstkonto'
+          ? 'Das Dienstkonto ist gültig, hat aber auf keine Property Zugriff. In der Search Console unter Einstellungen › Nutzer und Berechtigungen die E-Mail-Adresse des Dienstkontos hinzufügen.'
+          : 'Die Verbindung steht, aber dieses Google-Konto ist in der Search Console für keine Website eingetragen. Search Console zeigt nur Seiten, für die man selbst freigeschaltet ist.',
         403,
       )
     }

@@ -72,7 +72,7 @@ const PROVIDERS: Array<{
     required: false,
     fields: 'serviceAccount',
     docs: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
-    hint: 'Den vollständigen Inhalt der JSON-Datei des Dienstkontos einfügen. Danach in der Search Console unter Einstellungen › Nutzer und Berechtigungen die E-Mail-Adresse des Dienstkontos als Nutzerin hinzufügen — sonst ist das Konto gültig, sieht aber nichts. Schritt-für-Schritt-Anleitung: deploy/search-console.md im Projekt.',
+    hint: 'Nur für den technischen Weg über ein Dienstkonto: den vollständigen Inhalt der JSON-Datei einfügen. Danach muss die E-Mail-Adresse des Dienstkontos in der Search Console unter Einstellungen › Nutzer und Berechtigungen eingetragen werden. Der Knopf oben ist der einfachere Weg.',
   },
   {
     key: 'APIFY',
@@ -98,20 +98,60 @@ const PROVIDERS: Array<{
   },
 ]
 
+/**
+ * Rückmeldungen vom Umweg über Google.
+ *
+ * Sie kommen als Parameter in der Adresse zurück, weil der Rückweg von einer
+ * fremden Seite ausgeht und dort kein Formularzustand überlebt.
+ */
+const GOOGLE_MELDUNGEN: Record<string, { text: string; art: 'gut' | 'warn' | 'schlecht' }> = {
+  verbunden: { text: 'Google-Konto verbunden. Die verbundenen Properties stehen unten.', art: 'gut' },
+  'ohne-property': {
+    text: 'Die Verbindung steht, aber dieses Google-Konto ist in der Search Console für keine Website eingetragen. Search Console zeigt nur Seiten, für die man selbst freigeschaltet ist.',
+    art: 'warn',
+  },
+  abgebrochen: { text: 'Die Anmeldung wurde abgebrochen. Es wurde nichts gespeichert.', art: 'warn' },
+  'nicht-eingerichtet': {
+    text: 'Auf diesem Server ist noch kein Google-Zugang eingerichtet. Bis dahin funktioniert der Weg über ein Dienstkonto.',
+    art: 'warn',
+  },
+  ungueltig: { text: 'Der Rückweg von Google war nicht mehr gültig. Bitte erneut versuchen.', art: 'schlecht' },
+  unvollstaendig: { text: 'Google hat unvollständig geantwortet. Bitte erneut versuchen.', art: 'schlecht' },
+  fehlgeschlagen: { text: 'Die Verbindung ist fehlgeschlagen. Bitte erneut versuchen.', art: 'schlecht' },
+}
+
 export function VaultManager({
   credentials,
   fromEnv,
   canEdit,
+  googleBereit,
+  googleMeldung,
 }: {
   credentials: Credential[]
   fromEnv: Record<string, boolean>
   canEdit: boolean
+  /** Ist der Anmelde-Knopf auf diesem Server eingerichtet? */
+  googleBereit: boolean
+  googleMeldung?: string
 }) {
   const [state, action, pending] = useActionState<VaultState, FormData>(saveCredentialAction, {})
   const [open, setOpen] = useState<Provider | null>(null)
+  const meldung = googleMeldung ? GOOGLE_MELDUNGEN[googleMeldung] : null
 
   return (
     <div className="space-y-4">
+      {meldung && (
+        <p
+          className={cn(
+            'rounded-lg px-4 py-3 text-[13px]',
+            meldung.art === 'gut' && 'bg-good-subtle text-good',
+            meldung.art === 'warn' && 'bg-warn-subtle text-warn',
+            meldung.art === 'schlecht' && 'bg-bad-subtle text-bad',
+          )}
+        >
+          {meldung.text}
+        </p>
+      )}
       {state.success && (
         <p className="rounded-lg bg-good-subtle px-4 py-3 text-[13px] text-good">{state.success}</p>
       )}
@@ -147,7 +187,13 @@ export function VaultManager({
               action={
                 canEdit ? (
                   <Button size="sm" variant={configured ? 'ghost' : 'secondary'} onClick={() => setOpen(isOpen ? null : provider.key)}>
-                    {isOpen ? 'Abbrechen' : configured ? 'Ersetzen' : 'Eintragen'}
+                    {isOpen
+                      ? 'Abbrechen'
+                      : provider.key === 'SEARCH_CONSOLE'
+                        ? 'Dienstkonto'
+                        : configured
+                          ? 'Ersetzen'
+                          : 'Eintragen'}
                   </Button>
                 ) : null
               }
@@ -195,6 +241,43 @@ export function VaultManager({
                 <p className="text-[12px] text-ink-muted">
                   <span className="font-medium text-ink">Verbunden:</span> {stored.lastCheckDetail}
                 </p>
+              </div>
+            )}
+
+            {/*
+              Der einfache Weg zuerst. Ein Knopf, ein Google-Fenster, fertig –
+              das kennt jede von anderen Diensten. Der Weg über ein
+              Dienstkonto bleibt daneben bestehen, weil er für die eigene
+              Installation weniger Voraussetzungen hat.
+            */}
+            {provider.key === 'SEARCH_CONSOLE' && canEdit && (
+              <div className="border-b border-border p-5">
+                {googleBereit ? (
+                  <>
+                    <a
+                      href="/api/google/connect"
+                      className="inline-flex h-10 items-center gap-2.5 rounded-lg border border-border-strong bg-surface px-4 text-sm font-medium transition-colors hover:bg-surface-muted"
+                    >
+                      <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden>
+                        <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.3-2.1 3.5-5.2 3.5-8.9z"/>
+                        <path fill="#34A853" d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.700-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24z"/>
+                        <path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.6V6.7H1.4a12 12 0 0 0 0 10.8l4-3.1z"/>
+                        <path fill="#EA4335" d="M12 4.8c1.8 0 3.4.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.7l4 3.1C6.3 6.9 8.9 4.8 12 4.8z"/>
+                      </svg>
+                      {configured ? 'Anderes Google-Konto verbinden' : 'Mit Google verbinden'}
+                    </a>
+                    <p className="mt-2.5 text-[12px] text-ink-subtle">
+                      Google fragt einmal nach Zustimmung. Gelesen wird ausschliesslich die Search
+                      Console, nichts anderes. Der Zugriff lässt sich jederzeit hier oder im
+                      Google-Konto zurücknehmen.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[12px] text-ink-subtle">
+                    Der Anmelde-Knopf ist auf diesem Server noch nicht eingerichtet. Bis dahin
+                    funktioniert der Weg über ein Dienstkonto unten.
+                  </p>
+                )}
               </div>
             )}
 

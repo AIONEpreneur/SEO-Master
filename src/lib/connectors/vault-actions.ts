@@ -3,15 +3,16 @@
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth/session'
-import { seal, hintOf } from '@/lib/crypto/vault'
+import { seal, open, hintOf } from '@/lib/crypto/vault'
 import { DataForSeoClient } from './dataforseo'
 import { FirecrawlClient } from './firecrawl'
 import { ApifyClient } from './apify'
-import { SearchConsoleClient } from './search-console'
+import { SearchConsoleClient, type SearchConsoleSecret } from './search-console'
+import { widerrufe } from './google-oauth'
 import { resolveSecret } from './credentials'
 import { providerLabel } from './labels'
 import type { Provider } from '@prisma/client'
-import type { DataForSeoSecret, ServiceAccountSecret } from './credentials'
+import type { DataForSeoSecret } from './credentials'
 
 export type VaultState = { error?: string; success?: string }
 
@@ -137,6 +138,28 @@ export async function saveCredentialAction(_prev: VaultState, formData: FormData
 export async function deleteCredentialAction(formData: FormData) {
   const session = await requireRole('ADMIN')
   const id = String(formData.get('id'))
+
+  // Bei einer Google-Anmeldung reicht Löschen nicht: Die Freigabe im
+  // Google-Konto bliebe bestehen, und wer hier bewusst trennt, erwartet, dass
+  // sie weg ist. Ein Fehlschlag darf das Löschen trotzdem nicht aufhalten –
+  // sonst bleibt ein Zugang stehen, den jemand loswerden wollte.
+  const vorhanden = await db.credential.findFirst({
+    where: { id, organizationId: session.organizationId },
+    select: { provider: true, ciphertext: true, iv: true, authTag: true },
+  })
+  if (vorhanden?.provider === 'SEARCH_CONSOLE') {
+    try {
+      const secret = open<{ refresh_token?: string }>({
+        ciphertext: vorhanden.ciphertext,
+        iv: vorhanden.iv,
+        authTag: vorhanden.authTag,
+      })
+      if (secret?.refresh_token) await widerrufe(secret.refresh_token)
+    } catch {
+      // Der Zugang war schon ungültig oder Google nicht erreichbar.
+    }
+  }
+
   await db.credential.deleteMany({ where: { id, organizationId: session.organizationId } })
   await db.auditLog.create({
     data: { organizationId: session.organizationId, userId: session.id, action: 'vault.delete', target: id },
@@ -199,8 +222,8 @@ export async function testCredentialAction(formData: FormData) {
         break
       }
       case 'SEARCH_CONSOLE': {
-        const secret = await resolveSecret<ServiceAccountSecret>(session.organizationId, provider)
-        if (!secret) throw new Error('Kein Dienstkonto hinterlegt')
+        const secret = await resolveSecret<SearchConsoleSecret>(session.organizationId, provider)
+        if (!secret) throw new Error('Keine Google-Verbindung hinterlegt')
         // verify() meldet ausdrücklich, wenn das Konto gültig ist, aber auf
         // keine Property Zugriff hat – der häufigste Stolperstein.
         const result = await new SearchConsoleClient(secret).verify()

@@ -7,8 +7,10 @@ export type DataForSeoSecret = { login: string; password: string }
 export type ApiKeySecret = { apiKey: string }
 /** Der Inhalt der JSON-Datei eines Google-Dienstkontos. */
 export type ServiceAccountSecret = { client_email: string; private_key: string; project_id?: string }
+/** Dauerzugang aus der Google-Anmeldung. */
+export type GoogleOAuthSecret = { refresh_token: string; account?: string }
 
-type SecretShape = DataForSeoSecret | ApiKeySecret | ServiceAccountSecret
+type SecretShape = DataForSeoSecret | ApiKeySecret | ServiceAccountSecret | GoogleOAuthSecret
 
 /**
  * Zugangsdaten für einen Anbieter auflösen.

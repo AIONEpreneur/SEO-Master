@@ -28,7 +28,8 @@ import {
   analyzeSearchConsole, knappVorbei, normalisiereZeilen, ungenutzteEinblendungen,
   unbehandelteBegriffe, type SucheZeile,
 } from '../src/lib/analysis/search-console'
-import { findeProperty, zeitraum } from '../src/lib/connectors/search-console'
+import { findeProperty, zeitraum, istDienstkonto } from '../src/lib/connectors/search-console'
+import { pruefeZustand, signiereZustand } from '../src/lib/connectors/google-oauth'
 import { normalizeProfile } from '../src/lib/connectors/apify'
 import { buildDeterministicReport, sortFindings } from '../src/lib/analysis/report'
 import type { AnalysisResult, ModuleResult } from '../src/lib/analysis/types'
@@ -550,6 +551,50 @@ function main() {
     'Einblendungen ohne Klicks sind ein Sofortbefund',
     nieGeklickt.findings.find((f) => f.id === 'gsc-keine-klicks')?.severity === 'critical',
   )
+
+  // --- Google-Anmeldung -----------------------------------------------------
+  //
+  // Der Rückweg von Google kommt von einer fremden Seite. Ohne Absicherung
+  // könnte jemand einen manipulierten Rückweg auslösen und fremde
+  // Zugangsdaten in einen anderen Arbeitsbereich schreiben lassen.
+  section('Der Rückweg von Google lässt sich nicht fälschen')
+
+  const zustand = signiereZustand('org_abc123')
+  check('Eigener Zustand wird angenommen', pruefeZustand(zustand)?.organizationId === 'org_abc123')
+
+  const [daten, unterschrift] = zustand.split('.')
+  check(
+    'Veränderte Daten werden abgewiesen',
+    pruefeZustand(`${Buffer.from(JSON.stringify({ o: 'org_fremd', n: 'x', e: Date.now() + 60000 }), 'utf8').toString('base64url')}.${unterschrift}`) === null,
+    'sonst liesse sich ein fremder Arbeitsbereich unterschieben',
+  )
+  check('Veränderte Unterschrift wird abgewiesen', pruefeZustand(`${daten}.aaaa`) === null)
+  check('Zustand ohne Unterschrift wird abgewiesen', pruefeZustand(daten) === null)
+  check('Leerer Zustand wird abgewiesen', pruefeZustand('') === null)
+
+  const abgelaufen = (() => {
+    // Ein Zustand, dessen Ablauf in der Vergangenheit liegt, muss auch mit
+    // gültiger Unterschrift scheitern – sonst wäre ein abgefangener Rückweg
+    // unbegrenzt wiederverwendbar.
+    const inhalt = Buffer.from(JSON.stringify({ o: 'org_abc123', n: 'x', e: Date.now() - 1000 }), 'utf8').toString('base64url')
+    const echt = signiereZustand('org_abc123')
+    return `${inhalt}.${echt.split('.')[1]}`
+  })()
+  check('Abgelaufener Zustand wird abgewiesen', pruefeZustand(abgelaufen) === null)
+
+  check(
+    'Zwei Aufrufe ergeben verschiedene Zustände',
+    signiereZustand('org_abc123') !== signiereZustand('org_abc123'),
+    'die Zufallszahl verhindert Wiederverwendung',
+  )
+
+  section('Beide Zugangsformen werden unterschieden')
+
+  check(
+    'Dienstkonto wird erkannt',
+    istDienstkonto({ client_email: 'a@b.iam.gserviceaccount.com', private_key: '-----BEGIN' }),
+  )
+  check('Anmeldung wird nicht für ein Dienstkonto gehalten', !istDienstkonto({ refresh_token: '1//abc' }))
 
   section('Bericht')
   const result: AnalysisResult = {

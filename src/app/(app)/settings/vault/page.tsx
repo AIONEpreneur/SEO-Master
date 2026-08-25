@@ -1,11 +1,17 @@
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { env } from '@/lib/env'
+import { oauthKonfiguriert } from '@/lib/connectors/google-oauth'
 import { VaultManager } from './manager'
 
 export const dynamic = 'force-dynamic'
 
-export default async function VaultPage() {
+export default async function VaultPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string }>
+}) {
+  const { google } = await searchParams
   const session = await requireSession()
   const credentials = await db.credential.findMany({
     where: { organizationId: session.organizationId },
@@ -46,7 +52,13 @@ export default async function VaultPage() {
           Klartext verlässt den Server nicht und wird auch hier nie wieder angezeigt.
         </p>
       </header>
-      <VaultManager credentials={credentials} fromEnv={fromEnv} canEdit={session.role === 'OWNER' || session.role === 'ADMIN'} />
+      <VaultManager
+        credentials={credentials}
+        fromEnv={fromEnv}
+        canEdit={session.role === 'OWNER' || session.role === 'ADMIN'}
+        googleBereit={oauthKonfiguriert()}
+        googleMeldung={google}
+      />
     </div>
   )
 }
