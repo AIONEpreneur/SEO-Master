@@ -596,6 +596,49 @@ function main() {
   )
   check('Anmeldung wird nicht für ein Dienstkonto gehalten', !istDienstkonto({ refresh_token: '1//abc' }))
 
+  // --- Umgebungsvariablen erreichen die Container ---------------------------
+  //
+  // Die Compose-Dateien reichen die Variablen einzeln durch. Wer eine neue
+  // in env.ts aufnimmt und hier vergisst, bekommt keinen Fehler: Die
+  // Anwendung startet, die Variable ist im Container schlicht leer, und das
+  // Merkmal fehlt ohne jede Meldung. Genau das ist mit den Google-Variablen
+  // passiert – der Anmelde-Knopf blieb unsichtbar, obwohl die Werte in der
+  // .env standen.
+  section('Jede Anbieter-Variable erreicht Web und Worker')
+
+  const envQuelle = readFileSync(join(dir, '..', '..', 'src', 'lib', 'env.ts'), 'utf8')
+
+  // Variablen, die im Container aus der Compose-Datei selbst kommen und
+  // deshalb nicht aus der .env durchgereicht werden müssen.
+  const AUS_COMPOSE = new Set(['NODE_ENV', 'DATABASE_URL', 'REDIS_URL', 'ALLOW_PUBLIC_SIGNUP'])
+
+  // Variablen, die nur die Weboberfläche braucht. Der Worker führt Analysen
+  // aus und hat mit Registrierungen nichts zu tun.
+  const NUR_WEB = new Set(['ALLOWED_SIGNUP_EMAILS'])
+
+  const erwartet = [...envQuelle.matchAll(/^\s{2}([A-Z][A-Z0-9_]+):\s*z\./gm)]
+    .map((m) => m[1])
+    .filter((name) => !AUS_COMPOSE.has(name))
+
+  check('Variablen im Schema gefunden', erwartet.length >= 10, `${erwartet.length} Stück`)
+
+  for (const datei of ['docker-compose.prod.yml', 'docker-compose.vps.yml']) {
+    const compose = readFileSync(join(dir, '..', '..', datei), 'utf8')
+    // Je Dienst den Block ab "environment:" bis zur nächsten Einrückungsebene.
+    const bloecke = [...compose.matchAll(/^  (web|worker):$([\s\S]*?)(?=^  \w|\Z)/gm)]
+    check(`${datei}: web und worker gefunden`, bloecke.length === 2, `${bloecke.length}`)
+
+    for (const [, dienst, block] of bloecke) {
+      const noetig = dienst === 'worker' ? erwartet.filter((n) => !NUR_WEB.has(n)) : erwartet
+      const fehlend = noetig.filter((name) => !block.includes(`${name}:`))
+      check(
+        `${datei} · ${dienst} reicht alle Variablen durch`,
+        fehlend.length === 0,
+        fehlend.length ? `fehlt: ${fehlend.join(', ')}` : `${noetig.length} geprüft`,
+      )
+    }
+  }
+
   section('Bericht')
   const result: AnalysisResult = {
     target: { url: 'https://beispiel.de/ki-beratung', kind: 'WEBSITE', domain: 'beispiel.de' },
