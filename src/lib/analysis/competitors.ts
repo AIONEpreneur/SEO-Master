@@ -29,6 +29,33 @@ export type CompetitorProfile = {
  * Wettbewerbsanalyse: Wer teilt sich die Suchergebnisse mit der eigenen Domain,
  * wie gross ist der Abstand, und welche Themen fehlen im eigenen Bestand?
  */
+/**
+ * Mindest-Überschneidung für automatisch gefundene Wettbewerber.
+ *
+ * Die Wettbewerber-Abfrage liefert jede Domain, die irgendein Keyword teilt.
+ * Bei kleinen Domains reicht damit eine einzige Überschneidung – so landete
+ * die Katholische Erwachsenenbildung Bayern als "Wettbewerberin" einer
+ * KI-Beraterin im Bericht, mit einem gemeinsamen Keyword auf Position 31.
+ * Auf dem Vergleich ruhte dann der ganze Block: Platz 5 von 5, das 14-fache
+ * an Traffic, 22 "fehlende" Keywords.
+ *
+ * Wettbewerberin ist, wer entweder mindestens fünf Keywords teilt oder ein
+ * Zehntel des eigenen Bestands – was zuerst erreicht ist.
+ */
+export const MINDEST_GEMEINSAME = 5
+
+export function belastbareWettbewerber<T extends { intersections?: number }>(
+  items: T[],
+  eigeneKeywords: number,
+): { belastbar: T[]; aussortiert: T[] } {
+  const schwelle = Math.max(
+    1,
+    Math.min(MINDEST_GEMEINSAME, Math.ceil(eigeneKeywords * 0.1)),
+  )
+  const belastbar = items.filter((c) => (c.intersections ?? 0) >= schwelle)
+  return { belastbar, aussortiert: items.filter((c) => !belastbar.includes(c)) }
+}
+
 export function analyzeCompetitors(input: {
   domain: string
   own: { domainRank?: DomainRankResult | null; backlinks?: BacklinksSummaryResult | null }
@@ -108,7 +135,12 @@ export function analyzeCompetitors(input: {
   }
 
   // --- Keyword-Lücken -------------------------------------------------------
-  const allGaps = input.gaps
+  // Die Abfrage liefert zu jedem Keyword auch die eigene Platzierung mit
+  // (first_domain_serp_element). Sie zu ignorieren machte aus Begriffen, für
+  // die die Domain auf Platz 33–38 steht, "unbesetzte Felder" – die
+  // Empfehlung lautete dann, neue Seiten zu bauen, wo Nacharbeit an
+  // bestehenden gefragt ist.
+  const roheLuecken = input.gaps
     .flatMap(({ competitor, result }) =>
       (result?.items ?? []).map((item) => ({
         competitor,
@@ -116,11 +148,17 @@ export function analyzeCompetitors(input: {
         volume: item.keyword_data?.keyword_info?.search_volume ?? 0,
         difficulty: item.keyword_data?.keyword_properties?.keyword_difficulty ?? null,
         intent: item.keyword_data?.search_intent_info?.main_intent ?? null,
+        ownPosition: item.first_domain_serp_element?.rank_absolute ?? null,
         competitorPosition: item.second_domain_serp_element?.rank_absolute ?? null,
         competitorUrl: item.second_domain_serp_element?.url ?? null,
       })),
     )
     .filter((g) => g.keyword && g.volume > 0)
+
+  // Echte Lücke: die eigene Domain rankt gar nicht. Wer bereits rankt, hat
+  // keine Lücke, sondern eine Seite, die nachgeschärft gehört.
+  const allGaps = roheLuecken.filter((g) => g.ownPosition === null)
+  const nacharbeit = roheLuecken.filter((g) => g.ownPosition !== null && g.ownPosition > 10)
 
   // Nach Keyword zusammenfassen: taucht ein Thema bei mehreren Wettbewerbern
   // auf, ist es für den Markt offensichtlich relevant.
@@ -157,6 +195,27 @@ export function analyzeCompetitors(input: {
       })
     }
     criteria.push({ key: 'gaps', label: 'Keyword-Lücken', score, weight: 35, detail, status: statusFor(score) })
+
+  {
+    const einzigartig = [...new Map(nacharbeit.map((n) => [n.keyword, n])).values()].sort(
+      (a, b) => b.volume - a.volume,
+    )
+    if (einzigartig.length >= 2) {
+      const beispiele = einzigartig
+        .slice(0, 3)
+        .map((n) => `"${n.keyword}" (${n.volume.toLocaleString('de-DE')}/Monat, Position ${n.ownPosition})`)
+        .join(', ')
+      findings.push({
+        id: 'comp-nacharbeit',
+        severity: 'quickwin',
+        title: `${einzigartig.length} Begriffe, für die die Domain bereits rankt – nur zu weit hinten`,
+        why: `Darunter ${beispiele}. Das sind keine unbesetzten Felder: Die Seiten existieren und ranken – sie stehen nur jenseits von Seite eins.`,
+        action: 'Die bestehenden Seiten nachschärfen (Inhaltstiefe, interne Verlinkung, Aktualität) statt neue zu bauen. Eine Seite von Position 35 auf 8 zu heben ist schneller als eine neue von null.',
+        effort: 'mittel',
+        impact: 'hoch',
+      })
+    }
+  }
   }
 
   // --- Autoritätsabstand ----------------------------------------------------
@@ -199,6 +258,10 @@ export function analyzeCompetitors(input: {
       ausgeschlossen: ausgeschlossen.map((r) => ({ domain: r.domain, estimatedTraffic: r.estimatedTraffic })),
       keywordGaps: topGaps,
       gapCount: gapsByKeyword.size,
+      nacharbeit: [...new Map(nacharbeit.map((n) => [n.keyword, n])).values()]
+        .sort((a, b) => b.volume - a.volume)
+        .slice(0, 10)
+        .map(({ keyword, volume, ownPosition }) => ({ keyword, volume, ownPosition })),
     },
   }
 }

@@ -35,6 +35,7 @@ import { hasRole } from '../src/lib/auth/session'
 import { vergleiche, verlaufsSatz } from '../src/lib/analysis/verlauf'
 import { zulaessigeAdresse } from '../src/lib/schnellcheck'
 import { waehleSeiten, WEBSITE_UMFANG } from '../src/lib/analysis/seiten'
+import { analyzeCompetitors, belastbareWettbewerber } from '../src/lib/analysis/competitors'
 import { csvVon, dateiname } from '../src/app/api/export/route'
 import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
@@ -1717,6 +1718,139 @@ function main() {
     'Die Konfiguration ist nur fuer den Besitzer lesbar',
     /chmod 600 "\$KONF"/.test(kopieSkript),
   )
+
+  section('Eine Ueberschneidung macht keine Wettbewerberin')
+
+  // Der echte Fall: keb-bayern.de teilte genau ein Keyword ("sprachmodelle",
+  // Position 31) mit einer KI-Beraterin – und auf dem Vergleich ruhte der
+  // ganze Block: Platz 5 von 5, das 14-fache an Traffic, 22 "fehlende"
+  // Keywords aus Pfarrei-Bildungsprogrammen.
+  const kandidaten = [
+    { domain: 'keb-bayern.de', intersections: 1 },
+    { domain: 'echte-rivalin.de', intersections: 7 },
+    { domain: 'knapp-drueber.de', intersections: 5 },
+    { domain: 'knapp-drunter.de', intersections: 2 },
+  ]
+  const { belastbar, aussortiert } = belastbareWettbewerber(kandidaten, 22)
+  check(
+    'Eine einzige Ueberschneidung fliegt raus',
+    aussortiert.some((c) => c.domain === 'keb-bayern.de'),
+  )
+  check(
+    'Die Schwelle folgt dem eigenen Bestand',
+    belastbar.some((c) => c.domain === 'knapp-drueber.de') && !belastbar.some((c) => c.domain === 'knapp-drunter.de'),
+    'bei 22 eigenen Keywords liegt die Schwelle bei 3 gemeinsamen (10 %, aufgerundet)',
+  )
+  check(
+    'Bei kleinen Domains greift die Zehn-Prozent-Regel',
+    belastbareWettbewerber([{ domain: 'x.de', intersections: 3 }], 22).belastbar.length === 1,
+    'wer 3 von 22 Keywords teilt, ist Wettbewerberin, auch unter der Fuenfer-Schwelle',
+  )
+  check(
+    'Bei grossen Domains bleibt die Fuenfer-Schwelle',
+    belastbareWettbewerber([{ domain: 'x.de', intersections: 4 }], 5000).belastbar.length === 0 &&
+      belastbareWettbewerber([{ domain: 'x.de', intersections: 5 }], 5000).belastbar.length === 1,
+  )
+
+  // Wer bereits rankt, hat keine Luecke, sondern Nacharbeit.
+  const wettbewerb = analyzeCompetitors({
+    domain: 'kirstenbiema.com',
+    own: { domainRank: null, backlinks: null },
+    competitors: { items: [{ domain: 'echte-rivalin.de', intersections: 7, full_domain_metrics: { organic: { count: 50, etv: 100 } } }] },
+    gaps: [
+      {
+        competitor: 'echte-rivalin.de',
+        result: {
+          items: [
+            {
+              keyword_data: { keyword: 'claude code preis', keyword_info: { search_volume: 1900 } },
+              first_domain_serp_element: { rank_absolute: 36 },
+              second_domain_serp_element: { rank_absolute: 4 },
+            },
+            {
+              keyword_data: { keyword: 'claude opus vs sonnet', keyword_info: { search_volume: 720 } },
+              first_domain_serp_element: { rank_absolute: 33 },
+              second_domain_serp_element: { rank_absolute: 6 },
+            },
+            {
+              keyword_data: { keyword: 'wirklich unbesetzt', keyword_info: { search_volume: 500 } },
+              second_domain_serp_element: { rank_absolute: 2 },
+            },
+          ],
+        },
+      },
+    ],
+  })
+  const luecken = wettbewerb.data as { gapCount: number; nacharbeit: Array<{ keyword: string; ownPosition: number | null }> }
+  check(
+    'Begriffe mit eigener Platzierung sind keine Luecke',
+    luecken.gapCount === 1,
+    'nur "wirklich unbesetzt" bleibt als Luecke uebrig',
+  )
+  check(
+    'Sie werden als Nacharbeit ausgewiesen',
+    luecken.nacharbeit.length === 2 && luecken.nacharbeit[0].keyword === 'claude code preis',
+  )
+  check(
+    'Der Befund raet zum Nachschaerfen statt zu neuen Seiten',
+    /nachschärfen|Nacharbeit/.test(wettbewerb.findings.find((f) => f.id === 'comp-nacharbeit')?.action ?? ''),
+    wettbewerb.findings.find((f) => f.id === 'comp-nacharbeit')?.title,
+  )
+
+  section('FAQ-Laenge in Woertern, Listen auch in Abschnittskoepfen')
+
+  // Der echte Fall, zum dritten Mal gemeldet: fuenf Antworten mit 40-47
+  // Woertern, alle im empfohlenen Fenster – die alte Zeichengrenze (300)
+  // liess vier davon durchfallen, weil deutsche Woerter lang sind.
+  const antwort45 = Array.from({ length: 45 }, (_, i) => `wort${i}langgezogen`).join(' ')
+  check('45 Woerter sind laenger als 300 Zeichen', antwort45.length > 300, `${antwort45.length} Zeichen`)
+  const faqSeite = extractSignals({
+    url: 'https://beispiel.de/',
+    html: `<html><head><title>T</title><script type="application/ld+json">${JSON.stringify({
+      '@type': 'FAQPage',
+      mainEntity: [1, 2, 3, 4, 5].map((n) => ({
+        '@type': 'Question',
+        name: `Frage ${n}?`,
+        acceptedAnswer: { '@type': 'Answer', text: antwort45 },
+      })),
+    })}</script></head><body><p>Inhalt</p></body></html>`,
+  })
+  const faqBewertung = analyzeAeo({ signals: faqSeite, serp: null, peopleAlsoAsk: [] })
+  const faqKriterium = faqBewertung.criteria.find((c) => /vorlesbarer|FAQPage/.test(c.detail))
+  check(
+    'Alle fuenf Antworten gelten als vorlesbar',
+    /davon 5 in vorlesbarer Länge/.test(faqKriterium?.detail ?? ''),
+    faqKriterium?.detail,
+  )
+
+  // Eine Liste im Kopf eines Abschnitts ist Inhalt; nur der Seitenrahmen
+  // (header/footer direkt unter body) und Navigationen bleiben draussen.
+  const listenSeite = extractSignals({
+    url: 'https://beispiel.de/',
+    html: `<html><head><title>T</title></head><body>
+      <header><nav><ul><li>Menu 1</li><li>Menu 2</li></ul></nav></header>
+      <main>
+        <section><header><ul><li>A</li><li>B</li><li>C</li></ul></header></section>
+        <section><ul><li>D</li><li>E</li><li>F</li><li>G</li></ul></section>
+      </main>
+      <footer><ul><li>Impressum</li></ul></footer>
+    </body></html>`,
+  })
+  check(
+    'Beide Inhaltslisten werden gezaehlt: 3 + 4 = 7',
+    listenSeite.lists.itemsTotal === 7,
+    `gezaehlt: ${listenSeite.lists.itemsTotal} — die alte Pauschale schluckte die Liste im Abschnittskopf`,
+  )
+
+  section('Nicht ladbare Seiten werden benannt')
+
+  const runQuelle2 = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'run.ts'), 'utf8')
+  check(
+    'Der Hinweis nennt die Adressen, nicht nur die Anzahl',
+    /Nicht ladbar: \$\{nichtLadbar/.test(runQuelle2),
+    'ein blosser Zaehler ist nicht pruefbar',
+  )
+  check('Die Adressen stehen auch in den Rohdaten', /nichtLadbar/.test(runQuelle2) && /raw\.seitenauswahl/.test(runQuelle2))
 
   section('Bericht')
   const result: AnalysisResult = {

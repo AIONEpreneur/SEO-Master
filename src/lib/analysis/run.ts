@@ -9,7 +9,7 @@ import { analyzeSeo } from './seo'
 import { analyzeAeo } from './aeo'
 import { analyzeGeo, parseRobots } from './geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from './serp'
-import { analyzeCompetitors, type CompetitorProfile } from './competitors'
+import { analyzeCompetitors, belastbareWettbewerber, type CompetitorProfile } from './competitors'
 import { analyzeSocial } from './social'
 import { waehleSeiten, seitenErgebnis, type SeitenErgebnis } from './seiten'
 import { wiederkehrendeBefunde } from './wiederkehrend'
@@ -454,20 +454,20 @@ export async function runAnalysis(params: {
   // ohne die Domain-Daten, die schon erhoben sind.
   const seitenLimit = Math.max(1, params.pageLimit ?? 1)
   let seiten: SeitenErgebnis[] = []
-  let seitenFehler = 0
+  const nichtLadbar: string[] = []
 
   if (seitenLimit > 1 && firecrawl) {
     await step('Weitere Seiten werden gelesen', 55)
     try {
       const gefunden = await firecrawl.map(targetUrl, 200)
       const adressen = waehleSeiten({ startUrl: targetUrl, gefunden, limit: seitenLimit })
-      raw.seitenauswahl = { gefunden: gefunden.length, gewaehlt: adressen.length }
+      raw.seitenauswahl = { gefunden: gefunden.length, gewaehlt: adressen.length, nichtLadbar }
 
       // Gebündelt zu vieren: schnell genug, ohne die Zielseite zu fluten.
       for (let i = 0; i < adressen.length; i += 4) {
         const gruppe = adressen.slice(i, i + 4)
         const ergebnisse = await Promise.all(
-          gruppe.map(async (adresse) => {
+          gruppe.map(async (adresse): Promise<SeitenErgebnis | null> => {
             try {
               const geladen = await firecrawl.scrape(adresse)
               const seitenHtml = geladen?.rawHtml ?? geladen?.html
@@ -485,7 +485,11 @@ export async function runAnalysis(params: {
             }
           }),
         )
-        seitenFehler += ergebnisse.filter((e) => e === null).length
+        // Ein blosser Zähler ("3 Seiten liessen sich nicht laden") ist nicht
+        // verwertbar – erst der Name macht den Hinweis prüfbar.
+        ergebnisse.forEach((e, i) => {
+          if (e === null) nichtLadbar.push(gruppe[i])
+        })
         seiten.push(...ergebnisse.filter((e): e is SeitenErgebnis => e !== null))
         await step('Weitere Seiten werden gelesen', 55 + Math.round(((i + 4) / adressen.length) * 4))
       }
@@ -539,11 +543,29 @@ export async function runAnalysis(params: {
         providersUsed.add('DataForSEO')
         raw.competitors = competitors
 
+        // Automatisch gefundene Wettbewerber müssen genügend Keywords teilen –
+        // eine einzige Überschneidung macht keine Wettbewerberin. Von Hand
+        // vorgegebene Domains gelten dagegen ungefiltert: Wer eine Domain
+        // eintippt, hat entschieden.
+        // Die Zuweisung geschieht in einer Sammel-Closure – TypeScript sieht
+        // hier sonst nur den Startwert null.
+        const eigeneKeywords =
+          (domainRank as import('@/lib/connectors/dataforseo').DomainRankResult | null)?.items?.[0]?.metrics
+            ?.organic?.count ?? 0
+        const { belastbar, aussortiert } = belastbareWettbewerber(competitors?.items ?? [], eigeneKeywords)
+        if (aussortiert.length > 0) {
+          raw.wettbewerberAussortiert = aussortiert.map((c) => ({
+            domain: c.domain,
+            gemeinsameKeywords: c.intersections ?? 0,
+          }))
+        }
+        const gefiltert = competitors ? { ...competitors, items: belastbar } : null
+
         // Vorgegebene Wettbewerber haben Vorrang vor automatisch gefundenen.
         const rivalDomains = (
           params.competitorDomains?.length
             ? params.competitorDomains
-            : (competitors?.items ?? []).map((c) => c.domain).filter(Boolean)
+            : belastbar.map((c) => c.domain).filter(Boolean)
         )
           .map((d) => String(d).replace(/^www\./, ''))
           .filter((d) => d && d !== domain)
@@ -593,7 +615,7 @@ export async function runAnalysis(params: {
           analyzeCompetitors({
             domain,
             own: { domainRank, backlinks },
-            competitors,
+            competitors: gefiltert,
             gaps,
             competitorProfiles: profiles,
           }),
@@ -637,7 +659,15 @@ export async function runAnalysis(params: {
         `${1 + seiten.length} Seiten derselben Domain. Die Bausteine im Detail beziehen sich auf die ` +
         `eingegebene Seite; jede weitere Seite wurde nach denselben Regeln bewertet (ohne Markt-Daten, ` +
         `die je Domain einmal erhoben werden).` +
-        (seitenFehler > 0 ? ` ${seitenFehler} Seite${seitenFehler === 1 ? '' : 'n'} liess${seitenFehler === 1 ? '' : 'en'} sich nicht laden.` : ''),
+        (nichtLadbar.length > 0
+          ? ` Nicht ladbar: ${nichtLadbar.slice(0, 5).join(', ')}${nichtLadbar.length > 5 ? ` und ${nichtLadbar.length - 5} weitere` : ''}.`
+          : ''),
+    }
+    if (nichtLadbar.length > 0) {
+      skipped.push({
+        module: 'Seitenabruf',
+        reason: `Nicht ladbar: ${nichtLadbar.slice(0, 5).join(', ')}${nichtLadbar.length > 5 ? ` und ${nichtLadbar.length - 5} weitere` : ''}`,
+      })
     }
   }
 

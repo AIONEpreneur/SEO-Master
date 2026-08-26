@@ -109,8 +109,16 @@ export function analyzeAeo(input: {
   {
     const hasFaqSchema = s.schemaTypes.some((t) => /FAQPage/i.test(t))
     const faqCount = s.faqBlocks.length
-    // Für Sprachassistenten zählt Kürze: Antworten unter 300 Zeichen.
-    const shortAnswers = s.faqBlocks.filter((f) => f.answer.length > 0 && f.answer.length < 300).length
+    // Für Sprachassistenten zählt die Vorlesedauer, und die hängt an Wörtern,
+    // nicht an Zeichen. Die frühere Zeichengrenze (300) liess deutsche
+    // Antworten mit 43–47 Wörtern durchfallen, die mit ~330 Zeichen exakt im
+    // empfohlenen Fenster von 40–60 Wörtern lagen – der Bericht widersprach
+    // damit dem eigenen Massstab.
+    const wortzahl = (text: string) => text.split(/\s+/).filter(Boolean).length
+    const shortAnswers = s.faqBlocks.filter((f) => {
+      const w = wortzahl(f.answer)
+      return w >= 5 && w <= 80
+    }).length
 
     let score: number
     let detail: string
@@ -122,7 +130,7 @@ export function analyzeAeo(input: {
         severity: 'critical',
         title: 'Kein FAQ-Bereich mit FAQPage-Schema',
         why: 'FAQPage-Schema ist der direkteste und am schnellsten umsetzbare Weg in Antwortboxen und Sprachantworten.',
-        action: 'Fragenbereich mit 5–8 Fragen anlegen, Antworten je unter 300 Zeichen, und als FAQPage-JSON-LD auszeichnen.',
+        action: 'Fragenbereich mit 5–8 Fragen anlegen, Antworten je 40–60 Wörter, und als FAQPage-JSON-LD auszeichnen.',
         effort: 'mittel',
         impact: 'hoch',
       })
@@ -140,7 +148,7 @@ export function analyzeAeo(input: {
       })
     } else {
       score = clamp(5 + Math.min(faqCount, 8) * 0.4 + (shortAnswers >= 3 ? 1.5 : 0))
-      detail = `FAQPage-Schema vorhanden, ${faqCount} Fragen, davon ${shortAnswers} mit sprachassistenz-tauglicher Antwortlänge.`
+      detail = `FAQPage-Schema vorhanden, ${faqCount} Fragen, davon ${shortAnswers} in vorlesbarer Länge (bis 80 Wörter).`
       if (faqCount < 5) {
         findings.push({
           id: 'aeo-faq-few',

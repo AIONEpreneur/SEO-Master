@@ -368,8 +368,18 @@ function analyzeImages($: cheerio.CheerioAPI) {
 function analyzeLists($: cheerio.CheerioAPI) {
   const ordered = $('ol').length
   const unordered = $('ul').length
-  // Navigationslisten sind keine inhaltlichen Listen und würden das Ergebnis schönen.
-  const itemsTotal = $('ol li, ul li').filter((_, el) => $(el).closest('nav, header, footer').length === 0).length
+  // Navigationslisten sind keine inhaltlichen Listen und würden das Ergebnis
+  // schönen. Aber: <header> ist nur dann Seitenrahmen, wenn es direkt unter
+  // <body> hängt. Ein <header> innerhalb einer Section ist eine gewöhnliche
+  // Abschnittseinleitung – die frühere Pauschale schluckte dort ganze
+  // Inhaltslisten, und der Bericht zählte vier Punkte, wo sieben standen.
+  const itemsTotal = $('ol li, ul li')
+    .filter((_, el) => {
+      if ($(el).closest('nav').length > 0) return false
+      const rahmen = $(el).parents('header, footer').filter((_, r) => $(r).parent().is('body')).length
+      return rahmen === 0
+    })
+    .length
   return { ordered, unordered, itemsTotal }
 }
 
