@@ -33,6 +33,27 @@ services:
       timeout: 3s
       retries: 10
 
+  # OpenSEO als Beistelldienst (docs/OPENSEO-INTEGRATION.md). In der
+  # Entwicklung läuft der Worker auf dem Host, deshalb ist der Port hier –
+  # anders als im VPS-Betrieb – gebunden, aber nur an die Loopback-Adresse.
+  # Dazu in der .env:  OPENSEO_MCP_URL=http://localhost:3001/mcp
+  open-seo:
+    image: ghcr.io/every-app/open-seo:latest
+    restart: unless-stopped
+    environment:
+      CLOUDFLARE_INCLUDE_PROCESS_ENV: 'true'
+      AUTH_MODE: local_noauth
+      PORT: '3001'
+      # base64("email:api-passwort") – anderes Format als DATAFORSEO_LOGIN/
+      # -PASSWORD dieser App, deshalb der eigene Variablenname.
+      DATAFORSEO_API_KEY: ${OPENSEO_DATAFORSEO_API_KEY:-}
+      OPENSEO_TELEMETRY_DISABLED: '1'
+    ports:
+      - '127.0.0.1:3001:3001'
+    volumes:
+      - open_seo_data:/app/.wrangler
+
 volumes:
   postgres_data:
   redis_data:
+  open_seo_data:

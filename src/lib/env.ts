@@ -30,6 +30,13 @@ const schema = z.object({
   APIFY_TOKEN: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   PAGESPEED_API_KEY: z.string().optional(),
+
+  // OpenSEO-Beistelldienst (docs/OPENSEO-INTEGRATION.md). Nicht gesetzt heisst:
+  // der Anbieter entfällt und die betroffenen Abrufe werden als Lücke
+  // ausgewiesen – wie bei jedem anderen fehlenden Anbieter.
+  OPENSEO_MCP_URL: z.string().url().optional(),
+  // Nur für den späteren hosted-Modus; im local_noauth-Betrieb leer lassen.
+  OPENSEO_API_KEY: z.string().optional(),
 })
 
 let cached: z.infer<typeof schema> | null = null

@@ -95,15 +95,52 @@ services:
       APIFY_TOKEN: ${APIFY_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
+      # Anbindung des OpenSEO-Beistelldienstes (docs/OPENSEO-INTEGRATION.md).
+      # Leer lassen, um den Anbieter abzuschalten – die Analysen laufen dann
+      # ohne ihn weiter.
+      OPENSEO_MCP_URL: ${OPENSEO_MCP_URL:-http://open-seo:3001/mcp}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
     networks: [internal, extern]
 
+  # OpenSEO als Beistelldienst (docs/OPENSEO-INTEGRATION.md). Fertiges Image,
+  # kein Build; Aktualisierung über `docker compose pull open-seo`.
+  #
+  # Bewusst KEIN ports:-Eintrag: im Modus local_noauth gibt es keine
+  # Anmeldung – wer die Adresse erreicht, kann auf DataForSEO-Rechnung
+  # einkaufen. Erreichbar ist der Dienst nur im Docker-Netz `extern`, in dem
+  # auch der Worker hängt (und das er für DataForSEO ohnehin braucht). Für
+  # den Blick in die Oberfläche: docs/OPENSEO-INTEGRATION.md, Abnahme Phase 1.
+  open-seo:
+    image: ghcr.io/every-app/open-seo:latest
+    restart: unless-stopped
+    environment:
+      # Reicht die Compose-Umgebung an die Workers-Laufzeit im Container durch.
+      CLOUDFLARE_INCLUDE_PROCESS_ENV: 'true'
+      AUTH_MODE: local_noauth
+      PORT: '3001'
+      # Das Image liefert über `vite preview` aus, und Vite blockiert fremde
+      # Host-Header. Ohne diese Freigabe scheitert jeder Aufruf unter
+      # http://open-seo:3001 aus dem Docker-Netz mit "Blocked request".
+      ALLOWED_HOST: open-seo
+      # ACHTUNG, anderes Format als DATAFORSEO_LOGIN/-PASSWORD dieser App:
+      # OpenSEO erwartet base64("email:api-passwort"). Deshalb der eigene
+      # Variablenname. Erzeugen mit:  echo -n "email:api-passwort" | base64
+      DATAFORSEO_API_KEY: ${OPENSEO_DATAFORSEO_API_KEY:-}
+      OPENSEO_TELEMETRY_DISABLED: '1'
+    volumes:
+      # Projekte, gespeicherte Keywords, Rank-Tracker und das Forschungs-Log.
+      # Gehört in die Sicherung: ohne dieses Volume werden bereits gekaufte
+      # Daten nach einem Neuaufsetzen erneut gekauft.
+      - open_seo_data:/app/.wrangler
+    networks: [extern]
+
 volumes:
   postgres_data:
   redis_data:
+  open_seo_data:
 
 networks:
   # Datenbank und Warteschlange hängen ausschliesslich hier: dieses Netz hat

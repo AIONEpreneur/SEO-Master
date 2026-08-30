@@ -3,6 +3,7 @@ import type { Criterion, Finding, ModuleResult } from './types'
 import { weightedScore, scoreLabel, statusFor } from './types'
 import type { PageSpeedResult } from '@/lib/connectors/pagespeed'
 import type { BacklinksSummaryResult, DomainRankResult } from '@/lib/connectors/dataforseo'
+import type { OpenSeoDomainOverview } from '@/lib/connectors/openseo'
 import { deckungsgrad, enthaeltBegriff, teileMarke } from './begriffe'
 import { beurteileKanonisch, kanonischeNote, kanonischerHinweis, kanonischerBefund } from './kanonisch'
 import { leseChecks, checkBefunde, checkNote } from './onpage-checks'
@@ -19,8 +20,14 @@ export function analyzeSeo(input: {
   primaryKeyword?: string | null
   /** `checks`-Objekt aus der OnPage-API; fehlt, wenn der Abruf nicht lief. */
   onPageChecks?: Record<string, boolean> | null
+  /**
+   * Domain-Übersicht aus OpenSEO (docs/OPENSEO-INTEGRATION.md). Zweite
+   * Datenquelle unter demselben Raster: springt beim Backlink-Kriterium ein,
+   * wenn der direkte DataForSEO-Abruf ausfiel.
+   */
+  openSeo?: OpenSeoDomainOverview | null
 }): ModuleResult {
-  const { signals: s, pagespeed, backlinks, domainRank } = input
+  const { signals: s, pagespeed, backlinks, domainRank, openSeo } = input
   const findings: Finding[] = []
   const keyword = input.primaryKeyword?.trim() || null
 
@@ -567,7 +574,35 @@ export function analyzeSeo(input: {
   // --- Off-Page -------------------------------------------------------------
   const offpage: Criterion[] = []
   {
-    if (!backlinks) {
+    const openSeoBacklinks =
+      openSeo && (openSeo.referringDomains != null || openSeo.backlinks != null) ? openSeo : null
+
+    if (!backlinks && openSeoBacklinks) {
+      // Rückfallebene OpenSEO: dieselben Schwellwerte wie beim direkten
+      // Abruf. Einen Spam-Score liefert die Übersicht nicht – der wird dann
+      // auch nicht bewertet, statt ihn mit null zu erfinden.
+      const domains = openSeoBacklinks.referringDomains ?? 0
+      const score = domains === 0 ? 1 : domains < 10 ? 3 : domains < 50 ? 5 : domains < 200 ? 7 : 9
+      if (domains < 20) {
+        findings.push({
+          id: 'seo-backlinks-weak',
+          severity: 'longterm',
+          title: `Schwaches Backlink-Profil (${domains} verweisende Domains)`,
+          why: 'Verweisende Domains sind weiterhin der stärkste Off-Page-Faktor – und zugleich der wichtigste Hebel für Sichtbarkeit in KI-Antworten.',
+          action: 'Gezielt Erwähnungen aufbauen: Gastbeiträge, Podcast-Auftritte, Branchenverzeichnisse, Kooperationen mit thematisch passenden Seiten.',
+          effort: 'hoch',
+          impact: 'hoch',
+        })
+      }
+      offpage.push({
+        key: 'backlinks',
+        label: 'Backlink-Profil',
+        score,
+        weight: 2,
+        detail: `${openSeoBacklinks.backlinks ?? 0} Backlinks von ${domains} Domains (Quelle: OpenSEO, ohne Spam-Score).`,
+        status: statusFor(score),
+      })
+    } else if (!backlinks) {
       offpage.push({
         key: 'backlinks',
         label: 'Backlink-Profil',
@@ -682,6 +717,7 @@ export function analyzeSeo(input: {
       },
       pagespeed: pagespeed ?? null,
       backlinks: backlinks ?? null,
+      openSeo: openSeo ?? null,
     },
   }
 }

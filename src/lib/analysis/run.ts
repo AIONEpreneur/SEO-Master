@@ -4,6 +4,8 @@ import { DataForSeoClient } from '@/lib/connectors/dataforseo'
 import { FirecrawlClient } from '@/lib/connectors/firecrawl'
 import { ApifyClient, detectPlatform, DEFAULT_ACTORS, actorInput, normalizeProfile } from '@/lib/connectors/apify'
 import { PageSpeedClient } from '@/lib/connectors/pagespeed'
+import { OpenSeoClient, type OpenSeoDomainOverview } from '@/lib/connectors/openseo'
+import { env } from '@/lib/env'
 import { extractSignals, type PageSignals } from './extract'
 import { analyzeSeo } from './seo'
 import { analyzeAeo } from './aeo'
@@ -83,6 +85,11 @@ export async function runAnalysis(params: {
   const firecrawl = fcSecret ? new FirecrawlClient(fcSecret) : null
   const apify = apifySecret ? new ApifyClient(apifySecret) : null
   const pagespeed = new PageSpeedClient(psiSecret?.apiKey)
+  // OpenSEO läuft als Beistelldienst im selben Docker-Netz und wird über die
+  // Umgebung angebunden, nicht über den Tresor: im local_noauth-Betrieb gibt
+  // es keine Zugangsdaten, die je Organisation zu trennen wären.
+  const openSeoUrl = env().OPENSEO_MCP_URL
+  const openseo = openSeoUrl ? new OpenSeoClient({ mcpUrl: openSeoUrl, apiKey: env().OPENSEO_API_KEY }) : null
 
   // =========================================================================
   // Social-Profil: eigener, kürzerer Weg
@@ -278,6 +285,7 @@ export async function runAnalysis(params: {
   let domainRank = null
   let rankedKeywords = null
   let llmMentions = null
+  let openSeoOverview: OpenSeoDomainOverview | null = null
   let onPageChecks: Record<string, boolean> | null = null
   let begriffsUrteile: BegriffsUrteil[] = []
   let begriffsAlternativen: Array<{ begriff: string; volumen: number }> = []
@@ -297,6 +305,20 @@ export async function runAnalysis(params: {
       }
     })(),
   )
+
+  if (openseo && domain) {
+    collectors.push(
+      (async () => {
+        try {
+          openSeoOverview = await openseo.domainOverview({ domain, locationCode, languageCode })
+          raw.openSeoOverview = openSeoOverview
+          providersUsed.add('OpenSEO')
+        } catch (error) {
+          skipped.push({ module: 'OpenSEO-Domainübersicht', reason: message(error) })
+        }
+      })(),
+    )
+  }
 
   if (dfs && domain) {
     collectors.push(
@@ -513,7 +535,15 @@ export async function runAnalysis(params: {
 
   if (modules.includes('SEO')) {
     moduleResults.push(
-      analyzeSeo({ signals, pagespeed: psiResult, backlinks, domainRank, primaryKeyword, onPageChecks }),
+      analyzeSeo({
+        signals,
+        pagespeed: psiResult,
+        backlinks,
+        domainRank,
+        primaryKeyword,
+        onPageChecks,
+        openSeo: openSeoOverview,
+      }),
     )
   }
   if (modules.includes('AEO')) {
