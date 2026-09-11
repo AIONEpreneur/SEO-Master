@@ -71,6 +71,18 @@ services:
       APIFY_TOKEN: ${APIFY_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PREIS_STARTER: ${STRIPE_PREIS_STARTER:-}
+      STRIPE_PREIS_PRO: ${STRIPE_PREIS_PRO:-}
+      UPLOAD_VERZEICHNIS: /data/uploads
+    volumes:
+      - uploads:/data/uploads
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -95,6 +107,18 @@ services:
       APIFY_TOKEN: ${APIFY_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PREIS_STARTER: ${STRIPE_PREIS_STARTER:-}
+      STRIPE_PREIS_PRO: ${STRIPE_PREIS_PRO:-}
+      UPLOAD_VERZEICHNIS: /data/uploads
+    volumes:
+      - uploads:/data/uploads
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -102,6 +126,7 @@ services:
     networks: [internal, extern]
 
 volumes:
+  uploads:
   postgres_data:
   redis_data:
 

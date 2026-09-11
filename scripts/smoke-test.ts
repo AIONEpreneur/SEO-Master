@@ -491,7 +491,14 @@ async function main() {
   for (const datei of ['docker-compose.prod.yml', 'docker-compose.vps.yml']) {
     const compose = readFileSync(join(dir, '..', '..', datei), 'utf8')
     // Je Dienst den Block ab "environment:" bis zur nächsten Einrückungsebene.
-    const bloecke = [...compose.matchAll(/^  (web|worker):$([\s\S]*?)(?=^  \w|\Z)/gm)]
+    //
+    // Das Ende des Textes heisst hier `$(?![\s\S])` und nicht `\Z`: JavaScript
+    // kennt `\Z` nicht als Anker, sondern liest es als den Buchstaben Z. Der
+    // Block brach deshalb beim ersten Z ab – gutgegangen ist das nur so lange,
+    // wie keine Variable ein Z im Namen trug. UPLOAD_VERZEICHNIS hat den
+    // Fehler ans Licht gebracht: Der Test meldete die Variable als fehlend,
+    // obwohl sie in beiden Dateien stand.
+    const bloecke = [...compose.matchAll(/^  (web|worker):$([\s\S]*?)(?=^  \w|$(?![\s\S]))/gm)]
     check(`${datei}: web und worker gefunden`, bloecke.length === 2, `${bloecke.length}`)
 
     for (const [, dienst, block] of bloecke) {
@@ -1471,7 +1478,7 @@ async function main() {
   // eigene ein, laufen ihre Analysen ueber ein fremdes Konto und die
   // Guthabenrechnung stimmt nicht mehr.
   const alsKundin = {
-    id: 'k1', email: 'kundin@beispiel.de', name: null, isSuperAdmin: false,
+    id: 'k1', email: 'kundin@beispiel.de', name: null, avatarDatei: null, isSuperAdmin: false,
     organizationId: 'o1', organizationName: 'Praxis Sommer', organizationSlug: 'praxis-sommer',
     credits: 850, plan: 'STARTER' as const, role: 'OWNER' as const,
     nurAnsicht: false, wechsel: null,

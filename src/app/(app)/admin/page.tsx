@@ -1,23 +1,25 @@
 import Link from 'next/link'
 import {
   Building2, Users2, FileText, Clock, ShieldCheck, Repeat, Coins, AlertTriangle,
+  Activity, TrendingUp,
 } from 'lucide-react'
 import { requireSuperAdmin } from '@/lib/admin/wache'
 import { betriebszahlen, MINUTEN_JE_ANALYSE } from '@/lib/admin/kennzahlen'
+import { wirkung, nutzung } from '@/lib/admin/wirkung'
 import { Card, CardHeader } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminSeite() {
   await requireSuperAdmin()
-  const z = await betriebszahlen()
+  const [z, w, n] = await Promise.all([betriebszahlen(), wirkung(), nutzung()])
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Betrieb</h1>
-          <p className="mt-0.5 text-[13px] text-ink-muted">
+          <h1 className="text-xl">Betrieb</h1>
+          <p className="mt-1 text-[13px] font-medium text-ink-muted">
             Zahlen über alle Arbeitsbereiche. Ohne Adressen, ohne Suchbegriffe.
           </p>
         </div>
@@ -101,6 +103,67 @@ export default async function AdminSeite() {
             />
             <Zeile begriff="Offene Einladungen" wert={String(z.offeneEinladungen)} />
           </dl>
+        </Card>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card className="p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Activity size={14} className="text-ink-subtle" />
+            <p className="font-display text-[11px] uppercase tracking-wider text-ink-subtle">
+              Nutzung (30 Tage)
+            </p>
+          </div>
+          <dl className="space-y-3">
+            <Zeile
+              begriff="Aktive Konten"
+              wert={n.aktiveKonten30.toLocaleString('de-DE')}
+              erlaeuterung={`${n.aktiveKonten7} davon in den letzten sieben Tagen angemeldet.`}
+            />
+            <Zeile
+              begriff="Arbeitsbereiche mit Läufen"
+              wert={n.aktiveBereiche30.toLocaleString('de-DE')}
+              erlaeuterung={`Im Schnitt ${n.laeufeJeBereich.toLocaleString('de-DE')} Läufe je Bereich.`}
+            />
+            <Zeile
+              begriff="Arbeitstage"
+              wert={n.arbeitstage30.toLocaleString('de-DE')}
+              erlaeuterung="Kalendertage mit mindestens einem Lauf, je Arbeitsbereich gezählt. Gemessen, nicht geschätzt — wie lange jemand vor dem Bildschirm sass, wird bewusst nicht erfasst."
+            />
+          </dl>
+        </Card>
+
+        <Card className="p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <TrendingUp size={14} className="text-ink-subtle" />
+            <p className="font-display text-[11px] uppercase tracking-wider text-ink-subtle">
+              Mehr Sichtbarkeit?
+            </p>
+          </div>
+          {w.verfolgteAdressen === 0 ? (
+            <p className="text-[13px] font-medium text-ink-muted">
+              Noch keine Adresse wurde zweimal geprüft. Erst ein zweiter Lauf macht eine Veränderung
+              messbar — vorher ist jede Zahl eine Momentaufnahme.
+            </p>
+          ) : (
+            <dl className="space-y-3">
+              <Zeile
+                begriff="Verfolgte Adressen"
+                wert={w.verfolgteAdressen.toLocaleString('de-DE')}
+                erlaeuterung="Mindestens zweimal geprüft — nur dann ist ein Vergleich zulässig."
+              />
+              <Zeile
+                begriff="Davon verbessert"
+                wert={`${w.verbessert} von ${w.verfolgteAdressen}`}
+                erlaeuterung={`${w.verschlechtert} verschlechtert, ${w.unveraendert} unverändert.`}
+              />
+              <Zeile
+                begriff="Mittlere Veränderung"
+                wert={`${w.schnittVeraenderung > 0 ? '+' : ''}${w.schnittVeraenderung.toLocaleString('de-DE')} Noten`}
+                erlaeuterung={`Grösster einzelner Zugewinn: +${w.groessteVerbesserung.toLocaleString('de-DE')}.`}
+              />
+            </dl>
+          )}
         </Card>
       </div>
 

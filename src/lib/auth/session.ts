@@ -58,6 +58,8 @@ export type SessionUser = {
   id: string
   email: string
   name: string | null
+  /** Dateiname des Profilbilds, falls eines hinterlegt ist. */
+  avatarDatei: string | null
   isSuperAdmin: boolean
   organizationId: string
   organizationName: string
@@ -110,6 +112,7 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
     id: session.user.id,
     email: session.user.email,
     name: session.user.name,
+    avatarDatei: session.user.avatarDatei,
   }
 
   // Kein Wunsch oder der eigene Hauptbereich: der Normalfall.

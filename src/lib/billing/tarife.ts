@@ -1,10 +1,10 @@
 /**
  * Die öffentlichen Tarife — an genau einer Stelle.
  *
- * ACHTUNG: Die Preise sind Platzhalter, bis Kirsten sie festlegt. Die
- * Kauf-Adressen (ThriveCart) bleiben leer, bis die Produkte dort angelegt
- * sind — solange führen die Abo-Knöpfe zur kostenlosen Registrierung, und
- * der Hinweis darunter sagt das offen dazu.
+ * ACHTUNG: Preise und Guthaben sind Platzhalter, bis Kirsten sie festlegt.
+ * Welcher Preis bei Stripe hinterlegt ist, steht nicht hier, sondern in den
+ * Umgebungsvariablen STRIPE_PREIS_STARTER und STRIPE_PREIS_PRO — solange die
+ * fehlen, führen die Abo-Knöpfe offen beschriftet zur Registrierung.
  */
 
 export type Tarif = {
@@ -14,8 +14,13 @@ export type Tarif = {
   preisHinweis: string
   beschreibung: string
   leistungen: string[]
-  /** Kauf-Adresse (ThriveCart). Leer: Knopf führt zur Registrierung. */
-  kaufUrl: string
+  /**
+   * Guthaben, das mit jedem bezahlten Monat aufgefüllt wird.
+   * Ein Credit ist ein Cent an Anbieterkosten: Eine Analyse kostet etwa 40,
+   * eine Recherche etwa 10. Die Zahl ist bewusst so gewählt, dass zwischen
+   * Preis und Anbieterkosten Luft für Support und Weiterentwicklung bleibt.
+   */
+  monatsguthaben: number
   /** Flächenfarbe der Karte — die Akzentfarben der Vorlage. */
   farbe: 'creme' | 'orange' | 'limette'
   hervorgehoben: boolean
@@ -34,7 +39,7 @@ export const TARIFE: Tarif[] = [
       'Startguthaben für echte Recherchen und Analysen',
       'Alle Berichte in der App lesbar',
     ],
-    kaufUrl: '',
+    monatsguthaben: 0,
     farbe: 'creme',
     hervorgehoben: false,
   },
@@ -50,7 +55,7 @@ export const TARIFE: Tarif[] = [
       'SEO4U-Browser-Extension',
       'Claude und ChatGPT direkt angebunden',
     ],
-    kaufUrl: '',
+    monatsguthaben: 1200,
     farbe: 'orange',
     hervorgehoben: true,
   },
@@ -66,7 +71,7 @@ export const TARIFE: Tarif[] = [
       'Wettbewerbs-Vergleiche und Verlauf',
       'Team-Zugänge für den Arbeitsbereich',
     ],
-    kaufUrl: '',
+    monatsguthaben: 4000,
     farbe: 'limette',
     hervorgehoben: false,
   },

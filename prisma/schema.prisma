@@ -22,6 +22,14 @@ model User {
   name         String?
   passwordHash String
   isSuperAdmin Boolean   @default(false)
+  /**
+   * Dateiname des Profilbilds im Upload-Verzeichnis.
+   * Nur der Name, kein Pfad – wo die Dateien liegen, entscheidet der Betrieb
+   * über eine Umgebungsvariable, nicht die Datenbank.
+   */
+  avatarDatei  String?
+  /** Wann die Einstiegstour zuletzt abgeschlossen wurde. */
+  tourGesehenAm DateTime?
   // Gesperrte Konten können sich nicht anmelden; bestehende Sitzungen werden
   // beim Sperren verworfen.
   suspendedAt  DateTime?
@@ -29,13 +37,37 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  memberships Membership[]
-  sessions    Session[]
-  apiTokens   ApiToken[]
-  auditLogs   AuditLog[]
-  invitations Invitation[] @relation("EingeladenVon")
+  memberships    Membership[]
+  sessions       Session[]
+  apiTokens      ApiToken[]
+  auditLogs      AuditLog[]
+  invitations    Invitation[]    @relation("EingeladenVon")
+  passwortHilfen PasswortHilfe[]
 
   @@map("users")
+}
+
+/**
+ * Einmal-Link zum Zurücksetzen des Passworts.
+ *
+ * Der Code steht in der Mail und ist damit ein Schlüssel: Gespeichert wird
+ * nur sein Hash, wie bei Sitzungen und Einladungen. Er gilt eine Stunde und
+ * genau einmal; eine neue Anforderung entwertet die älteren, damit nie
+ * mehrere Links gleichzeitig im Umlauf sind.
+ */
+model PasswortHilfe {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("passwort_hilfen")
 }
 
 model Session {
@@ -90,6 +122,19 @@ model Organization {
   credits   Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // --- Abo bei Stripe -------------------------------------------------------
+  // Die Wahrheit über ein Abo steht bei Stripe, nicht hier: Diese Felder sind
+  // eine Abschrift, die der Webhook aktuell hält. Sie tragen nie Kartendaten –
+  // die sieht diese Anwendung zu keinem Zeitpunkt.
+  stripeKundeId      String?   @unique
+  stripeAboId        String?
+  /** Zustand bei Stripe: active, trialing, past_due, canceled … */
+  aboStatus          String?
+  /** Ende des bezahlten Zeitraums – bis dahin gilt der Zugang. */
+  aboLaeuftBis       DateTime?
+  /** Gekündigt, läuft aber noch bis zum Periodenende. */
+  aboEndetMitPeriode Boolean   @default(false)
 
   memberships       Membership[]
   projects          Project[]

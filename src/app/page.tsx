@@ -4,6 +4,7 @@ import { Check } from 'lucide-react'
 import { getSession } from '@/lib/auth/session'
 import { isRegistrationOpen } from '@/lib/auth/actions'
 import { SchnellCheck } from '@/components/schnellcheck'
+import { VideoBereich } from '@/components/video-bereich'
 import { HeroVisual } from '@/components/hero-visual'
 import { Laufband } from '@/components/laufband'
 import { Funke } from '@/components/ui'
@@ -207,6 +208,9 @@ export default async function Startseite() {
         <SchnellCheck />
       </section>
 
+      {/* ================= VIDEO ================= */}
+      <VideoBereich />
+
       {/* ================= WAS GEMESSEN WIRD ================= */}
       <section className="flex flex-col gap-9 px-5 pb-20 sm:px-10 lg:px-16 lg:pb-24">
         <div className="flex max-w-[760px] flex-col gap-4">
@@ -292,19 +296,18 @@ export default async function Startseite() {
                 ))}
               </ul>
 
+              {/* Gebucht wird im Konto, nicht hier: Für ein Abo braucht es
+                  einen Arbeitsbereich. Deshalb führt jeder Knopf zuerst zur
+                  Anmeldung — auch der für die bezahlten Tarife. */}
               <Link
-                href={tarif.kaufUrl || (registrierungOffen ? '/register' : '/login')}
+                href={registrierungOffen ? '/register' : '/login'}
                 className="lift mt-7 rounded-full border-2 border-tinte bg-tinte px-6 py-4 text-center text-[16px] font-bold text-creme"
               >
-                {tarif.kennung === 'FREE'
-                  ? 'Kostenlos starten'
-                  : tarif.kaufUrl
-                    ? `${tarif.name} holen`
-                    : 'Kostenlos beginnen'}
+                {tarif.kennung === 'FREE' ? 'Kostenlos starten' : `Mit ${tarif.name} starten`}
               </Link>
-              {tarif.kennung !== 'FREE' && !tarif.kaufUrl && (
+              {tarif.kennung !== 'FREE' && (
                 <p className="mt-3 text-[13px] font-medium">
-                  Der Kauf-Weg wird gerade angeschlossen — starte kostenlos, das Upgrade folgt.
+                  Erst kostenlos anlegen, dann im Konto buchen — jederzeit kündbar.
                 </p>
               )}
             </div>

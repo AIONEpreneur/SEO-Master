@@ -42,8 +42,15 @@ export default async function LoginPage({
           <p className="mt-4 text-[14px] font-medium">Sichtbarkeit messen, statt sie zu vermuten.</p>
         </div>
         <LoginForm weiter={ziel} />
+
+        <p className="mt-5 text-center text-[14px] font-medium">
+          <Link href="/passwort-vergessen" className="font-bold underline decoration-2 underline-offset-2">
+            Passwort vergessen?
+          </Link>
+        </p>
+
         {registrierungOffen && (
-          <p className="mt-6 text-center text-[14px] font-medium">
+          <p className="mt-3 text-center text-[14px] font-medium">
             Noch kein Zugang?{' '}
             <Link href="/register" className="font-bold underline decoration-2 underline-offset-2">
               Kostenlos anlegen

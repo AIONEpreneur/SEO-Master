@@ -6,7 +6,9 @@ import { useState } from 'react'
 import {
   LayoutDashboard, FolderKanban, ScanSearch, FileText, Users2,
   KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp, Coins, ShieldCheck, Puzzle, ListOrdered,
+  UserRound, LifeBuoy,
 } from 'lucide-react'
+import { Avatar } from '@/components/avatar'
 import { cn } from '@/lib/utils/cn'
 import { logoutAction } from '@/lib/auth/actions'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -24,6 +26,7 @@ const NAVIGATION = [
       { href: '/analyses', label: 'Analysen', icon: FileText },
       { href: '/keywords', label: 'Keyword-Recherche', icon: TrendingUp },
       { href: '/rankings', label: 'Ranking-Abfragen', icon: ListOrdered },
+      { href: '/hilfe', label: 'Erste Schritte', icon: LifeBuoy },
     ],
   },
   {
@@ -36,6 +39,7 @@ const NAVIGATION = [
   {
     label: 'Einstellungen',
     items: [
+      { href: '/settings/profil', label: 'Mein Konto', icon: UserRound },
       { href: '/settings/team', label: 'Team', icon: Users2 },
       { href: '/settings/extension', label: 'Extension', icon: Puzzle },
     ],
@@ -188,10 +192,22 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
           <div className="mb-3 px-0.5">
             <ThemeToggle initial={theme} />
           </div>
-          <div className="mb-2 px-2">
-            <p className="truncate text-[13px] font-bold">{session.name ?? session.email}</p>
-            <p className="truncate text-[12px] text-ink-subtle">{session.organizationName}</p>
-          </div>
+          <Link
+            href="/settings/profil"
+            onClick={() => setOpen(false)}
+            className="mb-2 flex items-center gap-2.5 rounded-full border-2 border-transparent px-2 py-1.5 transition-colors hover:border-border hover:bg-surface-muted"
+          >
+            <Avatar
+              datei={session.avatarDatei}
+              name={session.name}
+              email={session.email}
+              size={32}
+            />
+            <span className="min-w-0">
+              <span className="block truncate text-[13px] font-bold">{session.name ?? session.email}</span>
+              <span className="block truncate text-[12px] text-ink-subtle">{session.organizationName}</span>
+            </span>
+          </Link>
           <form action={logoutAction}>
             <button
               type="submit"

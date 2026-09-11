@@ -7,6 +7,8 @@ import { providerLabel } from '@/lib/connectors/labels'
 import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge, StatusPill } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
 import { Onboarding } from '@/components/onboarding'
+import { Tour } from '@/components/tour'
+import { echteSitzung } from '@/lib/auth/session'
 import { verwaltetEigeneZugaenge, siehtAbrechnung, verbleibendeAnalysen } from '@/lib/billing/zugaenge'
 import { KOSTEN_ANALYSE } from '@/lib/billing/guthaben'
 import { wiederkehrendeBefunde } from '@/lib/analysis/wiederkehrend'
@@ -15,6 +17,11 @@ export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
   const session = await requireSession()
+  // Die Tour beim allerersten Besuch. Der Merker haengt am Konto, nicht am
+  // Browser: Wer sie am Rechner gesehen hat, bekommt sie am Telefon nicht
+  // noch einmal.
+  const konto = await echteSitzung()
+  const zeigeTour = Boolean(konto && !konto.tourGesehenAm)
 
   const [analyses, projectCount, completedCount, providers, geprueft, letzteErgebnisse] = await Promise.all([
     db.analysis.findMany({
@@ -52,14 +59,16 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Übersicht</h1>
-          <p className="mt-0.5 text-[13px] text-ink-muted">{session.organizationName}</p>
+          <h1 className="text-xl">Übersicht</h1>
+          <p className="mt-1 text-[13px] font-medium text-ink-muted">{session.organizationName}</p>
         </div>
         <ButtonLink href="/analyses/new">
           <ScanSearch size={16} />
           Neue Analyse
         </ButtonLink>
       </header>
+
+      {zeigeTour && <Tour />}
 
       <Onboarding organizationId={session.organizationId} eigeneZugaenge={eigeneZugaenge} />
 

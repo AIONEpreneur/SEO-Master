@@ -30,6 +30,29 @@ const schema = z.object({
   APIFY_TOKEN: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   PAGESPEED_API_KEY: z.string().optional(),
+
+  // --- Mail-Versand ---------------------------------------------------------
+  // Alles optional: Ohne Konfiguration läuft die Anwendung weiter, nur der
+  // Versand meldet sich ab. Ein fehlendes Postfach darf keine Anmeldung
+  // verhindern.
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(465),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  /** Absender, etwa: SEO-Master <kirsten@mail.beispiel.de> */
+  SMTP_FROM: z.string().optional(),
+
+  // --- Stripe ---------------------------------------------------------------
+  // Ebenfalls optional: Ohne Schlüssel bleibt der Abo-Bereich sichtbar, aber
+  // als "noch nicht eingerichtet" beschriftet, statt Fehler zu werfen.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  /** Preis-Kennungen aus dem Stripe-Katalog (price_…). */
+  STRIPE_PREIS_STARTER: z.string().optional(),
+  STRIPE_PREIS_PRO: z.string().optional(),
+
+  /** Wohin hochgeladene Profilbilder geschrieben werden. */
+  UPLOAD_VERZEICHNIS: z.string().default('/data/uploads'),
 })
 
 let cached: z.infer<typeof schema> | null = null
