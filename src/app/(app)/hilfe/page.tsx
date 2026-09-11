@@ -62,8 +62,8 @@ const BEREICHE = [
     icon: Puzzle,
     farbe: 'bg-sand',
     titel: 'Im Browser und in der KI arbeiten',
-    text: 'Die SEO4U-Extension zeigt auf jeder Website per Klick die Rankings. Und über die KI-Anbindung holen sich Claude oder ChatGPT deine Daten selbst — nach Anmeldung und deiner Zustimmung.',
-    tipp: 'Beides richtest du mit demselben Zugangsschlüssel ein.',
+    text: 'SEO4U hat drei Ebenen: Ebene 1 ist das Symbol in der Chrome-Leiste — Rankings jeder Website und Keyword-Recherche im Browser. Ebene 2 ist der lila SEO-Knopf unten rechts in Claude und ChatGPT: deine Prompt-Bibliothek, schon mit deinem Profil gefüllt. Ebene 3 ist diese App, in der alles zusammenläuft.',
+    tipp: 'Alle drei richtest du mit demselben Zugangsschlüssel ein. Und über die KI-Anbindung holen sich Claude oder ChatGPT deine Daten sogar selbst — nach Anmeldung und deiner Zustimmung.',
     ziel: { href: '/settings/extension', text: 'Zur Einrichtung' },
   },
 ]

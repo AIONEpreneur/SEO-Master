@@ -43,8 +43,8 @@ const SCHRITTE = [
   },
   {
     farbe: 'bg-creme',
-    titel: 'Mitnehmen: Extension und KI-Anbindung',
-    text: 'Die Browser-Extension zeigt Rankings auf jeder Website, und Claude oder ChatGPT holen sich deine Daten direkt. Beides richtest du unter Extension ein.',
+    titel: 'Mitnehmen: SEO4U in Browser und KI',
+    text: 'Die Erweiterung hat drei Ebenen: Rankings jeder Website im Browser, deine Prompt-Bibliothek in Claude und ChatGPT — und hier in der App läuft beides zusammen. Eingerichtet ist das in zwei Minuten.',
     ziel: { href: '/settings/extension', text: 'Zur Extension' },
   },
 ]

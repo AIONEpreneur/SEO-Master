@@ -29,12 +29,37 @@ export default async function ExtensionPage() {
       <header>
         <h1 className="text-xl font-semibold tracking-tight">Browser-Extension</h1>
         <p className="mt-0.5 max-w-2xl text-[13px] text-ink-muted">
-          Die SEO4U-Extension zeigt zu jeder besuchten Website die echten Google-Rankings, macht
-          Keyword-Recherchen direkt im Browser und bringt die SEO-Prompts nach Claude und ChatGPT.
-          Ihre Abfragen laufen über diesen Server und weisen sich mit einem persönlichen
-          Zugangsschlüssel aus.
+          Die SEO4U-Extension holt zu jeder besuchten Website die echten Google-Rankings und bringt
+          deine SEO-Prompts nach Claude und ChatGPT. Ihre Abfragen laufen über diesen Server und
+          weisen sich mit einem persönlichen Zugangsschlüssel aus.
         </p>
       </header>
+
+      {/*
+        Dieselbe Einteilung wie im Popup und im Prompt-Panel der Extension.
+        Wer die Erweiterung nur von einer Seite kennt — hier oder dort —,
+        hält sie sonst für das Ganze und sucht die anderen beiden Teile nie.
+      */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Ebene
+          nummer={1}
+          farbe="bg-orange"
+          titel="Im Browser"
+          text="Klick auf das SEO4U-Symbol: Rankings jeder Website und Keyword-Recherche, ohne die Seite zu verlassen."
+        />
+        <Ebene
+          nummer={2}
+          farbe="bg-limette"
+          titel="In Claude & ChatGPT"
+          text="Unten rechts ein lila SEO-Knopf: deine Prompt-Bibliothek, schon mit deinem Profil gefüllt."
+        />
+        <Ebene
+          nummer={3}
+          farbe="bg-rosa"
+          titel="Hier in der App"
+          text="Jede Abfrage aus Ebene 1 liegt auch hier — mit Verlauf, Projekten und vollständigen Berichten."
+        />
+      </div>
 
       <Card>
         <CardHeader
@@ -76,7 +101,7 @@ export default async function ExtensionPage() {
         <p className="text-[13px] font-medium">So wird die Extension verbunden</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-[13px] text-ink-muted">
           <li>Oben einen Zugangsschlüssel erzeugen und kopieren.</li>
-          <li>In Chrome auf das SEO4U-Icon klicken und den Reiter Einstellungen öffnen.</li>
+          <li>In Chrome auf das SEO4U-Symbol klicken und den Reiter „Konto“ öffnen.</li>
           <li>
             Als Daten-Zugang „SEO-Master-Konto“ wählen, den Schlüssel einfügen und speichern — der
             Knopf „Zugang testen“ bestätigt die Verbindung sofort.
@@ -116,6 +141,31 @@ export default async function ExtensionPage() {
           Schlüssel die Anmeldung, nur eben ohne eigenen Anmelde-Dialog.
         </p>
       </Card>
+    </div>
+  )
+}
+
+/** Eine der drei Ebenen — Nummer, Titel, ein Satz. Mehr passt nicht, mehr braucht es nicht. */
+function Ebene({
+  nummer,
+  farbe,
+  titel,
+  text,
+}: {
+  nummer: number
+  farbe: string
+  titel: string
+  text: string
+}) {
+  return (
+    <div className={`rounded-2xl border-2 border-border p-5 ${farbe}`}>
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-tinte bg-creme font-display text-[13px] text-tinte">
+          {nummer}
+        </span>
+        <p className="font-display text-[14px] uppercase leading-tight text-tinte">{titel}</p>
+      </div>
+      <p className="mt-2.5 text-[13px] font-medium leading-relaxed text-tinte">{text}</p>
     </div>
   )
 }
