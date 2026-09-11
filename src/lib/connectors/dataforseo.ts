@@ -97,12 +97,22 @@ export class DataForSeoClient {
     }
   }
 
-  /** Alle Keywords, für die eine Domain in den Top-100 rankt. */
+  /**
+   * Alle Keywords, für die eine Domain (oder eine einzelne URL) in den
+   * Top-100 rankt.
+   *
+   * Die optionalen Felder braucht die Browser-Extension: Sie fragt auch
+   * exakte Unterseiten ab, will nur organische Treffer und sortiert nach
+   * Platzierung statt nach Suchvolumen.
+   */
   async rankedKeywords(params: {
     target: string
     locationCode: number
     languageCode: string
     limit?: number
+    orderBy?: string[]
+    itemTypes?: string[]
+    includeSubdomains?: boolean
   }) {
     const result = await this.post<RankedKeywordsResult>(
       '/dataforseo_labs/google/ranked_keywords/live',
@@ -112,7 +122,11 @@ export class DataForSeoClient {
           location_code: params.locationCode,
           language_code: params.languageCode,
           limit: params.limit ?? 100,
-          order_by: ['keyword_data.keyword_info.search_volume,desc'],
+          order_by: params.orderBy ?? ['keyword_data.keyword_info.search_volume,desc'],
+          ...(params.itemTypes ? { item_types: params.itemTypes } : {}),
+          ...(params.includeSubdomains !== undefined
+            ? { include_subdomains: params.includeSubdomains }
+            : {}),
         },
       ],
     )

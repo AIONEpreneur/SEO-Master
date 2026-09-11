@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, FolderKanban, ScanSearch, FileText, Users2,
-  KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp, Coins, ShieldCheck,
+  KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp, Coins, ShieldCheck, Puzzle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { logoutAction } from '@/lib/auth/actions'
@@ -34,7 +34,10 @@ const NAVIGATION = [
   },
   {
     label: 'Einstellungen',
-    items: [{ href: '/settings/team', label: 'Team', icon: Users2 }],
+    items: [
+      { href: '/settings/team', label: 'Team', icon: Users2 },
+      { href: '/settings/extension', label: 'Extension', icon: Puzzle },
+    ],
   },
 ]
 

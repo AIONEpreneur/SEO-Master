@@ -31,6 +31,7 @@ model User {
 
   memberships Membership[]
   sessions    Session[]
+  apiTokens   ApiToken[]
   auditLogs   AuditLog[]
   invitations Invitation[] @relation("EingeladenVon")
 
@@ -53,6 +54,32 @@ model Session {
   @@map("sessions")
 }
 
+/**
+ * Persönlicher Zugangsschlüssel für die Browser-Extension (SEO4U).
+ *
+ * Anders als eine Sitzung läuft er nicht ab und hängt an keinem Cookie: Die
+ * Extension schickt ihn als Bearer-Token mit. Gespeichert wird nur der Hash –
+ * der Klartext ist einmal beim Erzeugen sichtbar, wie bei den Einladungen.
+ * Widerrufen statt löschen, damit nachvollziehbar bleibt, dass es ihn gab.
+ */
+model ApiToken {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String
+  tokenHash      String    @unique
+  name           String
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("api_tokens")
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -73,6 +100,7 @@ model Organization {
   keywordResearches KeywordResearch[]
   invitations       Invitation[]
   erledigteBefunde  ErledigterBefund[]
+  apiTokens         ApiToken[]
 
   @@map("organizations")
 }
