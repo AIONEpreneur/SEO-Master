@@ -2,7 +2,17 @@
 #
 # Neuen Stand holen und übernehmen.
 #
-#   bash /home/seomaster/app/deploy/update.sh
+#   sudo bash /home/seomaster/app/deploy/update.sh
+#
+# Holt standardmässig den Zweig, auf dem die Installation gerade steht. Soll
+# sie auf einen anderen wechseln – etwa auf einen Entwicklungszweig oder
+# zurück auf main –, wird er vorangestellt:
+#
+#   sudo ZWEIG=main bash /home/seomaster/app/deploy/update.sh
+#
+# Das ersetzt den früheren Weg, den Zweig von Hand auszuchecken und dann das
+# Skript zu starten: zwei Schritte, von denen der erste gern vergessen wurde.
+# Dann lief das Update sauber durch und rollte den alten Stand aus.
 #
 # Muss als root laufen. Holt die Änderungen als der Benutzer, dem das
 # Verzeichnis gehört – Git verweigert sonst die Arbeit in einem Verzeichnis
@@ -28,10 +38,18 @@ COMPOSE="docker-compose.prod.yml"
 VORHER="$(su - "$BENUTZER" -c "cd $ZIEL && git rev-parse --short HEAD" 2>/dev/null)"
 
 schritt "Neuen Stand holen"
-ZWEIG="$(su - "$BENUTZER" -c "cd $ZIEL && git rev-parse --abbrev-ref HEAD" 2>/dev/null)"
-if ! su - "$BENUTZER" -c "cd $ZIEL && git fetch origin $ZWEIG && git reset --hard origin/$ZWEIG" >/dev/null 2>&1; then
+JETZIGER="$(su - "$BENUTZER" -c "cd $ZIEL && git rev-parse --abbrev-ref HEAD" 2>/dev/null)"
+ZWEIG="${ZWEIG:-$JETZIGER}"
+[ "$ZWEIG" = "$JETZIGER" ] || ok "Zweig: $JETZIGER → $ZWEIG"
+
+# checkout -B statt reset --hard: Steht die Installation auf einem anderen
+# Zweig, würde reset den alten Zweignamen heimlich auf den neuen Stand
+# ziehen. Danach hiesse der Zweig noch wie vorher und enthielte etwas
+# anderes – ein Zustand, in dem sich niemand mehr zurechtfindet.
+if ! su - "$BENUTZER" -c "cd $ZIEL && git fetch origin $ZWEIG && git checkout -B $ZWEIG origin/$ZWEIG" >/dev/null 2>&1; then
   abbruch "Der neue Stand liess sich nicht holen." \
-"Von Hand ansehen:  su - $BENUTZER -c 'cd $ZIEL && git pull'"
+"Gibt es den Zweig '$ZWEIG' auf GitHub? Von Hand ansehen:
+  su - $BENUTZER -c 'cd $ZIEL && git fetch origin && git branch -r'"
 fi
 
 NACHHER="$(su - "$BENUTZER" -c "cd $ZIEL && git rev-parse --short HEAD" 2>/dev/null)"
