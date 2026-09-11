@@ -12,6 +12,9 @@ import { echteSitzung } from '@/lib/auth/session'
 import { verwaltetEigeneZugaenge, siehtAbrechnung, verbleibendeAnalysen } from '@/lib/billing/zugaenge'
 import { KOSTEN_ANALYSE } from '@/lib/billing/guthaben'
 import { wiederkehrendeBefunde } from '@/lib/analysis/wiederkehrend'
+import { Begruessung } from '@/components/begruessung'
+import { NeuigkeitenAufsteller } from '@/components/neuigkeiten-aufsteller'
+import { ungeleseneNeuigkeiten } from '@/lib/neuigkeiten'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +25,14 @@ export default async function DashboardPage() {
   // noch einmal.
   const konto = await echteSitzung()
   const zeigeTour = Boolean(konto && !konto.tourGesehenAm)
+
+  // Die Neuigkeiten gehören zur angemeldeten Person, nicht zum gezeigten
+  // Bereich — und sie warten, bis die Einstiegstour vorbei ist. Zwei
+  // Aufsteller übereinander beim allerersten Anmelden wären keine Begrüssung,
+  // sondern ein Hindernis.
+  const neuigkeiten = konto && !zeigeTour && !session.nurAnsicht
+    ? await ungeleseneNeuigkeiten(konto)
+    : []
 
   const [analyses, projectCount, completedCount, providers, geprueft, letzteErgebnisse] = await Promise.all([
     db.analysis.findMany({
@@ -59,7 +70,9 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl">Übersicht</h1>
+          <h1 className="text-xl">
+            <Begruessung name={session.name} />
+          </h1>
           <p className="mt-1 text-[13px] font-medium text-ink-muted">{session.organizationName}</p>
         </div>
         <ButtonLink href="/analyses/new">
@@ -69,6 +82,7 @@ export default async function DashboardPage() {
       </header>
 
       {zeigeTour && <Tour />}
+      {neuigkeiten.length > 0 && <NeuigkeitenAufsteller neuigkeiten={neuigkeiten} />}
 
       <Onboarding organizationId={session.organizationId} eigeneZugaenge={eigeneZugaenge} />
 

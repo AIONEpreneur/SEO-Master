@@ -6,7 +6,7 @@ import { useState } from 'react'
 import {
   LayoutDashboard, FolderKanban, ScanSearch, FileText, Users2,
   KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp, Coins, ShieldCheck, Puzzle, ListOrdered,
-  UserRound, LifeBuoy, Eye,
+  UserRound, LifeBuoy, Eye, Megaphone, Lightbulb,
 } from 'lucide-react'
 import { vorschauBereichAction } from '@/lib/auth/ansicht'
 import { Avatar } from '@/components/avatar'
@@ -38,6 +38,13 @@ const NAVIGATION = [
     ],
   },
   {
+    label: 'Austausch',
+    items: [
+      { href: '/neuigkeiten', label: 'Neuigkeiten', icon: Megaphone },
+      { href: '/wuensche', label: 'Wünsche', icon: Lightbulb },
+    ],
+  },
+  {
     label: 'Einstellungen',
     items: [
       { href: '/settings/profil', label: 'Mein Konto', icon: UserRound },
@@ -60,10 +67,22 @@ const VERBRAUCH = { href: '/settings/usage', label: 'Verbrauch', icon: Receipt }
  */
 const BETRIEB = {
   label: 'Betrieb',
-  items: [{ href: '/admin', label: 'Betriebsübersicht', icon: ShieldCheck }],
+  items: [
+    { href: '/admin', label: 'Betriebsübersicht', icon: ShieldCheck },
+    { href: '/admin/wuensche', label: 'Alle Wünsche', icon: Lightbulb },
+  ],
 }
 
-export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme }) {
+export function Sidebar({
+  session,
+  theme,
+  ungeleseneNeuigkeiten = 0,
+}: {
+  session: SessionUser
+  theme: Theme
+  /** Ungelesene Einträge — die Zahl steht neben dem Menüpunkt. */
+  ungeleseneNeuigkeiten?: number
+}) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
@@ -147,7 +166,22 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
                       )}
                     >
                       <item.icon size={16} className="shrink-0" />
-                      {item.label}
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      {/*
+                        Die Zahl steht nur, solange sie etwas sagt. Eine
+                        Null neben "Neuigkeiten" ist keine Information,
+                        sondern ein Fleck.
+                      */}
+                      {item.href === '/neuigkeiten' && ungeleseneNeuigkeiten > 0 && (
+                        <span
+                          className={cn(
+                            'shrink-0 rounded-full border-2 border-border px-1.5 text-[11px] font-bold tabular-nums',
+                            active ? 'bg-creme text-tinte' : 'bg-limette text-tinte',
+                          )}
+                        >
+                          {ungeleseneNeuigkeiten}
+                        </span>
+                      )}
                     </Link>
                   )
                 })}

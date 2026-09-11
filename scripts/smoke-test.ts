@@ -19,6 +19,7 @@ import { analyzeAeo } from '../src/lib/analysis/aeo'
 import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
 import { keywordKandidaten } from '../src/lib/analysis/run'
+import { begruessung, vorname } from '../src/lib/begruessung'
 import {
   MARKTGRUPPEN,
   MAERKTE,
@@ -843,6 +844,34 @@ async function main() {
       !nameIstGueltig('bild.png') &&
       nameIstGueltig('0123456789abcdef0123456789abcdef.png'),
     '32 Hex-Zeichen und eine erlaubte Endung',
+  )
+
+  // --- Anrede ---------------------------------------------------------------
+  //
+  // Eine Begrüssung, die danebengeht, ist schlimmer als keine: "Guten Morgen,
+  // k.biema+seo" oder "Guten Morgen, Dr." fällt sofort auf und wirkt
+  // maschinell.
+  section('Die Anrede geht nicht daneben')
+
+  check('Der Vorname genügt', vorname('Kirsten Biema') === 'Kirsten')
+  check('Ein Titel ist kein Name', vorname('Dr. Kirsten Biema') === 'Kirsten', vorname('Dr. Kirsten Biema') ?? 'null')
+  check('Auch ohne Punkt', vorname('Prof Anna Meier') === 'Anna')
+  check('Ohne Namen keine Anrede', vorname(null) === null && vorname('  ') === null)
+  check('Ein einzelner Buchstabe ist kein Name', vorname('K') === null)
+
+  check(
+    'Ohne Namen wird niemand mit seiner Adresse begrüsst',
+    begruessung(null, 9) === 'Guten Morgen',
+    begruessung(null, 9),
+  )
+  check('Morgens', begruessung('Kirsten Biema', 8) === 'Guten Morgen, Kirsten')
+  check('Mittags', begruessung('Kirsten Biema', 14) === 'Hallo, Kirsten')
+  check('Abends', begruessung('Kirsten Biema', 20) === 'Guten Abend, Kirsten')
+  check('Nachts', begruessung('Kirsten Biema', 2) === 'Gute Nacht, Kirsten')
+  check(
+    'Ohne Tageszeit bleibt es allgemein',
+    begruessung('Kirsten Biema') === 'Hallo, Kirsten' && begruessung(null) === 'Schön, dass du da bist',
+    'so rendert der Server, bevor der Browser die Stunde kennt',
   )
 
   // --- Märkte ---------------------------------------------------------------

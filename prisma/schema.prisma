@@ -17,25 +17,36 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String?
-  passwordHash String
-  isSuperAdmin Boolean   @default(false)
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  name                 String?
+  passwordHash         String
+  isSuperAdmin         Boolean   @default(false)
   /**
    * Dateiname des Profilbilds im Upload-Verzeichnis.
    * Nur der Name, kein Pfad – wo die Dateien liegen, entscheidet der Betrieb
    * über eine Umgebungsvariable, nicht die Datenbank.
    */
-  avatarDatei  String?
-  /** Wann die Einstiegstour zuletzt abgeschlossen wurde. */
-  tourGesehenAm DateTime?
+  avatarDatei          String?
+  /**
+   * Wann die Einstiegstour zuletzt abgeschlossen wurde.
+   */
+  tourGesehenAm        DateTime?
+  /**
+   * Bis wann die Neuigkeiten gelesen wurden.
+   * Der Merker hängt am Konto und nicht am Browser: Wer die Meldung am
+   * Rechner weggeklickt hat, soll sie am Telefon nicht noch einmal
+   * vorgesetzt bekommen. Leer heisst "noch nie hingesehen" – dann gilt die
+   * Anmeldung als Stichtag, damit niemand beim ersten Login von zwei Jahren
+   * Änderungshistorie erschlagen wird.
+   */
+  neuigkeitenGesehenAm DateTime?
   // Gesperrte Konten können sich nicht anmelden; bestehende Sitzungen werden
   // beim Sperren verworfen.
-  suspendedAt  DateTime?
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  suspendedAt          DateTime?
+  lastLoginAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   memberships    Membership[]
   sessions       Session[]
@@ -43,13 +54,84 @@ model User {
   auditLogs      AuditLog[]
   invitations    Invitation[]    @relation("EingeladenVon")
   passwortHilfen PasswortHilfe[]
+  wuensche       Wunsch[]
+  neuigkeiten    Neuigkeit[]     @relation("VerfasstVon")
 
   @@map("users")
 }
 
 /**
+ * Was sich in der Anwendung geändert hat.
+ * Gepflegt vom Betrieb, gelesen von allen. Der Zweck ist nicht Werbung,
+ * sondern Verlässlichkeit: Wer eine Woche nicht da war und plötzlich einen
+ * neuen Knopf vorfindet, soll nachlesen können, woher er kommt.
+ */
+model Neuigkeit {
+  id                String       @id @default(cuid())
+  art               NeuigkeitArt @default(NEU)
+  titel             String
+  /**
+   * Fliesstext, ein bis drei Sätze. Keine Formatierung, keine Überschriften.
+   */
+  text              String
+  /**
+   * Ab wann sie sichtbar ist. Getrennt von createdAt, damit sich ein
+   * Eintrag vorbereiten lässt, ohne dass er sofort erscheint.
+   */
+  veroeffentlichtAm DateTime     @default(now())
+  verfasstVonId     String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  verfasstVon User? @relation("VerfasstVon", fields: [verfasstVonId], references: [id], onDelete: SetNull)
+
+  @@index([veroeffentlichtAm])
+  @@map("neuigkeiten")
+}
+
+enum NeuigkeitArt {
+  NEU
+  VERBESSERT
+  BEHOBEN
+}
+
+/**
+ * Ein Wunsch für eine künftige Funktion.
+ * Gehört dem Arbeitsbereich, nicht der Anwendung: Eine Kundin sieht ihre
+ * eigenen Wünsche und die ihres Teams, nie die einer anderen. Der Betrieb
+ * sieht alle – nur so lässt sich erkennen, was mehrfach gewünscht wird.
+ */
+model Wunsch {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?
+  titel          String
+  text           String
+  status         WunschStatus @default(OFFEN)
+  /**
+   * Antwort des Betriebs. Steht beim Wunsch, nicht in einer Mail.
+   */
+  antwort        String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("wuensche")
+}
+
+enum WunschStatus {
+  OFFEN
+  GEPLANT
+  UMGESETZT
+  ABGELEHNT
+}
+
+/**
  * Einmal-Link zum Zurücksetzen des Passworts.
- *
  * Der Code steht in der Mail und ist damit ein Schlüssel: Gespeichert wird
  * nur sein Hash, wie bei Sitzungen und Einladungen. Er gilt eine Stunde und
  * genau einmal; eine neue Anforderung entwertet die älteren, damit nie
@@ -88,7 +170,6 @@ model Session {
 
 /**
  * Persönlicher Zugangsschlüssel für die Browser-Extension (SEO4U).
- *
  * Anders als eine Sitzung läuft er nicht ab und hängt an keinem Cookie: Die
  * Extension schickt ihn als Bearer-Token mit. Gespeichert wird nur der Hash –
  * der Klartext ist einmal beim Erzeugen sichtbar, wie bei den Einladungen.
@@ -129,11 +210,17 @@ model Organization {
   // die sieht diese Anwendung zu keinem Zeitpunkt.
   stripeKundeId      String?   @unique
   stripeAboId        String?
-  /** Zustand bei Stripe: active, trialing, past_due, canceled … */
+  /**
+   * Zustand bei Stripe: active, trialing, past_due, canceled …
+   */
   aboStatus          String?
-  /** Ende des bezahlten Zeitraums – bis dahin gilt der Zugang. */
+  /**
+   * Ende des bezahlten Zeitraums – bis dahin gilt der Zugang.
+   */
   aboLaeuftBis       DateTime?
-  /** Gekündigt, läuft aber noch bis zum Periodenende. */
+  /**
+   * Gekündigt, läuft aber noch bis zum Periodenende.
+   */
   aboEndetMitPeriode Boolean   @default(false)
 
   memberships       Membership[]
@@ -145,6 +232,7 @@ model Organization {
   keywordResearches KeywordResearch[]
   invitations       Invitation[]
   erledigteBefunde  ErledigterBefund[]
+  wuensche          Wunsch[]
   apiTokens         ApiToken[]
   rankingLookups    RankingLookup[]
 
@@ -295,12 +383,10 @@ model Project {
   locationCode   Int        @default(2276) // Deutschland
   /**
    * Alle Märkte des Projekts, der führende eingeschlossen.
-   *
    * Wer für den DACH-Raum arbeitet, trägt hier Deutschland, Österreich und
    * die Schweiz ein. Gemessen wird trotzdem je Land einzeln: Beim
    * Datenanbieter ist das Land die grösste Einheit, und ein Mittelwert über
    * drei Länderindizes entspräche keiner Suchanfrage.
-   *
    * Leer heisst: nur der führende Markt. So verhalten sich Projekte, die vor
    * dieser Erweiterung entstanden sind, unverändert.
    */
@@ -550,7 +636,6 @@ model KeywordResearch {
 
 /**
  * Ein bei diesem Server registrierter OAuth-Client (Claude, ChatGPT, …).
- *
  * MCP-Clients registrieren sich selbst (Dynamic Client Registration), bevor
  * sie den Anmelde-Fluss starten. Es sind öffentliche Clients ohne Geheimnis;
  * die Sicherheit liegt in PKCE und der geprüften Rücksprungadresse.
@@ -568,7 +653,6 @@ model OAuthClient {
 
 /**
  * Einmal-Code aus dem Anmelde-Fluss.
- *
  * Entsteht, wenn eine angemeldete Person den Zugriff bestätigt, und wird am
  * Token-Endpunkt gegen einen Zugangsschlüssel eingetauscht – genau einmal,
  * binnen zehn Minuten, mit PKCE-Nachweis. Gespeichert ist nur der Hash.
@@ -592,7 +676,6 @@ model OAuthCode {
 
 /**
  * Ranking-Abfrage aus der Browser-Extension (SEO4U).
- *
  * Jede Abfrage im Popup – Rankings einer Domain oder einer exakten
  * Unterseite – wird hier abgelegt, damit sie im eigenen Arbeitsbereich
  * wiederauffindbar ist und die Arbeit in der App weitergehen kann.
@@ -601,15 +684,23 @@ model RankingLookup {
   id             String   @id @default(cuid())
   organizationId String
   createdById    String?
-  /** Domain oder vollständige Adresse der Unterseite. */
+  /**
+   * Domain oder vollständige Adresse der Unterseite.
+   */
   target         String
-  /** 'domain' oder 'seite' – was abgefragt wurde. */
+  /**
+   * 'domain' oder 'seite' – was abgefragt wurde.
+   */
   scope          String   @default("domain")
   locationCode   Int      @default(2276)
   languageCode   String   @default("de")
-  /** Rankende Keywords insgesamt (Top 100), auch über die Liste hinaus. */
+  /**
+   * Rankende Keywords insgesamt (Top 100), auch über die Liste hinaus.
+   */
   totalCount     Int      @default(0)
-  /** Die abgerufenen Platzierungen ({rank, keyword, sv, path}[]). */
+  /**
+   * Die abgerufenen Platzierungen ({rank, keyword, sv, path}[]).
+   */
   items          Json
   creditsUsed    Int      @default(0)
   createdAt      DateTime @default(now())
