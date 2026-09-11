@@ -22,6 +22,9 @@ import { analyzeSocial } from '../src/lib/analysis/social'
 import {
   fuehreZusammen, fasseZusammen, leseVerlauf, lohnendeBegriffe, vergleichsform,
 } from '../src/lib/keywords/research'
+import { rechercheAlsText, rechercheAlsCsv } from '../src/lib/keywords/export'
+import { beantworteMcp } from '../src/lib/mcp/server'
+import type { TokenKontext } from '../src/lib/auth/api-token'
 import { deckungsgrad, enthaeltBegriff, grundform, teileMarke, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
 import { beurteile, begriffsBefund, beurteileSerpUmfeld, istZuAllgemein, messbare } from '../src/lib/analysis/keyword-pruefung'
 import { beurteileKanonisch, kanonischerBefund, kanonischeNote } from '../src/lib/analysis/kanonisch'
@@ -103,7 +106,7 @@ function report(pages: ReturnType<typeof analyzePage>[]) {
   }
 }
 
-function main() {
+async function main() {
   testVault()
 
   const dir = join(__dirname, 'fixtures')
@@ -689,6 +692,103 @@ function main() {
     'Fuerwoerter werden nicht mehr zum Keyword',
     tragenderBegriff('Ich zeige dir, wie du mit KI arbeitest') !== 'ich zeige dir',
     `abgeleitet wuerde: ${tragenderBegriff('Ich zeige dir, wie du mit KI arbeitest') ?? 'nichts'}`,
+  )
+
+  section('Die Recherche laesst sich mitnehmen — mit Verlauf')
+
+  const kiExportZeilen = [
+    {
+      begriff: 'ki beratung',
+      suchvolumen: 2400,
+      klickpreis: 4.2,
+      anzeigenwert: 10080,
+      wettbewerb: 'niedrig' as const,
+      schwierigkeit: 28,
+      absicht: 'vergleich' as const,
+      trendJahr: 22,
+      verlauf: [1900, 2000, 2100, 2200, 2400, 2400, 2300, 2400, 2500, 2400, 2400, 2400],
+    },
+    {
+      begriff: 'was kostet ki beratung',
+      suchvolumen: 320,
+      klickpreis: 0,
+      anzeigenwert: 0,
+      wettbewerb: null,
+      schwierigkeit: null,
+      absicht: 'information' as const,
+      trendJahr: null,
+      verlauf: [],
+    },
+  ]
+  const kiExportText = rechercheAlsText({
+    seed: 'ki beratung',
+    datum: new Date('2026-09-11'),
+    zeilen: kiExportZeilen,
+    summary: fasseZusammen(kiExportZeilen),
+  })
+  check('Der KI-Text traegt Kopfzeile und Markt', /Google Deutschland/.test(kiExportText))
+  check(
+    'Der Zwoelfmonatsverlauf steht im KI-Text',
+    kiExportText.includes('1900, 2000, 2100'),
+    'genau der fehlt sonst in jeder Abschrift',
+  )
+  check('Fehlende Werte heissen k. A., nicht null', kiExportText.includes('k. A.') && !kiExportText.includes('null'))
+
+  const kiExportCsv = rechercheAlsCsv(kiExportZeilen)
+  check('CSV beginnt mit BOM und trennt per Semikolon', kiExportCsv.charCodeAt(0) === 0xfeff && kiExportCsv.includes(';'))
+  check('CSV nutzt das deutsche Dezimalkomma', kiExportCsv.includes('4,20'))
+  check(
+    'Der Verlauf steht als ein Feld in der CSV',
+    kiExportCsv.includes(';1900, 2000, 2100'),
+    'bei Semikolon-Trennung sind Kommas im Feld unschaedlich',
+  )
+
+  section('MCP-Anbindung spricht das Protokoll')
+
+  const mcpKontext = {
+    tokenId: 'tok',
+    userId: 'user',
+    userName: 'Kirsten',
+    organization: { id: 'org', name: 'Testbereich', plan: 'INTERNAL', credits: 0 },
+  } as unknown as TokenKontext
+
+  const initAntwort = (await beantworteMcp(mcpKontext, {
+    id: 1,
+    method: 'initialize',
+    params: { protocolVersion: '2025-03-26' },
+  })) as { result?: { protocolVersion?: string; capabilities?: { tools?: object } } }
+  check('initialize spiegelt eine bekannte Protokollfassung', initAntwort.result?.protocolVersion === '2025-03-26')
+  check('initialize meldet Werkzeug-Faehigkeit', initAntwort.result?.capabilities?.tools !== undefined)
+
+  const listAntwort = (await beantworteMcp(mcpKontext, { id: 2, method: 'tools/list' })) as {
+    result?: { tools?: Array<{ name: string; inputSchema?: unknown }> }
+  }
+  const werkzeuge = listAntwort.result?.tools ?? []
+  check('Sieben Werkzeuge, jedes mit Eingabeschema', werkzeuge.length === 7 && werkzeuge.every((w) => w.inputSchema))
+  check(
+    'Recherche und Rankings sind abrufbar UND startbar',
+    ['keyword_recherche', 'recherche_abrufen', 'ranking_abfrage', 'ranking_abfrage_abrufen'].every((n) =>
+      werkzeuge.some((w) => w.name === n),
+    ),
+  )
+
+  check(
+    'Eine Notification bekommt keine Antwort',
+    (await beantworteMcp(mcpKontext, { method: 'notifications/initialized' })) === null,
+  )
+  const unbekannt = (await beantworteMcp(mcpKontext, { id: 3, method: 'gibtsnicht' })) as {
+    error?: { code?: number }
+  }
+  check('Unbekannte Methoden melden -32601', unbekannt.error?.code === -32601)
+
+  const statusAufruf = (await beantworteMcp(mcpKontext, {
+    id: 4,
+    method: 'tools/call',
+    params: { name: 'konto_status', arguments: {} },
+  })) as { result?: { content?: Array<{ text?: string }> } }
+  check(
+    'konto_status nennt den Arbeitsbereich',
+    (statusAufruf.result?.content?.[0]?.text ?? '').includes('Testbereich'),
   )
 
   section('Eingebettete Frames sind nicht der Inhalt der Seite')
@@ -2071,8 +2171,8 @@ if (liveUrl) {
       console.log(`  ${module.module}: ${module.score.toFixed(1)}/10 (${module.label}), ${module.findings.length} Befunde`)
     }
     console.log()
-    main()
+    await main()
   })()
 } else {
-  main()
+  void main()
 }

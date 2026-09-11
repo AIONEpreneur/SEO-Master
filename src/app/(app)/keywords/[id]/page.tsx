@@ -10,7 +10,9 @@ import {
   type KeywordZeile,
   type Zusammenfassung,
 } from '@/lib/keywords/research'
+import { rechercheAlsText } from '@/lib/keywords/export'
 import { KeywordTabelle } from './table'
+import { ExportKnoepfe } from './export-knoepfe'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,20 +39,30 @@ export default async function KeywordResearchPage({ params }: { params: Promise<
     ? Math.round((summary.suchenMitKaufabsicht / summary.suchenGesamt) * 100)
     : 0
 
+  const exportText = rechercheAlsText({
+    seed: research.seed,
+    datum: research.createdAt,
+    zeilen,
+    summary,
+  })
+
   return (
     <div className="space-y-6">
-      <div>
-        <Link href="/keywords" className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-ink-muted hover:text-ink">
-          <ArrowLeft size={14} />
-          Alle Recherchen
-        </Link>
-        <h1 className="text-xl font-semibold tracking-tight">{research.seed}</h1>
-        <p className="mt-0.5 text-[13px] text-ink-muted">
-          {MARKTNAMEN[research.locationCode] ?? research.locationCode} ·{' '}
-          {research.createdAt.toLocaleString('de-DE', {
-            day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
-          })}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Link href="/keywords" className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-ink-muted hover:text-ink">
+            <ArrowLeft size={14} />
+            Alle Recherchen
+          </Link>
+          <h1 className="text-xl font-semibold tracking-tight">{research.seed}</h1>
+          <p className="mt-0.5 text-[13px] text-ink-muted">
+            {MARKTNAMEN[research.locationCode] ?? research.locationCode} ·{' '}
+            {research.createdAt.toLocaleString('de-DE', {
+              day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+            })}
+          </p>
+        </div>
+        <ExportKnoepfe text={exportText} csvUrl={`/api/keywords/${research.id}/csv`} />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

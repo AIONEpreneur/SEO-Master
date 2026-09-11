@@ -8,6 +8,7 @@ import { Button, Card, Input, Label } from '@/components/ui'
 export function TokenVerwaltung() {
   const [state, formAction, pending] = useActionState<TokenState, FormData>(erzeugeTokenAction, {})
   const [kopiert, setKopiert] = useState(false)
+  const [mcpKopiert, setMcpKopiert] = useState(false)
 
   return (
     <Card className="p-5">
@@ -56,6 +57,29 @@ export function TokenVerwaltung() {
             >
               {kopiert ? <Check size={14} /> : <Copy size={14} />}
               {kopiert ? 'Kopiert' : 'Kopieren'}
+            </Button>
+          </div>
+
+          <p className="mt-4 text-[12px] text-ink-muted">
+            Derselbe Schlüssel verbindet auch Claude und ChatGPT direkt mit SEO-Master (MCP) — dafür
+            diese Adresse als Connector eintragen:
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded bg-surface px-2.5 py-2 text-[12px]">
+              {`${typeof window !== 'undefined' ? window.location.origin : ''}/api/mcp/${state.token}`}
+            </code>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard.writeText(`${window.location.origin}/api/mcp/${state.token}`)
+                setMcpKopiert(true)
+                setTimeout(() => setMcpKopiert(false), 2000)
+              }}
+            >
+              {mcpKopiert ? <Check size={14} /> : <Copy size={14} />}
+              {mcpKopiert ? 'Kopiert' : 'Kopieren'}
             </Button>
           </div>
         </div>

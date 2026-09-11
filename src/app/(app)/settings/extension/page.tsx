@@ -82,6 +82,32 @@ export default async function ExtensionPage() {
           </li>
         </ol>
       </Card>
+
+      <Card className="p-5">
+        <p className="text-[13px] font-medium">Claude und ChatGPT direkt verbinden (MCP)</p>
+        <p className="mt-2 text-[13px] text-ink-muted">
+          Über das Model Context Protocol greifen die KI-Werkzeuge selbst auf SEO-Master zu:
+          gespeicherte Recherchen und Ranking-Abfragen abrufen (kostenlos) oder neue starten
+          (verbraucht Kontingent, wird hier gespeichert). Die MCP-Adresse erscheint zusammen mit
+          jedem neu erzeugten Schlüssel — sie enthält den Schlüssel und ist deshalb genauso
+          vertraulich zu behandeln.
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-[13px] text-ink-muted">
+          <li>
+            <span className="font-medium">Claude:</span> Einstellungen → Connectors → „Eigenen
+            Connector hinzufügen“ → die MCP-Adresse einfügen. Danach stehen die SEO-Master-Werkzeuge
+            in jedem Chat zur Verfügung.
+          </li>
+          <li>
+            <span className="font-medium">ChatGPT:</span> Einstellungen → Apps &amp; Connectors →
+            Entwicklermodus aktivieren → Connector mit der MCP-Adresse anlegen (ohne Authentifizierung —
+            der Schlüssel steckt in der Adresse).
+          </li>
+        </ul>
+        <p className="mt-2 text-[12px] text-ink-subtle">
+          Ein Widerruf des Schlüssels oben trennt auch diese Verbindung sofort.
+        </p>
+      </Card>
     </div>
   )
 }

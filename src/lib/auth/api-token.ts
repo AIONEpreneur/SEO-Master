@@ -20,6 +20,16 @@ export type TokenKontext = {
 export async function resolveApiToken(request: Request): Promise<TokenKontext | null> {
   const header = request.headers.get('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
+  return resolveApiTokenWert(token)
+}
+
+/**
+ * Denselben Schlüssel als blossen Wert auflösen – für die MCP-Anbindung,
+ * bei der der Schlüssel in der Adresse steht statt im Authorization-Header
+ * (die Verbindungs-Dialoge von Claude und ChatGPT nehmen nur eine Adresse
+ * entgegen, keine eigenen Header).
+ */
+export async function resolveApiTokenWert(token: string): Promise<TokenKontext | null> {
   if (!token) return null
 
   const eintrag = await db.apiToken.findUnique({
