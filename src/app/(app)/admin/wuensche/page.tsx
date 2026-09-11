@@ -4,7 +4,8 @@ import { requireSuperAdmin } from '@/lib/admin/wache'
 import { db } from '@/lib/db'
 import { Card, CardHeader, EmptyState } from '@/components/ui'
 import { STATUS_LABEL, STATUS_FARBE, STATUS_WERTE } from '@/lib/wuensche'
-import { beantworteWunsch } from '@/lib/wuensche/actions'
+import { beantworteWunsch, sendeWebhookProbe } from '@/lib/wuensche/actions'
+import { webhookEingerichtet } from '@/lib/benachrichtigung/webhook'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +54,37 @@ export default async function AdminWuenscheSeite() {
             : `${offen} ${offen === 1 ? 'Wunsch wartet' : 'Wünsche warten'} auf eine Antwort.`}
         </p>
       </header>
+
+      {/*
+        Der Webhook meldet jeden neuen Wunsch nach draussen — dort baut ein
+        Workflow daraus, was gebraucht wird: eine Slack-Nachricht, eine
+        Zeile in einer Tabelle, was auch immer. Die Probe gibt es, damit
+        sich das einrichten lässt, ohne auf einen echten Wunsch zu warten;
+        sonst wird zum Testen einer eingetragen, und der steht danach in
+        den Daten einer Kundin.
+      */}
+      <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
+        <div className="min-w-0">
+          <p className="text-[14px] font-bold">
+            {webhookEingerichtet() ? 'Webhook ist eingerichtet' : 'Kein Webhook hinterlegt'}
+          </p>
+          <p className="mt-1 max-w-2xl text-[13px] font-medium text-ink-muted">
+            {webhookEingerichtet()
+              ? 'Jeder neue Wunsch geht als JSON an die hinterlegte Adresse — mit Titel, Text, Bereich, Person und einem Link hierher. Was daraus wird, entscheidet der Workflow am anderen Ende.'
+              : 'Ohne WEBHOOK_URL in der Server-Konfiguration bleiben Wünsche hier stehen und melden sich nirgends. Ein Webhook ist eine Zutat, keine Voraussetzung — die Wünsche gehen nicht verloren.'}
+          </p>
+        </div>
+        {webhookEingerichtet() && (
+          <form action={sendeWebhookProbe} className="shrink-0">
+            <button
+              type="submit"
+              className="lift rounded-full border-2 border-border bg-surface px-4 py-2 text-[13px] font-bold"
+            >
+              Probe senden
+            </button>
+          </form>
+        )}
+      </Card>
 
       {wuensche.length === 0 ? (
         <Card>

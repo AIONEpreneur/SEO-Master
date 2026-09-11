@@ -15,6 +15,7 @@ import { wiederkehrendeBefunde } from '@/lib/analysis/wiederkehrend'
 import { Begruessung } from '@/components/begruessung'
 import { NeuigkeitenAufsteller } from '@/components/neuigkeiten-aufsteller'
 import { ungeleseneNeuigkeiten } from '@/lib/neuigkeiten'
+import { Lightbulb } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,24 @@ export default async function DashboardPage() {
   // sondern ein Hindernis.
   const neuigkeiten = konto && !zeigeTour && !session.nurAnsicht
     ? await ungeleseneNeuigkeiten(konto)
+    : []
+
+  /*
+    Offene Wünsche gehören auf die Übersicht, nicht nur in die Seitenleiste.
+
+    Eine Zahl neben einem Menüpunkt sieht, wer hinschaut. Ein Wunsch ist
+    aber eine Frage an die Betreiberin — und eine Frage, die tagelang
+    unbeantwortet liegt, ist schlimmer als gar kein Wunschformular: Es hat
+    ein Versprechen gegeben. Deshalb steht sie hier, wo ohnehin jeder
+    Arbeitstag beginnt, mit dem neuesten Titel als Vorschau.
+  */
+  const offeneWuensche = session.isSuperAdmin
+    ? await db.wunsch.findMany({
+        where: { status: 'OFFEN' },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        select: { id: true, titel: true, organization: { select: { name: true } } },
+      })
     : []
 
   const [analyses, projectCount, completedCount, providers, geprueft, letzteErgebnisse] = await Promise.all([
@@ -83,6 +102,33 @@ export default async function DashboardPage() {
 
       {zeigeTour && <Tour />}
       {neuigkeiten.length > 0 && <NeuigkeitenAufsteller neuigkeiten={neuigkeiten} />}
+
+      {offeneWuensche.length > 0 && (
+        <Link
+          href="/admin/wuensche"
+          className="karte-hover block rounded-2xl border-2 border-border bg-rosa p-5"
+        >
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-tinte bg-creme">
+              <Lightbulb size={17} className="text-tinte" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-display text-[15px] uppercase leading-tight text-tinte">
+                {offeneWuensche.length === 1
+                  ? 'Ein Wunsch wartet auf Antwort'
+                  : `${offeneWuensche.length} Wünsche warten auf Antwort`}
+              </p>
+              <ul className="mt-2 space-y-1">
+                {offeneWuensche.map((w) => (
+                  <li key={w.id} className="truncate text-[13px] font-medium text-tinte">
+                    „{w.titel}" — {w.organization.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </Link>
+      )}
 
       <Onboarding organizationId={session.organizationId} eigeneZugaenge={eigeneZugaenge} />
 

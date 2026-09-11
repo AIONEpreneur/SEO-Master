@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth/session'
 import { requireSuperAdmin } from '@/lib/admin/wache'
+import { env } from '@/lib/env'
+import { sendeEreignis } from '@/lib/benachrichtigung/webhook'
 
 export type WunschState = { ok?: string; error?: string }
 
@@ -37,7 +39,7 @@ export async function legeWunschAn(_prev: WunschState, formData: FormData): Prom
   })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
-  await db.wunsch.create({
+  const angelegt = await db.wunsch.create({
     data: {
       organizationId: session.organizationId,
       userId: session.id,
@@ -46,7 +48,25 @@ export async function legeWunschAn(_prev: WunschState, formData: FormData): Prom
     },
   })
 
+  /*
+    Nach draussen melden — erst jetzt, und ohne Folgen für die Eintragende.
+
+    Der Wunsch ist gespeichert, bevor hier irgendetwas passiert. Scheitert
+    das Melden, hat sie trotzdem recht, wenn sie glaubt, es habe geklappt:
+    Es hat. Der Fehlschlag steht im Protokoll des Servers, nicht in ihrem
+    Formular — sie könnte ohnehin nichts daran ändern.
+  */
+  void sendeEreignis({
+    art: 'wunsch.neu',
+    titel: parsed.data.titel,
+    text: parsed.data.text,
+    bereich: session.organizationName,
+    person: session.name ?? session.email,
+    url: `${env().APP_URL}/admin/wuensche`,
+  })
+
   revalidatePath('/wuensche')
+  revalidatePath('/dashboard')
   return { ok: 'Angekommen. Du siehst hier, sobald sich der Stand ändert.' }
 }
 
@@ -91,4 +111,23 @@ export async function beantworteWunsch(formData: FormData): Promise<void> {
 
   revalidatePath('/admin/wuensche')
   revalidatePath('/wuensche')
+}
+
+/**
+ * Eine Probe an den Webhook schicken.
+ *
+ * Wer einen Workflow baut, will ihn auslösen können, ohne auf einen echten
+ * Wunsch zu warten — sonst wird zum Testen ein Wunsch eingetragen, und der
+ * steht danach in den Daten einer Kundin.
+ */
+export async function sendeWebhookProbe(): Promise<void> {
+  await requireSuperAdmin()
+  await sendeEreignis({
+    art: 'probe',
+    titel: 'Probe aus SEO-Master',
+    text: 'Wenn diese Nachricht ankommt, ist der Webhook richtig eingerichtet. Echte Ereignisse tragen die Art "wunsch.neu".',
+    bereich: 'Betrieb',
+    url: `${env().APP_URL}/admin/wuensche`,
+  })
+  revalidatePath('/admin/wuensche')
 }

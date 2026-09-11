@@ -73,6 +73,8 @@ services:
       STRIPE_PREIS_STARTER: ${STRIPE_PREIS_STARTER:-}
       STRIPE_PREIS_PRO: ${STRIPE_PREIS_PRO:-}
       UPLOAD_VERZEICHNIS: /data/uploads
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:-}
     volumes:
       - uploads:/data/uploads
     depends_on:
@@ -109,6 +111,8 @@ services:
       STRIPE_PREIS_STARTER: ${STRIPE_PREIS_STARTER:-}
       STRIPE_PREIS_PRO: ${STRIPE_PREIS_PRO:-}
       UPLOAD_VERZEICHNIS: /data/uploads
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:-}
     volumes:
       - uploads:/data/uploads
     depends_on:

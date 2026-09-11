@@ -53,6 +53,12 @@ const schema = z.object({
 
   /** Wohin hochgeladene Profilbilder geschrieben werden. */
   UPLOAD_VERZEICHNIS: z.string().default('/data/uploads'),
+
+  // Webhook für Ereignisse nach draussen (n8n, Make, eigenes Skript).
+  // Ohne Adresse passiert nichts — ein Webhook ist eine Zutat, keine
+  // Voraussetzung. Der Token wandert als Bearer in den Kopf der Anfrage.
+  WEBHOOK_URL: z.string().url().optional().or(z.literal('')),
+  WEBHOOK_TOKEN: z.string().optional(),
 })
 
 let cached: z.infer<typeof schema> | null = null

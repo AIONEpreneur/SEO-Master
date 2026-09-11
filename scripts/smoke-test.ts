@@ -874,6 +874,55 @@ async function main() {
     'so rendert der Server, bevor der Browser die Stunde kennt',
   )
 
+  // --- Webhook --------------------------------------------------------------
+  //
+  // Ein Wunsch, der niemanden erreicht, ist schlimmer als kein
+  // Wunschformular: Er hat ein Versprechen gegeben. Zwei Dinge dürfen dabei
+  // nie passieren — das Absenden darf nicht an einem fremden Server hängen,
+  // und ein Fehlschlag beim Melden darf die Eintragende nicht als Fehler
+  // erreichen. Ihr Wunsch ist ja gespeichert.
+  section('Der Webhook meldet, ohne im Weg zu stehen')
+
+  const webhookQuelle = readFileSync(
+    join(dir, '..', '..', 'src', 'lib', 'benachrichtigung', 'webhook.ts'),
+    'utf8',
+  )
+  check(
+    'Eine Zeitgrenze ist gesetzt',
+    /AbortSignal\.timeout\(\s*\d+\s*\)/.test(webhookQuelle),
+    'sonst hängt das Formular an der Erreichbarkeit eines fremden Servers',
+  )
+  check(
+    'Fehler werden gefangen, nicht geworfen',
+    /catch\s*\(/.test(webhookQuelle) && !/throw /.test(webhookQuelle),
+    'die Eintragende hat recht, wenn sie glaubt, es habe geklappt',
+  )
+  check(
+    'Der Token geht als Bearer mit',
+    webhookQuelle.includes('Authorization') && webhookQuelle.includes('Bearer'),
+    'die Header-Authentifizierung, die der n8n-Baustein von Haus aus kann',
+  )
+
+  const wunschQuelle = readFileSync(
+    join(dir, '..', '..', 'src', 'lib', 'wuensche', 'actions.ts'),
+    'utf8',
+  )
+  const anlegen = wunschQuelle.slice(
+    wunschQuelle.indexOf('export async function legeWunschAn'),
+    wunschQuelle.indexOf('export async function ziehWunschZurueck'),
+  )
+  // Die Reihenfolge trägt die ganze Zusage: erst speichern, dann melden.
+  check(
+    'Erst gespeichert, dann gemeldet',
+    anlegen.indexOf('db.wunsch.create') < anlegen.indexOf('sendeEreignis'),
+    'ein Aussetzer beim Melden darf keinen Wunsch kosten',
+  )
+  check(
+    'Auf das Melden wird nicht gewartet',
+    /void sendeEreignis\(/.test(anlegen),
+    'sonst wartet die Eintragende auf einen fremden Server',
+  )
+
   // --- Märkte ---------------------------------------------------------------
   //
   // Die Liste stand dreimal im Code: im Analyse-Formular, im
