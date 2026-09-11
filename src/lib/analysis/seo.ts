@@ -511,7 +511,12 @@ export function analyzeSeo(input: {
       // eine Massnahme gegen einen Zustand, den die Analyse zwei Abschnitte
       // vorher als erfüllt ausgewiesen hat. Fehlt dann nur noch der sichtbare
       // Teil – und genau das steht dann da.
-      const personSchemaVorhanden = s.schemaTypes.some((t) => /Person/i.test(t))
+      //
+      // Geprüft wird jetzt der Name aus dem Schema, nicht bloss die Existenz
+      // eines Person-Typs: Steht der Name auch im Text oder in einem
+      // Bild-Alt-Text, ist die Autorschaft sichtbar, und dieser Befund
+      // entsteht gar nicht erst (hasAuthorInfo ist dann wahr).
+      const personSchemaVorhanden = s.personenImSchema.length > 0
       findings.push({
         id: 'seo-author-missing',
         severity: 'quickwin',
@@ -539,9 +544,41 @@ export function analyzeSeo(input: {
   }
 
   {
+    /*
+      Zwei Datumsangaben, zwei Zielgruppen.
+
+      Im Schema steht das Datum für Maschinen, im Text das für Leserinnen.
+      Weichen sie voneinander ab, glaubt Google das eine und der Mensch das
+      andere — und niemand merkt es, weil beide Angaben für sich genommen
+      plausibel aussehen. Gefunden wird das nur, wenn man sie vergleicht.
+
+      Verglichen wird auf den Tag genau: Eine Abweichung von Stunden ist eine
+      Frage der Zeitzone, keine Unstimmigkeit.
+    */
+    const imSchema = (s.modifiedDate ?? s.publishedDate)?.slice(0, 10) ?? null
+    if (imSchema && s.sichtbaresDatum && imSchema !== s.sichtbaresDatum) {
+      const alsText = (iso: string) => new Date(iso).toLocaleDateString('de-DE')
+      findings.push({
+        id: 'seo-datum-widerspruch',
+        severity: 'quickwin',
+        title: 'Sichtbares Datum und Datum im Schema stimmen nicht überein',
+        why: `Auf der Seite steht der ${alsText(s.sichtbaresDatum)}, im Schema der ${alsText(imSchema)}. Suchmaschinen und KI-Systeme lesen das Schema, Leserinnen den Text — so bewerten beide die Aktualität unterschiedlich, und welche Angabe stimmt, ist von aussen nicht zu erkennen.`,
+        action:
+          'Beide Angaben aus derselben Quelle speisen. In den meisten Redaktionssystemen heisst das: das sichtbare Datum aus demselben Feld ausgeben, das auch `dateModified` füllt.',
+        effort: 'gering',
+        impact: 'mittel',
+        evidence: s.sichtbaresDatumFundstelle ?? undefined,
+      })
+    }
+
     const freshness = s.modifiedDate ?? s.publishedDate
     let score = 3
-    let detail = 'Kein Datum sichtbar.'
+    // Bisher stand hier "Kein Datum sichtbar", geprüft wurde aber das Schema.
+    // Eine Seite mit sichtbarem Datum und ohne Schema bekam damit eine
+    // Auskunft, die ihr Gegenteil behauptete.
+    let detail = s.sichtbaresDatum
+      ? 'Datum steht auf der Seite, fehlt aber in den maschinenlesbaren Angaben.'
+      : 'Weder auf der Seite noch im Schema ein Datum.'
     if (freshness) {
       const age = Date.now() - new Date(freshness).getTime()
       const months = age / (1000 * 60 * 60 * 24 * 30)

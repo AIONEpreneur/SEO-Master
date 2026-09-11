@@ -102,6 +102,20 @@ export function kanonischerHinweis(urteil: KanonischUrteil): string {
   }
 }
 
+/**
+ * Die Schwere folgt der Wirkung, nicht dem Aufwand.
+ *
+ * Vorher trug jeder Canonical-Befund dieselbe Stufe. Damit stand ein
+ * Canonical, das vorhanden ist und auf eine erreichbare Variante zeigt,
+ * neben einem, das die Rankings an eine fremde Domain abgibt — und die
+ * Leserin des Berichts konnte nicht erkennen, was zuerst zu tun ist.
+ *
+ *   kritisch     Die Seite gibt ihre Bewertung an eine andere Adresse ab.
+ *                Das passiert, ob es gewollt ist oder nicht.
+ *   quickwin     Es fehlt oder ist kaputt: ein Mangel, aber ein billiger.
+ *   langfristig  Vorhanden, gültig, zeigt auf eine erreichbare Variante.
+ *                Das kann genau richtig sein — nachsehen lohnt, mehr nicht.
+ */
 export function kanonischerBefund(urteil: KanonischUrteil): Finding | null {
   switch (urteil.art) {
     case 'stimmig':
@@ -121,7 +135,7 @@ export function kanonischerBefund(urteil: KanonischUrteil): Finding | null {
     case 'anderer-host':
       return {
         id: 'seo-canonical-host',
-        severity: 'quickwin',
+        severity: 'critical',
         title: urteil.nurWww
           ? 'Canonical zeigt auf die andere www-Variante'
           : 'Canonical zeigt auf eine andere Domain',
@@ -137,7 +151,7 @@ export function kanonischerBefund(urteil: KanonischUrteil): Finding | null {
     case 'anderes-protokoll':
       return {
         id: 'seo-canonical-protocol',
-        severity: 'quickwin',
+        severity: 'critical',
         title: 'Canonical zeigt auf ein anderes Protokoll',
         why: 'http und https gelten für Google als zwei getrennte Adressen. Ein Canonical, das auf die andere Fassung zeigt, führt die Bewertung von der ausgelieferten Seite weg.',
         action: 'Das Canonical auf die https-Adresse dieser Seite setzen und alle http-Aufrufe per 301 auf https umleiten.',
@@ -149,12 +163,12 @@ export function kanonischerBefund(urteil: KanonischUrteil): Finding | null {
     case 'andere-seite':
       return {
         id: 'seo-canonical-elsewhere',
-        severity: 'quickwin',
+        severity: 'longterm',
         title: 'Diese Seite verweist per Canonical auf eine andere Seite',
         why: `Das Canonical zeigt auf ${urteil.ziel}. Damit erklärt die Seite sich selbst zur Zweitfassung – Google wertet sie nicht eigenständig. Falls das gewollt ist, ist alles in Ordnung; falls nicht, arbeitet jede Optimierung hier ins Leere.`,
         action: `Prüfen, ob ${urteil.ziel} tatsächlich die maßgebliche Fassung ist. Wenn diese Seite eigenständig ranken soll, das Canonical auf sie selbst setzen.`,
         effort: 'gering',
-        impact: 'mittel',
+        impact: 'gering',
         evidence: urteil.wert,
       }
 

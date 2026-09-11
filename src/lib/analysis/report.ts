@@ -36,11 +36,19 @@ Fachliche Festlegungen, die du nicht überschreiben darfst:
  * Analyse, kein Auftrag der Nutzerin — und Platzierungswerte dazu sind
  * entsprechend zu lesen.
  */
-function keywordZeile(result: AnalysisResult): string {
-  const { value, source } = result.meta.keyword
+export function keywordZeile(result: AnalysisResult): string {
+  const { value, source, kandidaten } = result.meta.keyword
   if (!value) return 'keines bestimmbar — bitte beim nächsten Lauf eigene Keywords angeben'
-  if (source === 'abgeleitet') return `"${value}" (aus der Seite abgeleitet, nicht vorgegeben)`
-  return `"${value}"`
+  if (source !== 'abgeleitet') return `"${value}"`
+
+  // Die Alternativen gehören dazu. Ein abgeleiteter Begriff ist eine
+  // Vermutung über die Absicht der Seite, nicht über das Suchverhalten —
+  // und wer die Alternativen sieht, erkennt, dass hier gewählt wurde.
+  const weitere = (kandidaten ?? []).filter((k) => k !== value)
+  const zusatz = weitere.length
+    ? ` Ebenfalls möglich wären ${weitere.map((k) => `"${k}"`).join(' oder ')} — welcher Begriff tatsächlich Aufrufe bringt, zeigt nur die Search Console.`
+    : ''
+  return `"${value}" (aus der Seite abgeleitet, nicht vorgegeben).${zusatz}`
 }
 
 export async function generateReport(

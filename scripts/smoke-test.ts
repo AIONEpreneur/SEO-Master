@@ -18,6 +18,7 @@ import { analyzeSeo } from '../src/lib/analysis/seo'
 import { analyzeAeo } from '../src/lib/analysis/aeo'
 import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
+import { keywordKandidaten } from '../src/lib/analysis/run'
 import { legeBildAb, nameIstGueltig, HOECHSTGROESSE } from '../src/lib/profil/bilder'
 import { analyzeSocial } from '../src/lib/analysis/social'
 import {
@@ -47,7 +48,7 @@ import { execSync } from 'node:child_process'
 import { leseChecks, checkBefunde, checkNote } from '../src/lib/analysis/onpage-checks'
 import { istAllgemeinePlattform } from '../src/lib/analysis/geo'
 import { normalizeProfile } from '../src/lib/connectors/apify'
-import { buildDeterministicReport, sortFindings } from '../src/lib/analysis/report'
+import { buildDeterministicReport, sortFindings, keywordZeile } from '../src/lib/analysis/report'
 import type { AnalysisResult, ModuleResult } from '../src/lib/analysis/types'
 
 let failures = 0
@@ -408,7 +409,12 @@ async function main() {
   section('Bericht widerspricht sich nicht')
 
   const mitPersonSchema = analyzeSeo({
-    signals: { ...weak.signals, schemaTypes: ['WebSite', 'Person', 'FAQPage'], hasAuthorInfo: false },
+    signals: {
+      ...weak.signals,
+      schemaTypes: ['WebSite', 'Person', 'FAQPage'],
+      personenImSchema: ['Kirsten Biema'],
+      hasAuthorInfo: false,
+    },
   })
   const autorBefund = mitPersonSchema.findings.find((f) => f.id === 'seo-author-missing')
   check('Autorenbefund erscheint', Boolean(autorBefund))
@@ -419,13 +425,225 @@ async function main() {
   )
 
   const ohnePersonSchema = analyzeSeo({
-    signals: { ...weak.signals, schemaTypes: ['WebSite'], hasAuthorInfo: false },
+    signals: { ...weak.signals, schemaTypes: ['WebSite'], personenImSchema: [], hasAuthorInfo: false },
   })
   check(
     'Ohne Person-Schema wird es sehr wohl gefordert',
     /`Person`-Schema auszeichnen/.test(
       ohnePersonSchema.findings.find((f) => f.id === 'seo-author-missing')?.action ?? '',
     ),
+  )
+
+  // --- E-E-A-T: der Name muss gesucht werden, nicht nur ein Muster ----------
+  //
+  // Der Fehlbefund aus der Praxis: Auf der Seite stand eine ausführliche
+  // Vorstellung mit Namen und Foto, im Schema ein Person-Knoten — und der
+  // Bericht meldete "Keine Autorenangabe", weil nirgends das Feld `author`
+  // stand und keine Klasse "author" hiess.
+  section('Wer sich vorstellt, gilt als erkennbar')
+
+  const vorstellung = extractSignals({
+    url: 'https://example.com/ueber-mich',
+    html: `<html lang="de"><head><title>Über mich</title>
+      <script type="application/ld+json">
+        {"@context":"https://schema.org","@type":"Person","name":"Kirsten Biema",
+         "jobTitle":"KI-Beraterin"}
+      </script></head>
+      <body><h1>Über mich</h1>
+      <p>Ich bin Kirsten Biema und begleite seit zwölf Jahren Solo-Selbstständige.</p>
+      <img src="/portrait.jpg" alt="Kirsten Biema in ihrem Büro">
+      </body></html>`,
+  })
+
+  check(
+    'Der Name aus dem Person-Schema wird im Text gefunden',
+    vorstellung.autorImText,
+    vorstellung.personenImSchema.join(', ') || 'kein Person-Schema gelesen',
+  )
+  check('Auch im Bild-Alt-Text', vorstellung.autorInAltText)
+  check(
+    'Damit gilt die Autorschaft als erkennbar',
+    vorstellung.hasAuthorInfo && vorstellung.authorNames.includes('Kirsten Biema'),
+    vorstellung.authorNames.join(', ') || 'keine',
+  )
+  check(
+    'Und der Bericht meldet kein Fehlen mehr',
+    !analyzeSeo({ signals: vorstellung }).findings.some((f) => f.id === 'seo-author-missing'),
+  )
+
+  // Ein Person-Schema allein genügt nicht: Steht der Name nirgends sichtbar,
+  // ist für Leserinnen weiterhin niemand erkennbar.
+  const nurImQuelltext = extractSignals({
+    url: 'https://example.com/leistungen',
+    html: `<html lang="de"><head><title>Leistungen</title>
+      <script type="application/ld+json">
+        {"@context":"https://schema.org","@type":"Person","name":"Kirsten Biema"}
+      </script></head>
+      <body><h1>Leistungen</h1><p>Beratung, Workshops, Begleitung.</p></body></html>`,
+  })
+  check(
+    'Ein Name nur im Quelltext genügt nicht',
+    !nurImQuelltext.autorImText && !nurImQuelltext.hasAuthorInfo,
+    nurImQuelltext.authorNames.join(', ') || 'keine',
+  )
+
+  // --- Kurzantwort im eigenen Kasten ----------------------------------------
+  //
+  // Der zweite Fehlbefund: Die Antwort stand in einem eigenen Kasten statt in
+  // einem Absatz direkt unter der Frage. Wer nur das nächste <p> ansieht,
+  // meldet ein Fehlen, wo eine gute Kurzantwort steht.
+  section('Kurzantworten stehen auch in einem Kasten')
+
+  const imKasten = extractSignals({
+    url: 'https://example.com/faq',
+    html: `<html lang="de"><head><title>Fragen</title></head><body>
+      <h1>Häufige Fragen</h1>
+      <h2>Was kostet eine SEO-Beratung?</h2>
+      <div class="antwort-box"><p>Eine SEO-Beratung kostet je nach Umfang zwischen
+      achthundert und dreitausend Euro. Der Preis richtet sich danach, wie viele
+      Seiten geprüft werden und ob die Umsetzung begleitet wird. Für einen ersten
+      Überblick genügt meist ein halber Tag, für eine vollständige Begleitung
+      rechnet man mit drei bis sechs Monaten.</p></div>
+      <h2>Wie lange dauert es, bis SEO wirkt?</h2>
+      <p>Die ersten Bewegungen sieht man nach etwa acht Wochen. Bis eine Seite
+      dauerhaft auf der ersten Ergebnisseite steht, vergehen in umkämpften
+      Themen sechs bis zwölf Monate — in Nischen deutlich weniger.</p>
+      </body></html>`,
+  })
+
+  check(
+    'Beide Fragen werden erkannt',
+    imKasten.frageAntworten.length === 2,
+    `${imKasten.frageAntworten.length} Fragen`,
+  )
+  check(
+    'Die Antwort im Kasten wird gefunden',
+    (imKasten.frageAntworten[0]?.worte ?? 0) >= 20 && imKasten.frageAntworten[0]?.imKasten === true,
+    `${imKasten.frageAntworten[0]?.worte ?? 0} Wörter, im Kasten: ${imKasten.frageAntworten[0]?.imKasten}`,
+  )
+  check(
+    'Die Antwort im Absatz auch',
+    (imKasten.frageAntworten[1]?.worte ?? 0) >= 20 && imKasten.frageAntworten[1]?.imKasten === false,
+    `${imKasten.frageAntworten[1]?.worte ?? 0} Wörter`,
+  )
+  check(
+    'Und der Bericht meldet keine fehlenden Erklärblöcke',
+    !analyzeAeo({ signals: imKasten }).findings.some((f) => f.id === 'aeo-no-paragraph-snippet'),
+  )
+
+  // --- Datum: Schema gegen sichtbaren Text ----------------------------------
+  //
+  // Der echte Fund, den das Werkzeug bisher verpasst hat: Im Schema stand der
+  // 1. September, sichtbar auf der Seite der 24. August. Beide Angaben sehen
+  // für sich plausibel aus — nur der Vergleich zeigt den Widerspruch.
+  section('Sichtbares Datum und Schema-Datum werden verglichen')
+
+  const datumsStreit = extractSignals({
+    url: 'https://example.com/artikel',
+    html: `<html lang="de"><head><title>Artikel</title>
+      <script type="application/ld+json">
+        {"@context":"https://schema.org","@type":"Article","dateModified":"2026-09-01T10:00:00+02:00"}
+      </script></head>
+      <body><h1>Artikel</h1>
+      <p>Zuletzt aktualisiert am 24. August 2026</p>
+      <p>Inhalt des Artikels.</p></body></html>`,
+  })
+
+  check(
+    'Das sichtbare Datum wird gelesen',
+    datumsStreit.sichtbaresDatum === '2026-08-24',
+    datumsStreit.sichtbaresDatum ?? 'keines',
+  )
+  check(
+    'Das Schema-Datum bleibt davon getrennt',
+    datumsStreit.modifiedDate?.startsWith('2026-09-01') === true,
+    datumsStreit.modifiedDate ?? 'keines',
+  )
+
+  const streitBefund = analyzeSeo({ signals: datumsStreit }).findings.find(
+    (f) => f.id === 'seo-datum-widerspruch',
+  )
+  check('Der Widerspruch wird gemeldet', Boolean(streitBefund), streitBefund?.title)
+  check(
+    'Und beide Daten stehen in der Begründung',
+    /24\.8\.2026|24\.08\.2026/.test(streitBefund?.why ?? '') &&
+      /1\.9\.2026|01\.09\.2026/.test(streitBefund?.why ?? ''),
+    streitBefund?.why?.slice(0, 80),
+  )
+
+  // Stimmen beide überein, entsteht kein Befund — sonst wäre die Regel
+  // Lärm statt Hinweis.
+  const datumEinig = extractSignals({
+    url: 'https://example.com/artikel',
+    html: `<html lang="de"><head><title>Artikel</title>
+      <script type="application/ld+json">
+        {"@context":"https://schema.org","@type":"Article","dateModified":"2026-08-24T10:00:00+02:00"}
+      </script></head>
+      <body><h1>Artikel</h1><p>Zuletzt aktualisiert am 24. August 2026</p></body></html>`,
+  })
+  check(
+    'Stimmen sie überein, schweigt der Bericht',
+    !analyzeSeo({ signals: datumEinig }).findings.some((f) => f.id === 'seo-datum-widerspruch'),
+    datumEinig.sichtbaresDatum ?? 'keines',
+  )
+
+  // --- Canonical: Schwere folgt der Wirkung ---------------------------------
+  section('Die Schwere eines Canonical-Befunds folgt seiner Wirkung')
+
+  const wirkung = (art: Parameters<typeof kanonischerBefund>[0]) => kanonischerBefund(art)?.severity
+
+  check(
+    'Verweis auf eine andere eigene Seite ist eine Empfehlung',
+    wirkung({ art: 'andere-seite', wert: '/ziel', ziel: '/ziel' }) === 'longterm',
+  )
+  check(
+    'Verweis auf eine fremde Domain ist kritisch',
+    wirkung({
+      art: 'anderer-host',
+      wert: 'https://fremd.de/',
+      ziel: 'fremd.de',
+      eigener: 'example.com',
+      nurWww: false,
+    }) === 'critical',
+  )
+  check(
+    'Verweis auf das andere Protokoll ebenso',
+    wirkung({ art: 'anderes-protokoll', wert: 'http://example.com/', ziel: 'http' }) === 'critical',
+  )
+  check('Ein stimmiges Canonical erzeugt gar keinen Befund', kanonischerBefund({ art: 'stimmig', wert: 'x' }) === null)
+
+  // --- Keyword: mehrere Kandidaten ------------------------------------------
+  //
+  // Ein aus einer Seite abgeleiteter Begriff ist eine Vermutung über die
+  // Absicht der Seite, nicht über das Suchverhalten. Beides fällt regelmässig
+  // auseinander — deshalb nennt der Bericht die Alternativen mit.
+  section('Abgeleitete Keywords werden als Auswahl ausgewiesen')
+
+  const mehrdeutig = {
+    ...weak.signals,
+    h1: ['Dein Online-Business aufbauen'],
+    title: 'Selbstständig machen ohne Umweg',
+    h2: ['Der erste Kunde'],
+    questionHeadings: [],
+  }
+  const keywordAuswahl = keywordKandidaten(mehrdeutig)
+  check('Mehr als ein Kandidat entsteht', keywordAuswahl.length >= 2, keywordAuswahl.join(' | '))
+  check(
+    'Der H1-Begriff steht vorn',
+    keywordAuswahl[0] === tragenderBegriff(mehrdeutig.h1[0]),
+    keywordAuswahl[0],
+  )
+  check('Keine Dopplungen', new Set(keywordAuswahl).size === keywordAuswahl.length)
+
+  const zeile = keywordZeile({
+    meta: {
+      keyword: { value: keywordAuswahl[0], source: 'abgeleitet', kandidaten: keywordAuswahl },
+    },
+  } as AnalysisResult)
+  check(
+    'Der Bericht nennt die Alternativen',
+    zeile.includes(keywordAuswahl[1]) && zeile.includes('Search Console'),
+    zeile.slice(0, 110),
   )
 
   // --- Spam-Score -----------------------------------------------------------

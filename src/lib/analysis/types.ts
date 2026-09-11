@@ -58,8 +58,18 @@ export type AnalysisResult = {
      * nicht wissen, was in fünfundzwanzig Blogartikeln steht.
      */
     scope: { pages: number; note: string }
-    /** Das geprüfte Hauptkeyword und woher es stammt. */
-    keyword: { value: string | null; source: 'vorgegeben' | 'abgeleitet' | 'keines' }
+    /**
+     * Das geprüfte Hauptkeyword und woher es stammt.
+     *
+     * `kandidaten` steht nur, wenn der Begriff abgeleitet wurde: Dann ist er
+     * eine Vermutung, und die Alternativen gehören in den Bericht. Wonach
+     * tatsächlich gesucht wird, weiss allein die Search Console.
+     */
+    keyword: {
+      value: string | null
+      source: 'vorgegeben' | 'abgeleitet' | 'keines'
+      kandidaten?: string[]
+    }
   }
   scores: {
     seo: number | null

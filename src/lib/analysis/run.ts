@@ -258,6 +258,7 @@ export async function runAnalysis(params: {
 
   // Hauptkeyword bestimmen: bevorzugt vorgegeben, sonst aus der Seite
   // abgeleitet.
+  const kandidaten = params.seedKeywords?.length ? [] : keywordKandidaten(signals)
   const primaryKeyword = params.seedKeywords?.[0] ?? deriveKeyword(signals)
   const keywordsToCheck = (params.seedKeywords?.length ? params.seedKeywords : [primaryKeyword])
     .filter((k): k is string => Boolean(k))
@@ -710,7 +711,7 @@ export async function runAnalysis(params: {
     locationCode,
     pageType: guessPageType(signals),
     pageLanguage: signals.lang,
-    keyword: { value: primaryKeyword, source: keywordQuelle },
+    keyword: { value: primaryKeyword, source: keywordQuelle, kandidaten },
   })
 
   if (seiten.length > 0) {
@@ -832,7 +833,7 @@ function assemble(input: {
   locationCode: number
   pageType?: string | null
   pageLanguage?: string | null
-  keyword?: { value: string | null; source: 'vorgegeben' | 'abgeleitet' | 'keines' }
+  keyword?: AnalysisResult['meta']['keyword']
 }): AnalysisResult {
   const find = (m: string) => input.moduleResults.find((r) => r.module === m)?.score ?? null
 
@@ -887,16 +888,45 @@ function assemble(input: {
  * vergab eine schlechte Note für ein Ergebnis, das nichts bedeutet.
  */
 function deriveKeyword(signals: PageSignals): string | null {
-  const ausUeberschrift = tragenderBegriff(signals.h1[0])
-  if (ausUeberschrift && ausUeberschrift.includes(' ')) return ausUeberschrift
+  return keywordKandidaten(signals)[0] ?? null
+}
 
-  const ausTitle = tragenderBegriff(signals.title)
-  if (ausTitle && ausTitle.includes(' ')) return ausTitle
+/**
+ * Mehrere mögliche Suchbegriffe statt eines festgelegten.
+ *
+ * Ein aus einer einzelnen Seite abgeleiteter Begriff ist eine Vermutung über
+ * die Absicht der Seite — nicht darüber, wonach Menschen tatsächlich suchen.
+ * Beides fällt regelmässig auseinander: Eine Seite über das eigene
+ * "Online-Business" bekommt ihre Aufrufe womöglich über "selbstständig
+ * machen", und das sieht nur, wer die Search Console hat.
+ *
+ * Gemessen wird weiter mit dem ersten Kandidaten — eine Messung braucht einen
+ * Begriff. Aber der Bericht nennt die anderen mit, damit erkennbar bleibt,
+ * dass hier eine Wahl getroffen wurde und welche Alternativen es gab.
+ *
+ * Die Reihenfolge ist die Rangfolge der Verlässlichkeit: H1 vor Title vor der
+ * ersten Frage-Überschrift. Einzelwörter fallen raus — nach "Business" oder
+ * "Beratung" sucht niemand so, und die Platzierungsprüfung misst damit an der
+ * Sache vorbei.
+ */
+export function keywordKandidaten(signals: PageSignals): string[] {
+  const roh = [
+    tragenderBegriff(signals.h1[0]),
+    tragenderBegriff(signals.title),
+    tragenderBegriff(signals.h2[0]),
+    tragenderBegriff(signals.questionHeadings[0]),
+  ]
 
-  // Ein einzelnes Wort ist als Suchanfrage fast immer zu allgemein
-  // ("Business", "Beratung"). Dann lieber kein abgeleitetes Keyword als eine
-  // Messung, die an der Sache vorbeigeht.
-  return null
+  const gesehen = new Set<string>()
+  const kandidaten: string[] = []
+  for (const begriff of roh) {
+    if (!begriff || !begriff.includes(' ')) continue
+    const schluessel = begriff.toLowerCase()
+    if (gesehen.has(schluessel)) continue
+    gesehen.add(schluessel)
+    kandidaten.push(begriff)
+  }
+  return kandidaten.slice(0, 3)
 }
 
 function guessPageType(signals: PageSignals): string {

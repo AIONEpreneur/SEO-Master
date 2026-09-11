@@ -62,14 +62,31 @@ export function analyzeAeo(input: {
 
   // --- Snippet-taugliche Formatierung (25 %) -------------------------------
   {
-    // Absatz-Snippets: kompakte Erklärblöcke von 40–60 Wörtern.
+    /*
+      Zwei Wege zur selben Frage, und beide zählen.
+
+      Der erste zählt kompakte Blöcke irgendwo im Fliesstext. Er weiss nicht,
+      wozu sie gehören, und er verliert die Absatzgrenzen beim Plattmachen
+      des Textes — er unterschätzt also eher.
+
+      Der zweite geht am Dokument von jeder Frage-Überschrift zu dem, was ihr
+      folgt, und sieht dabei auch in einen umschliessenden Kasten hinein.
+      Genau diese Form hat der alte Weg übersehen: Steht die Kurzantwort in
+      einem eigenen Kasten statt in einem Absatz daneben, meldete der Bericht
+      ein Fehlen, wo eine gute Antwort stand.
+    */
     const paragraphSnippets = countParagraphSnippets(s.text)
+    const beantworteteFragen = s.frageAntworten.filter(
+      (f) => f.worte >= 20 && f.worte <= 120,
+    )
+    const inKaesten = beantworteteFragen.filter((f) => f.imKasten).length
+    const snippetTauglich = paragraphSnippets + beantworteteFragen.length
     const hasLists = s.lists.itemsTotal >= 5
     const hasTable = s.tables > 0
     const hasHowTo = s.schemaTypes.some((t) => /HowTo/i.test(t)) || s.lists.ordered > 0
 
     let score = 2
-    if (paragraphSnippets > 0) score += 3
+    if (snippetTauglich > 0) score += 3
     if (hasLists) score += 2
     if (hasTable) score += 1.5
     if (hasHowTo) score += 1.5
@@ -77,15 +94,18 @@ export function analyzeAeo(input: {
 
     const parts = [
       `${paragraphSnippets} kompakte Erklärblöcke (40–60 Wörter)`,
+      `${beantworteteFragen.length} von ${s.frageAntworten.length} Fragen mit Kurzantwort${
+        inKaesten > 0 ? ` (${inKaesten} davon in einem eigenen Kasten)` : ''
+      }`,
       `${s.lists.itemsTotal} Listenpunkte`,
       `${s.tables} Tabellen`,
     ]
-    if (paragraphSnippets === 0) {
+    if (snippetTauglich === 0) {
       findings.push({
         id: 'aeo-no-paragraph-snippet',
         severity: 'quickwin',
         title: 'Keine snippet-tauglichen Erklärblöcke',
-        why: 'Absatz-Snippets sind der häufigste Typ in Antwortboxen – sie brauchen eine geschlossene Erklärung von 40–60 Wörtern direkt unter der Frage.',
+        why: 'Absatz-Snippets sind der häufigste Typ in Antwortboxen – sie brauchen eine geschlossene Erklärung von 40–60 Wörtern direkt unter der Frage. Geprüft wurde beides: kompakte Blöcke im Fliesstext und das, was auf jede Frage-Überschrift folgt, auch in einem eigenen Kasten.',
         action: 'Unter jede Frage-Überschrift einen Absatz mit 40–60 Wörtern setzen, der die Frage vollständig und für sich allein verständlich beantwortet.',
         effort: 'mittel',
         impact: 'hoch',

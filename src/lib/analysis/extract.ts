@@ -42,6 +42,8 @@ export type PageSignals = {
     withoutAlt: number
     /** Dateinamen der Bilder ohne alt, damit der Befund nachprüfbar ist. */
     missingAltSources: string[]
+    /** Die beschreibenden Alt-Texte selbst — dort steht oft, wer zu sehen ist. */
+    altTexte: string[]
     lazy: number
   }
   links: { internal: number; external: number; genericAnchors: number; externalDomains: string[] }
@@ -51,6 +53,15 @@ export type PageSignals = {
 
   /** Fragen im Text – Grundlage der AEO-Bewertung. */
   questionHeadings: string[]
+  /**
+   * Zu jeder Frage-Überschrift die Länge der Antwort, die ihr folgt.
+   *
+   * Gezählt wird am Dokument, nicht am Fliesstext: Die Antwort steht oft in
+   * einem eigenen Kasten statt in einem Absatz direkt daneben. Wer nur den
+   * nächsten Absatz ansieht, übersieht genau diese Form — und meldet ein
+   * Fehlen, wo eine gute Kurzantwort steht.
+   */
+  frageAntworten: Array<{ frage: string; worte: number; imKasten: boolean }>
   faqBlocks: Array<{ question: string; answer: string }>
   lists: { ordered: number; unordered: number; itemsTotal: number }
   tables: number
@@ -62,8 +73,28 @@ export type PageSignals = {
 
   hasAuthorInfo: boolean
   authorNames: string[]
+  /**
+   * Namen aus einem eigenständigen Person-Schema — auch wenn sie nicht unter
+   * `author` hängen. Eine Seite, die sich ausführlich vorstellt, trägt die
+   * Person oft als eigenen Knoten und nirgends als Autorin.
+   */
+  personenImSchema: string[]
+  /** Einer dieser Namen steht im sichtbaren Text. */
+  autorImText: boolean
+  /** Einer dieser Namen steht in einem Bild-Alt-Text. */
+  autorInAltText: boolean
   publishedDate: string | null
   modifiedDate: string | null
+  /**
+   * Ein Datum, das sichtbar auf der Seite steht (ISO, nur der Tag).
+   *
+   * Getrennt von publishedDate und modifiedDate, die aus Schema und
+   * Meta-Angaben stammen. Erst der Vergleich beider zeigt, ob die Seite ihren
+   * Leserinnen etwas anderes sagt als den Suchmaschinen.
+   */
+  sichtbaresDatum: string | null
+  /** Die Textstelle, aus der es stammt — damit der Befund nachprüfbar ist. */
+  sichtbaresDatumFundstelle: string | null
   hasImprint: boolean
   hasPrivacyPolicy: boolean
   hasContact: boolean
@@ -159,6 +190,24 @@ export function extractSignals(input: {
 
   const authorNames = extractAuthors($, schemaRaw)
   const dates = extractDates($, schemaRaw)
+  const frageAntworten = extractFrageAntworten($, questionHeadings)
+
+  // Eine Seite, die sich ausführlich vorstellt, trägt die Person oft als
+  // eigenen Schema-Knoten und nirgends als `author`. Steht dieser Name auch
+  // sichtbar auf der Seite — im Text oder in einem Bild-Alt-Text —, dann ist
+  // die Autorschaft erkennbar, und ein Befund "fehlt" wäre schlicht falsch.
+  const personenImSchema = extractPersonen(schemaRaw)
+  const altText = imageStats.altTexte.join(' ')
+  const autorImText = personenImSchema.some((n) => nameKommtVor(n, workingText))
+  const autorInAltText = personenImSchema.some((n) => nameKommtVor(n, altText))
+  const erkannteAutoren = [
+    ...new Set([
+      ...authorNames,
+      ...(autorImText || autorInAltText ? personenImSchema : []),
+    ]),
+  ].slice(0, 5)
+
+  const sichtbar = extractSichtbaresDatum($, workingText)
 
   const footerHtml = ($('footer').html() ?? '') + ($('body').html()?.slice(-6000) ?? '')
   const lowerAll = (bodyText + ' ' + footerHtml).toLowerCase()
@@ -197,6 +246,7 @@ export function extractSignals(input: {
     schemaRaw,
 
     questionHeadings,
+    frageAntworten,
     faqBlocks,
     lists: analyzeLists($),
     tables: $('table').length,
@@ -207,10 +257,15 @@ export function extractSignals(input: {
       AUTHORITY_DOMAINS.some((a) => d.includes(a)),
     ).length,
 
-    hasAuthorInfo: authorNames.length > 0,
-    authorNames,
+    hasAuthorInfo: erkannteAutoren.length > 0,
+    authorNames: erkannteAutoren,
+    personenImSchema,
+    autorImText,
+    autorInAltText,
     publishedDate: dates.published,
     modifiedDate: dates.modified,
+    sichtbaresDatum: sichtbar.datum,
+    sichtbaresDatumFundstelle: sichtbar.fundstelle,
     hasImprint: /impressum|imprint|legal notice/.test(lowerAll),
     hasPrivacyPolicy: /datenschutz|privacy policy|privacy-policy/.test(lowerAll),
     hasContact: /kontakt|contact/.test(lowerAll),
@@ -362,6 +417,7 @@ function analyzeImages($: cheerio.CheerioAPI) {
   let decorative = 0
   let lazy = 0
   const missingAltSources: string[] = []
+  const altTexte: string[] = []
 
   imgs.each((_, el) => {
     const alt = $(el).attr('alt')
@@ -370,6 +426,7 @@ function analyzeImages($: cheerio.CheerioAPI) {
       missingAltSources.push(quelle.split('/').pop() || quelle || '(ohne src)')
     } else if (alt.trim().length > 0) {
       withAlt++
+      altTexte.push(alt.replace(/\s+/g, ' ').trim())
     } else {
       decorative++
     }
@@ -382,6 +439,7 @@ function analyzeImages($: cheerio.CheerioAPI) {
     decorative,
     withoutAlt: missingAltSources.length,
     missingAltSources: missingAltSources.slice(0, 8),
+    altTexte: altTexte.slice(0, 40),
     lazy,
   }
 }
@@ -479,6 +537,180 @@ function extractDates($: cheerio.CheerioAPI, schemaRaw: unknown[]) {
   published ??= $('time[datetime]').first().attr('datetime') ?? null
 
   return { published, modified }
+}
+
+/** Namen aus eigenständigen Person-Knoten im Schema — unabhängig von `author`. */
+/**
+ * Was folgt auf eine Frage-Überschrift?
+ *
+ * Der alte Weg zählte Absätze passender Länge irgendwo im Fliesstext — ohne
+ * zu wissen, ob sie zu einer Frage gehören, und ohne die Absatzgrenzen, die
+ * beim Plattmachen des Textes längst verloren gegangen waren.
+ *
+ * Hier wird stattdessen am Dokument entlanggegangen: von der Überschrift zu
+ * den nachfolgenden Geschwistern. Ist das erste davon ein Kasten (div,
+ * section, blockquote, aside …), zählt sein Inhalt — genau die Form, die der
+ * alte Weg übersah. Weiter als bis zur nächsten Überschrift wird nie
+ * gelesen, sonst würde die Antwort der nächsten Frage mitgezählt.
+ */
+function extractFrageAntworten(
+  $: cheerio.CheerioAPI,
+  fragen: string[],
+): PageSignals['frageAntworten'] {
+  if (fragen.length === 0) return []
+
+  const gesucht = new Set(fragen.map((f) => f.replace(/\s+/g, ' ').trim()))
+  const ergebnis: PageSignals['frageAntworten'] = []
+
+  $('h2, h3').each((_, el) => {
+    const frage = $(el).text().replace(/\s+/g, ' ').trim()
+    if (!gesucht.has(frage)) return
+
+    let worte = 0
+    let imKasten = false
+
+    let knoten = $(el).next()
+    // Ein paar Geschwister weit: Zwischen Überschrift und Antwort stehen
+    // gern eine Trennlinie, ein Bild oder ein leerer Absatz.
+    for (let i = 0; i < 4 && knoten.length > 0; i++) {
+      const tag = (knoten.prop('tagName') ?? '').toLowerCase()
+      if (/^h[1-6]$/.test(tag)) break
+
+      const inhalt = knoten.text().replace(/\s+/g, ' ').trim()
+      if (inhalt.length > 0) {
+        worte = inhalt.split(/\s+/).filter(Boolean).length
+        imKasten = tag !== 'p'
+        break
+      }
+      knoten = knoten.next()
+    }
+
+    // Steht die Frage selbst in einem Kasten, hat sie keine Geschwister —
+    // dann trägt der umschliessende Kasten die Antwort.
+    if (worte === 0) {
+      const eltern = $(el).parent()
+      const drin = eltern.text().replace(/\s+/g, ' ').trim().replace(frage, '').trim()
+      if (drin.length > 0) {
+        worte = drin.split(/\s+/).filter(Boolean).length
+        imKasten = true
+      }
+    }
+
+    ergebnis.push({ frage, worte, imKasten })
+  })
+
+  return ergebnis.slice(0, 30)
+}
+
+/** Namen aus eigenständigen Person-Knoten im Schema — unabhängig von `author`. */
+function extractPersonen(schemaRaw: unknown[]): string[] {
+  const namen = new Set<string>()
+
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) return node.forEach(walk)
+    if (!node || typeof node !== 'object') return
+    const obj = node as Record<string, any>
+    const typen = Array.isArray(obj['@type']) ? obj['@type'] : [obj['@type']]
+    if (typen.some((t) => typeof t === 'string' && /^person$/i.test(t))) {
+      const name = typeof obj.name === 'string' ? obj.name.trim() : ''
+      if (name.length >= 3 && name.length < 60) namen.add(name)
+    }
+    Object.values(obj).forEach(walk)
+  }
+  schemaRaw.forEach(walk)
+
+  return [...namen].slice(0, 5)
+}
+
+/**
+ * Steht der Name irgendwo im Text?
+ *
+ * Verlangt wird der vollständige Name, nicht einzelne Bestandteile: „Anna"
+ * allein kommt auf jeder zweiten Seite vor und wäre kein Nachweis. Zwischen
+ * den Namensteilen darf beliebiger Leerraum stehen, damit ein Zeilenumbruch
+ * im Quelltext den Fund nicht verhindert.
+ */
+function nameKommtVor(name: string, wo: string): boolean {
+  const teile = name.split(/\s+/).filter((t) => t.length >= 2)
+  if (teile.length === 0) return false
+  const muster = teile.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')
+  return new RegExp(muster, 'i').test(wo)
+}
+
+/**
+ * Monatsnamen ausgeschrieben — die häufigste Form auf deutschen Seiten.
+ *
+ * „24. August 2026" ist für Leserinnen gedacht und taucht in keinem
+ * Schema-Feld auf. Genau deshalb kann sie von der maschinenlesbaren Angabe
+ * abweichen, ohne dass es jemandem auffällt.
+ */
+const MONATE: Record<string, number> = {
+  januar: 1, jänner: 1, februar: 2, märz: 3, maerz: 3, april: 4, mai: 5, juni: 6,
+  juli: 7, august: 8, september: 9, oktober: 10, november: 11, dezember: 12,
+}
+
+/** Wörter, die ein Datum als Aktualisierungsdatum ausweisen. */
+const AKTUALISIERT =
+  /(zuletzt\s+(aktualisiert|ge(ä|ae)ndert|bearbeitet)|aktualisiert\s+am|stand[:\s]|letzte\s+(aktualisierung|(ä|ae)nderung)|ver(ö|oe)ffentlicht\s+am|last\s+updated)/i
+
+/**
+ * Ein sichtbar auf der Seite stehendes Datum finden.
+ *
+ * Gesucht wird zuerst dort, wo ein Aktualisierungshinweis steht — ein
+ * beliebiges Datum im Text wäre wertlos, davon stehen auf einer Seite viele.
+ * Findet sich keiner, gilt der Text eines `<time>`-Elements, denn der ist
+ * ausdrücklich als Datumsangabe ausgezeichnet.
+ */
+function extractSichtbaresDatum(
+  $: cheerio.CheerioAPI,
+  text: string,
+): { datum: string | null; fundstelle: string | null } {
+  const kandidaten: string[] = []
+
+  // Um jeden Aktualisierungshinweis ein Fenster von 80 Zeichen: Das Datum
+  // steht mal davor ("Stand: 24. August"), mal dahinter.
+  const hinweis = new RegExp(AKTUALISIERT.source, 'gi')
+  let treffer: RegExpExecArray | null
+  while ((treffer = hinweis.exec(text)) !== null) {
+    kandidaten.push(text.slice(treffer.index, treffer.index + 80))
+  }
+
+  $('time').each((_, el) => {
+    const roh = $(el).text().replace(/\s+/g, ' ').trim()
+    if (roh) kandidaten.push(roh)
+  })
+
+  for (const stelle of kandidaten) {
+    const datum = leseDatum(stelle)
+    if (datum) return { datum, fundstelle: stelle.trim().slice(0, 70) }
+  }
+  return { datum: null, fundstelle: null }
+}
+
+/** Ein deutsches Datum aus einem kurzen Textstück lesen. */
+export function leseDatum(stelle: string): string | null {
+  const ausgeschrieben = stelle.match(
+    /(\d{1,2})\.\s*([A-Za-zÄÖÜäöüß]+)\s+(\d{4})/,
+  )
+  if (ausgeschrieben) {
+    const monat = MONATE[ausgeschrieben[2].toLowerCase()]
+    if (monat) return alsTag(Number(ausgeschrieben[1]), monat, Number(ausgeschrieben[3]))
+  }
+
+  const numerisch = stelle.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/)
+  if (numerisch) {
+    return alsTag(Number(numerisch[1]), Number(numerisch[2]), Number(numerisch[3]))
+  }
+
+  const iso = stelle.match(/(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+
+  return null
+}
+
+function alsTag(tag: number, monat: number, jahr: number): string | null {
+  if (tag < 1 || tag > 31 || monat < 1 || monat > 12 || jahr < 1990 || jahr > 2100) return null
+  return `${jahr}-${String(monat).padStart(2, '0')}-${String(tag).padStart(2, '0')}`
 }
 
 /**
