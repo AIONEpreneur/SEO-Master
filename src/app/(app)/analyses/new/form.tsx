@@ -6,9 +6,22 @@ import { startAnalysisAction, type StartState } from '@/lib/analysis/actions'
 import { Button, Card, CardHeader, Input, Label, Select } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
 import type { VerwendeterAnbieter } from '@/lib/connectors/credentials'
-import { MARKTGRUPPEN, BERICHTSSPRACHEN } from '@/lib/analysis/maerkte'
+import {
+  MARKTGRUPPEN,
+  BERICHTSSPRACHEN,
+  STANDARD_MARKT,
+  projektMaerkte,
+  maerkteInWorten,
+} from '@/lib/analysis/maerkte'
 
-type Project = { id: string; name: string; url: string; locationCode: number; languageCode: string }
+type Project = {
+  id: string
+  name: string
+  url: string
+  locationCode: number
+  locationCodes: number[]
+  languageCode: string
+}
 
 const MODULES = [
   {
@@ -66,7 +79,14 @@ export function NewAnalysisForm({
   const [selected, setSelected] = useState<string[]>(['SEO', 'AEO', 'GEO'])
   const [url, setUrl] = useState('')
   const [umfang, setUmfang] = useState<'seite' | 'website'>('seite')
-  const [market, setMarket] = useState(2276)
+  const [market, setMarket] = useState(STANDARD_MARKT)
+  const [projektId, setProjektId] = useState('')
+  // Mehrere Märkte auf einmal nur, wenn das Projekt auch mehrere hat.
+  const [alleMaerkte, setAlleMaerkte] = useState(false)
+
+  const projektMaerkteListe = projektMaerkte(
+    projects.find((p) => p.id === projektId) ?? { locationCode: market, locationCodes: [] },
+  )
 
   const isSocial = /instagram\.|linkedin\.|tiktok\.|youtube\.|facebook\.|x\.com|twitter\./i.test(url)
 
@@ -75,10 +95,16 @@ export function NewAnalysisForm({
   }
 
   const applyProject = (id: string) => {
+    setProjektId(id)
     const project = projects.find((p) => p.id === id)
     if (project) {
       setUrl(project.url)
       setMarket(project.locationCode)
+      // Trägt das Projekt mehrere Märkte, ist das der Regelfall – sonst wäre
+      // die Auswahl im Projekt folgenlos geblieben.
+      setAlleMaerkte(projektMaerkte(project).length > 1)
+    } else {
+      setAlleMaerkte(false)
     }
   }
 
@@ -192,6 +218,34 @@ export function NewAnalysisForm({
                   </optgroup>
                 ))}
               </Select>
+
+              {/*
+                Nur zeigen, wenn es etwas zu entscheiden gibt. Ein Kästchen,
+                das bei einem Markt "in allen Märkten" anbietet, ist eine
+                Frage ohne Inhalt — und die Kosten stehen dabei, bevor
+                geklickt wird, nicht danach in der Abrechnung.
+              */}
+              {projektMaerkteListe.length > 1 && (
+                <label className="lift mt-2 flex cursor-pointer items-start gap-2.5 rounded-xl border-2 border-border bg-limette px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    name="alleMaerkte"
+                    value="ja"
+                    checked={alleMaerkte}
+                    onChange={(e) => setAlleMaerkte(e.target.checked)}
+                    className="mt-0.5 accent-rot"
+                  />
+                  <span className="text-[12px] font-medium text-tinte">
+                    <span className="font-bold">
+                      In allen {projektMaerkteListe.length} Märkten des Projekts starten
+                    </span>
+                    <span className="mt-0.5 block">
+                      {maerkteInWorten(projektMaerkteListe)} — je Land ein eigener Lauf, also{' '}
+                      {projektMaerkteListe.length}× Kontingent.
+                    </span>
+                  </span>
+                </label>
+              )}
             </div>
             <div>
               <Label htmlFor="languageCode">Sprache</Label>

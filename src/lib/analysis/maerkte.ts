@@ -110,6 +110,30 @@ export function istMarkt(code: number): boolean {
 }
 
 /**
+ * Die Märkte eines Projekts.
+ *
+ * Eine leere Liste bedeutet "nur der führende Markt" — so verhalten sich
+ * Projekte, die vor der Mehrfachauswahl entstanden sind, unverändert. Der
+ * führende Markt steht immer vorn, auch wenn er in der Liste an anderer
+ * Stelle steht: Wo nur ein Lauf möglich ist, soll es der erwartete sein.
+ */
+export function projektMaerkte(projekt: {
+  locationCode: number
+  locationCodes?: number[] | null
+}): number[] {
+  const liste = (projekt.locationCodes ?? []).filter(istMarkt)
+  if (liste.length === 0) return [projekt.locationCode]
+  return [projekt.locationCode, ...liste.filter((c) => c !== projekt.locationCode)]
+}
+
+/** Die Märkte in Worten — "Deutschland, Österreich und Schweiz". */
+export function maerkteInWorten(codes: number[]): string {
+  const namen = codes.map(marktName)
+  if (namen.length <= 1) return namen[0] ?? '—'
+  return `${namen.slice(0, -1).join(', ')} und ${namen[namen.length - 1]}`
+}
+
+/**
  * Die Sprachen, in denen die Oberfläche Analysen anbietet.
  *
  * Bewusst knapp gehalten: Die Berichte entstehen auf Deutsch, und für alles,

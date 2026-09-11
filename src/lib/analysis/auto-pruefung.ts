@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { enqueueAnalysis } from '@/lib/queue'
 import { reichtGuthaben } from '@/lib/billing/guthaben'
 import type { ModuleKey } from '@/lib/analysis/run'
+import { projektMaerkte } from '@/lib/analysis/maerkte'
 
 /**
  * Automatische Monats-Prüfung.
@@ -42,8 +43,19 @@ export async function starteFaelligePruefungen(jetzt = new Date()): Promise<Auto
     // Die Guthaben-Sperre gilt auch hier – gerade hier: Ein automatischer
     // Lauf, den niemand anstösst, darf erst recht keine Kosten über das
     // Kontingent hinaus erzeugen.
-    if (!reichtGuthaben(projekt.organization, 'analyse')) {
-      ergebnis.uebersprungen.push({ projekt: projekt.name, grund: 'Guthaben reicht nicht' })
+    // Ein Projekt kann mehrere Märkte tragen; gemessen wird je Land einzeln,
+    // weil das Land beim Datenanbieter die grösste Einheit ist. Geprüft wird
+    // deshalb für alle Läufe zusammen — sonst scheitert der letzte mitten im
+    // Anlegen und hinterlässt angefangene Arbeit.
+    const maerkte = projektMaerkte(projekt)
+    if (!reichtGuthaben(projekt.organization, 'analyse', maerkte.length)) {
+      ergebnis.uebersprungen.push({
+        projekt: projekt.name,
+        grund:
+          maerkte.length > 1
+            ? `Guthaben reicht nicht für ${maerkte.length} Märkte`
+            : 'Guthaben reicht nicht',
+      })
       continue
     }
 
@@ -69,35 +81,38 @@ export async function starteFaelligePruefungen(jetzt = new Date()): Promise<Auto
     })
     const pageLimit = letzter?.pageLimit ?? 1
 
-    const analyse = await db.analysis.create({
-      data: {
+    for (const markt of maerkte) {
+      const analyse = await db.analysis.create({
+        data: {
+          organizationId: projekt.organizationId,
+          projectId: projekt.id,
+          // Kein createdById: Der Lauf kam von der Anwendung, nicht von einer Person.
+          targetUrl: projekt.url,
+          targetKind: projekt.kind,
+          modules: AUTO_MODULE,
+          status: 'QUEUED',
+          pageLimit,
+          locationCode: markt,
+          languageCode: projekt.languageCode,
+          seedKeywords: [],
+        },
+      })
+
+      await enqueueAnalysis({
+        analysisId: analyse.id,
         organizationId: projekt.organizationId,
-        projectId: projekt.id,
-        // Kein createdById: Der Lauf kam von der Anwendung, nicht von einer Person.
         targetUrl: projekt.url,
         targetKind: projekt.kind,
         modules: AUTO_MODULE,
-        status: 'QUEUED',
-        pageLimit,
-        locationCode: projekt.locationCode,
+        locationCode: markt,
         languageCode: projekt.languageCode,
-        seedKeywords: [],
-      },
-    })
+        pageLimit,
+      })
 
-    await enqueueAnalysis({
-      analysisId: analyse.id,
-      organizationId: projekt.organizationId,
-      targetUrl: projekt.url,
-      targetKind: projekt.kind,
-      modules: AUTO_MODULE,
-      locationCode: projekt.locationCode,
-      languageCode: projekt.languageCode,
-      pageLimit,
-    })
+      ergebnis.gestartet++
+    }
 
     await db.project.update({ where: { id: projekt.id }, data: { autoZuletzt: jetzt } })
-    ergebnis.gestartet++
   }
 
   return ergebnis

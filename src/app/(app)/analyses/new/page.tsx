@@ -14,7 +14,7 @@ export default async function NewAnalysisPage() {
     db.project.findMany({
       where: { organizationId: session.organizationId, isArchived: false },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, url: true, locationCode: true, languageCode: true },
+      select: { id: true, name: true, url: true, locationCode: true, locationCodes: true, languageCode: true },
     }),
     availableProviders(session.organizationId),
   ])

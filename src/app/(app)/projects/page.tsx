@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils/cn'
 import { schalteAutoPruefungAction } from './actions'
 import { ButtonLink, Card, CardHeader, EmptyState, ScoreBadge } from '@/components/ui'
 import { ProjectForm } from './form'
+import { projektMaerkte, marktName } from '@/lib/analysis/maerkte'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +53,21 @@ export default async function ProjectsPage() {
                 <div className="min-w-0">
                   <p className="truncate text-[14px] font-semibold">{project.name}</p>
                   <p className="mt-0.5 truncate text-[12px] text-ink-subtle">{project.url}</p>
+                  {/*
+                    Die Märkte gehören auf die Karte: Sie entscheiden, wie
+                    viele Läufe eine Prüfung auslöst — und damit über die
+                    Kosten. Das darf man nicht erst im Formular erfahren.
+                  */}
+                  <p className="mt-1 flex flex-wrap gap-1">
+                    {projektMaerkte(project).map((code) => (
+                      <span
+                        key={code}
+                        className="rounded-full border-2 border-border bg-sand px-2 py-0.5 text-[11px] font-bold"
+                      >
+                        {marktName(code)}
+                      </span>
+                    ))}
+                  </p>
                 </div>
                 <ScoreBadge score={project.analyses[0]?.scoreOverall ?? null} size="sm" />
               </div>
@@ -73,7 +89,11 @@ export default async function ProjectsPage() {
                   <p className="text-[12px] font-medium">Monatliche Prüfung</p>
                   <p className="mt-0.5 text-[12px] leading-snug text-ink-subtle">
                     {project.autoPruefung
-                      ? `Läuft von selbst — zuletzt ${project.autoZuletzt ? project.autoZuletzt.toLocaleDateString('de-DE') : 'startet in Kürze'}. So entsteht der Verlauf, ohne dass jemand daran denken muss.`
+                      ? `Läuft von selbst — zuletzt ${project.autoZuletzt ? project.autoZuletzt.toLocaleDateString('de-DE') : 'startet in Kürze'}. ${
+                          projektMaerkte(project).length > 1
+                            ? `Je Markt ein Lauf, also ${projektMaerkte(project).length} im Monat.`
+                            : 'So entsteht der Verlauf, ohne dass jemand daran denken muss.'
+                        }`
                       : 'Aus. Eingeschaltet prüft die App diese Adresse einmal im Monat von selbst.'}
                   </p>
                 </div>

@@ -26,6 +26,8 @@ import {
   STANDARD_MARKT,
   marktName,
   istMarkt,
+  projektMaerkte,
+  maerkteInWorten,
 } from '../src/lib/analysis/maerkte'
 import { legeBildAb, nameIstGueltig, HOECHSTGROESSE } from '../src/lib/profil/bilder'
 import { analyzeSocial } from '../src/lib/analysis/social'
@@ -895,6 +897,58 @@ async function main() {
     'Berichtssprachen bleiben bei Deutsch und Englisch',
     BERICHTSSPRACHEN.map((s) => s.code).join(',') === 'de,en',
     BERICHTSSPRACHEN.map((s) => s.label).join(', '),
+  )
+
+  // --- Mehrere Märkte je Projekt -------------------------------------------
+  //
+  // Ein Projekt kann für den DACH-Raum stehen. Gemessen wird trotzdem je
+  // Land einzeln — jede Prüfung ist dann drei Läufe. Was dabei schiefgehen
+  // kann: der führende Markt rutscht nach hinten (dann vergleicht der
+  // Verlauf das falsche Land), oder ein Bestandsprojekt ohne Liste verliert
+  // seinen Markt.
+  section('Ein Projekt kann mehrere Märkte tragen')
+
+  check(
+    'Ohne Liste bleibt es beim führenden Markt',
+    projektMaerkte({ locationCode: 2276, locationCodes: [] }).join(',') === '2276',
+    'Bestandsprojekte ändern sich nicht',
+  )
+  check(
+    'Auch wenn die Liste fehlt',
+    projektMaerkte({ locationCode: 2840 }).join(',') === '2840',
+  )
+  check(
+    'Der führende Markt steht immer vorn',
+    projektMaerkte({ locationCode: 2756, locationCodes: [2276, 2040, 2756] }).join(',') ===
+      '2756,2276,2040',
+    'sonst vergliche der Verlauf das falsche Land',
+  )
+  check(
+    'Keine Dopplung, wenn der führende auch in der Liste steht',
+    projektMaerkte({ locationCode: 2276, locationCodes: [2276, 2040] }).length === 2,
+  )
+  check(
+    'Unbekannte Kennziffern fallen raus',
+    projektMaerkte({ locationCode: 2276, locationCodes: [2276, 999999] }).join(',') === '2276',
+    'ein Lauf ins Leere ist schlimmer als ein fehlender Markt',
+  )
+
+  check(
+    'Drei Märkte lesen sich als Satz',
+    maerkteInWorten([2276, 2040, 2756]) === 'Deutschland, Österreich und Schweiz',
+    maerkteInWorten([2276, 2040, 2756]),
+  )
+  check('Ein Markt bleibt ein Wort', maerkteInWorten([2840]) === 'USA')
+
+  // Das Kontingent muss für alle Läufe zusammen reichen. Sonst scheitert der
+  // dritte mitten im Anlegen und hinterlässt zwei begonnene.
+  const knapp = { plan: 'STARTER' as const, credits: KOSTEN_ANALYSE * 2 }
+  check('Zwei Läufe gehen bei Guthaben für zwei', reichtGuthaben(knapp, 'analyse', 2))
+  check('Drei nicht', !reichtGuthaben(knapp, 'analyse', 3))
+  check('Ohne Angabe gilt weiterhin einer', reichtGuthaben(knapp, 'analyse'))
+  check(
+    'Ein interner Bereich rechnet auch bei drei Läufen nicht ab',
+    reichtGuthaben({ plan: 'INTERNAL', credits: 0 }, 'analyse', 3),
   )
 
   // --- Wortformen -----------------------------------------------------------

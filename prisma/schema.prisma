@@ -288,7 +288,23 @@ model Project {
   // Website: vollständige URL. Social: Profil-URL.
   url            String
   domain         String?
+  /**
+   * Der führende Markt. Bleibt bestehen, weil jede einzelne Analyse genau
+   * einen Länderindex misst — und weil Bestandsprojekte ihn schon haben.
+   */
   locationCode   Int        @default(2276) // Deutschland
+  /**
+   * Alle Märkte des Projekts, der führende eingeschlossen.
+   *
+   * Wer für den DACH-Raum arbeitet, trägt hier Deutschland, Österreich und
+   * die Schweiz ein. Gemessen wird trotzdem je Land einzeln: Beim
+   * Datenanbieter ist das Land die grösste Einheit, und ein Mittelwert über
+   * drei Länderindizes entspräche keiner Suchanfrage.
+   *
+   * Leer heisst: nur der führende Markt. So verhalten sich Projekte, die vor
+   * dieser Erweiterung entstanden sind, unverändert.
+   */
+  locationCodes  Int[]      @default([])
   languageCode   String     @default("de")
   description    String?
   isArchived     Boolean    @default(false)

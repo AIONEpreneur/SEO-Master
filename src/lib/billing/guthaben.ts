@@ -30,9 +30,18 @@ export function rechnetAb(plan: Plan): boolean {
   return plan !== 'INTERNAL'
 }
 
-export function reichtGuthaben(organisation: { plan: Plan; credits: number }, vorgang: Vorgang): boolean {
+/**
+ * @param anzahl Wie viele Vorgänge auf einmal. Ein Projekt mit drei Märkten
+ *   startet drei Läufe — geprüft werden muss dann auch für drei, sonst
+ *   scheitert der dritte mitten im Anlegen und hinterlässt zwei begonnene.
+ */
+export function reichtGuthaben(
+  organisation: { plan: Plan; credits: number },
+  vorgang: Vorgang,
+  anzahl = 1,
+): boolean {
   if (!rechnetAb(organisation.plan)) return true
-  return organisation.credits >= NOETIG[vorgang]
+  return organisation.credits >= NOETIG[vorgang] * Math.max(1, anzahl)
 }
 
 /**

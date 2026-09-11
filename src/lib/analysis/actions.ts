@@ -11,6 +11,7 @@ import { reichtGuthaben, guthabenHinweis } from '@/lib/billing/guthaben'
 import { WEBSITE_UMFANG } from '@/lib/analysis/seiten'
 import { siehtAbrechnung } from '@/lib/billing/zugaenge'
 import { detectPlatform } from '@/lib/connectors/apify'
+import { istMarkt, projektMaerkte, maerkteInWorten } from './maerkte'
 import type { ModuleKey } from './run'
 
 const MODULE_KEYS = ['SEO', 'AEO', 'GEO', 'SERP', 'COMPETITORS'] as const
@@ -65,54 +66,87 @@ export async function startAnalysisAction(_prev: StartState, formData: FormData)
     }
   }
 
-  const organization = await db.organization.findUniqueOrThrow({ where: { id: session.organizationId } })
-  if (!reichtGuthaben(organization, 'analyse')) {
-    return { error: guthabenHinweis(organization, 'analyse', { mitZahlen: siehtAbrechnung(session) }) }
+  /*
+    In welchen Märkten wird gemessen?
+
+    Normalfall: genau einer. Gehört die Analyse zu einem Projekt mit mehreren
+    Märkten und ist "in allen Märkten" angekreuzt, entsteht je Land ein
+    eigener Lauf — denn beim Datenanbieter ist das Land die grösste Einheit,
+    die es als Standort gibt. Drei Länder heissen deshalb drei Läufe und
+    dreimal Kontingent. Das steht im Formular, bevor geklickt wird.
+  */
+  let maerkte = [locationCode]
+  if (String(formData.get('alleMaerkte') ?? '') === 'ja' && parsed.data.projectId) {
+    const projekt = await db.project.findFirst({
+      where: { id: parsed.data.projectId, organizationId: session.organizationId },
+      select: { locationCode: true, locationCodes: true },
+    })
+    if (projekt) maerkte = projektMaerkte(projekt)
   }
 
-  const analysis = await db.analysis.create({
-    data: {
+  const organization = await db.organization.findUniqueOrThrow({ where: { id: session.organizationId } })
+  if (!reichtGuthaben(organization, 'analyse', maerkte.length)) {
+    return {
+      error:
+        maerkte.length > 1
+          ? `Für ${maerkte.length} Läufe (${maerkteInWorten(maerkte)}) reicht das Kontingent nicht. ` +
+            guthabenHinweis(organization, 'analyse', { mitZahlen: siehtAbrechnung(session) })
+          : guthabenHinweis(organization, 'analyse', { mitZahlen: siehtAbrechnung(session) }),
+    }
+  }
+
+  const pageLimit = targetKind === 'WEBSITE' && websiteUmfang ? WEBSITE_UMFANG : 1
+  const angelegt: string[] = []
+
+  for (const markt of maerkte) {
+    const analysis = await db.analysis.create({
+      data: {
+        organizationId: session.organizationId,
+        projectId: parsed.data.projectId || null,
+        createdById: session.id,
+        targetUrl: url,
+        targetKind,
+        modules: targetKind === 'SOCIAL_PROFILE' ? ['SOCIAL'] : modules,
+        status: 'QUEUED',
+        currentStep: 'In Warteschlange',
+        locationCode: markt,
+        languageCode,
+        pageLimit,
+        seedKeywords: parsed.data.seedKeywords?.filter(Boolean) ?? [],
+        competitorDomains: parsed.data.competitorDomains?.filter(Boolean) ?? [],
+      },
+    })
+
+    const job = await enqueueAnalysis({
+      analysisId: analysis.id,
       organizationId: session.organizationId,
-      projectId: parsed.data.projectId || null,
-      createdById: session.id,
       targetUrl: url,
       targetKind,
-      modules: targetKind === 'SOCIAL_PROFILE' ? ['SOCIAL'] : modules,
-      status: 'QUEUED',
-      currentStep: 'In Warteschlange',
-      locationCode,
+      modules: modules as ModuleKey[],
+      locationCode: markt,
       languageCode,
-      pageLimit: targetKind === 'WEBSITE' && websiteUmfang ? WEBSITE_UMFANG : 1,
-      seedKeywords: parsed.data.seedKeywords?.filter(Boolean) ?? [],
-      competitorDomains: parsed.data.competitorDomains?.filter(Boolean) ?? [],
-    },
-  })
+      seedKeywords: parsed.data.seedKeywords?.filter(Boolean),
+      competitorDomains: parsed.data.competitorDomains?.filter(Boolean),
+      pageLimit,
+    })
 
-  const job = await enqueueAnalysis({
-    analysisId: analysis.id,
-    organizationId: session.organizationId,
-    targetUrl: url,
-    targetKind,
-    modules: modules as ModuleKey[],
-    locationCode,
-    languageCode,
-    seedKeywords: parsed.data.seedKeywords?.filter(Boolean),
-    competitorDomains: parsed.data.competitorDomains?.filter(Boolean),
-    pageLimit: targetKind === 'WEBSITE' && websiteUmfang ? WEBSITE_UMFANG : 1,
-  })
+    await db.analysis.update({ where: { id: analysis.id }, data: { jobId: String(job.id) } })
+    angelegt.push(analysis.id)
+  }
 
-  await db.analysis.update({ where: { id: analysis.id }, data: { jobId: String(job.id) } })
   await db.auditLog.create({
     data: {
       organizationId: session.organizationId,
       userId: session.id,
       action: 'analysis.start',
       target: url,
-      metadata: { modules, analysisId: analysis.id },
+      metadata: { modules, analysisIds: angelegt, maerkte },
     },
   })
 
-  redirect(`/analyses/${analysis.id}`)
+  // Bei mehreren Läufen zur Liste: Eine einzelne davon aufzuschlagen würde
+  // die anderen verstecken, und alle drei laufen gleichzeitig an.
+  redirect(angelegt.length === 1 ? `/analyses/${angelegt[0]}` : '/analyses')
 }
 
 /**
@@ -240,6 +274,18 @@ export async function createProjectAction(_prev: StartState, formData: FormData)
     return { error: 'Bitte eine vollständige URL inklusive https:// angeben.' }
   }
 
+  // Mehrere Märkte sind erlaubt und der Regelfall für den DACH-Raum. Der
+  // erste angekreuzte ist der führende: Wo nur ein Lauf möglich ist — etwa
+  // beim Vergleich im Verlauf —, ist er gemeint.
+  const gewaehlt = formData
+    .getAll('locationCodes')
+    .map((wert) => Number(wert))
+    .filter((code) => Number.isFinite(code) && istMarkt(code))
+
+  if (gewaehlt.length === 0) {
+    return { error: 'Bitte mindestens einen Markt auswählen.' }
+  }
+
   const platform = detectPlatform(url)
   await db.project.create({
     data: {
@@ -248,7 +294,8 @@ export async function createProjectAction(_prev: StartState, formData: FormData)
       url,
       domain,
       kind: platform ? 'SOCIAL_PROFILE' : 'WEBSITE',
-      locationCode: Number(formData.get('locationCode') ?? 2276),
+      locationCode: gewaehlt[0],
+      locationCodes: gewaehlt,
       languageCode: String(formData.get('languageCode') ?? 'de'),
       description: String(formData.get('description') ?? '').trim() || null,
     },
