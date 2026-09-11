@@ -6,6 +6,7 @@ import { startAnalysisAction, type StartState } from '@/lib/analysis/actions'
 import { Button, Card, CardHeader, Input, Label, Select } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
 import type { VerwendeterAnbieter } from '@/lib/connectors/credentials'
+import { MARKTGRUPPEN, BERICHTSSPRACHEN } from '@/lib/analysis/maerkte'
 
 type Project = { id: string; name: string; url: string; locationCode: number; languageCode: string }
 
@@ -45,14 +46,6 @@ const MODULES = [
     icon: Swords,
     requires: ['DATAFORSEO'] as VerwendeterAnbieter[],
   },
-]
-
-const MARKETS = [
-  { code: 2276, label: 'Deutschland', language: 'de' },
-  { code: 2040, label: 'Österreich', language: 'de' },
-  { code: 2756, label: 'Schweiz', language: 'de' },
-  { code: 2826, label: 'Vereinigtes Königreich', language: 'en' },
-  { code: 2840, label: 'USA', language: 'en' },
 ]
 
 export function NewAnalysisForm({
@@ -186,20 +179,28 @@ export function NewAnalysisForm({
                 value={market}
                 onChange={(e) => setMarket(Number(e.target.value))}
               >
-                {MARKETS.map((m) => (
-                  <option key={m.code} value={m.code}>
-                    {m.label}
-                  </option>
+                {MARKTGRUPPEN.map((gruppe) => (
+                  <optgroup
+                    key={gruppe.name}
+                    label={gruppe.hinweis ? `${gruppe.name} — ${gruppe.hinweis}` : gruppe.name}
+                  >
+                    {gruppe.laender.map((m) => (
+                      <option key={m.code} value={m.code}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </Select>
             </div>
             <div>
               <Label htmlFor="languageCode">Sprache</Label>
               <Select id="languageCode" name="languageCode" defaultValue="de">
-                <option value="de">Deutsch</option>
-                <option value="en">Englisch</option>
-                <option value="fr">Französisch</option>
-                <option value="it">Italienisch</option>
+                {BERICHTSSPRACHEN.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.label}
+                  </option>
+                ))}
               </Select>
             </div>
           </div>

@@ -19,6 +19,14 @@ import { analyzeAeo } from '../src/lib/analysis/aeo'
 import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
 import { keywordKandidaten } from '../src/lib/analysis/run'
+import {
+  MARKTGRUPPEN,
+  MAERKTE,
+  BERICHTSSPRACHEN,
+  STANDARD_MARKT,
+  marktName,
+  istMarkt,
+} from '../src/lib/analysis/maerkte'
 import { legeBildAb, nameIstGueltig, HOECHSTGROESSE } from '../src/lib/profil/bilder'
 import { analyzeSocial } from '../src/lib/analysis/social'
 import {
@@ -833,6 +841,60 @@ async function main() {
       !nameIstGueltig('bild.png') &&
       nameIstGueltig('0123456789abcdef0123456789abcdef.png'),
     '32 Hex-Zeichen und eine erlaubte Endung',
+  )
+
+  // --- Märkte ---------------------------------------------------------------
+  //
+  // Die Liste stand dreimal im Code: im Analyse-Formular, im
+  // Projekt-Formular und noch einmal für den Namen im Bericht. Drei Listen
+  // laufen auseinander, und eine falsche Kennziffer misst still im falschen
+  // Land — das Ergebnis sieht aus wie ein Ergebnis.
+  section('Märkte')
+
+  check('Gruppen vorhanden', MARKTGRUPPEN.length >= 4, MARKTGRUPPEN.map((g) => g.name).join(', '))
+  check('Genug Länder zur Auswahl', MAERKTE.length >= 30, `${MAERKTE.length} Länder`)
+
+  const dach = MARKTGRUPPEN.find((g) => g.name === 'DACH')
+  check(
+    'DACH führt genau Deutschland, Österreich und die Schweiz',
+    dach?.laender.map((l) => l.code).join(',') === '2276,2040,2756',
+    dach?.laender.map((l) => l.label).join(', '),
+  )
+
+  // Googles Kennziffer ist 2000 plus der numerische ISO-3166-1-Code. Ein
+  // Zahlendreher fällt sonst nirgends auf.
+  const ISO_NUMERISCH: Record<string, number> = {
+    Deutschland: 276, Österreich: 40, Schweiz: 756, Belgien: 56, Dänemark: 208,
+    Finnland: 246, Frankreich: 250, Griechenland: 300, Irland: 372, Italien: 380,
+    Kroatien: 191, Luxemburg: 442, Niederlande: 528, Norwegen: 578, Polen: 616,
+    Portugal: 620, Rumänien: 642, Schweden: 752, Slowakei: 703, Slowenien: 705,
+    Spanien: 724, Tschechien: 203, Ungarn: 348, 'Vereinigtes Königreich': 826,
+    USA: 840, Kanada: 124, Australien: 36, Indien: 356, Japan: 392, Singapur: 702,
+    Südkorea: 410, 'Vereinigte Arabische Emirate': 784, Neuseeland: 554,
+  }
+  const falsch = MAERKTE.filter((m) => {
+    const iso = ISO_NUMERISCH[m.label]
+    return iso === undefined || m.code !== 2000 + iso
+  })
+  check(
+    'Jede Kennziffer ist 2000 plus ISO-Ländernummer',
+    falsch.length === 0,
+    falsch.length ? falsch.map((m) => `${m.label}=${m.code}`).join(', ') : `${MAERKTE.length} geprüft`,
+  )
+
+  check(
+    'Keine Kennziffer doppelt',
+    new Set(MAERKTE.map((m) => m.code)).size === MAERKTE.length,
+  )
+  check('Der Standardmarkt ist in der Liste', istMarkt(STANDARD_MARKT), marktName(STANDARD_MARKT))
+  check(
+    'Ein unbekannter Standort bekommt keinen erfundenen Namen',
+    marktName(999999) === 'Standort 999999' && !istMarkt(999999),
+  )
+  check(
+    'Berichtssprachen bleiben bei Deutsch und Englisch',
+    BERICHTSSPRACHEN.map((s) => s.code).join(',') === 'de,en',
+    BERICHTSSPRACHEN.map((s) => s.label).join(', '),
   )
 
   // --- Wortformen -----------------------------------------------------------

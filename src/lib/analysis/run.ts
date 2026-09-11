@@ -14,6 +14,7 @@ import { analyzeSocial } from './social'
 import { waehleSeiten, seitenErgebnis, type SeitenErgebnis } from './seiten'
 import { wiederkehrendeBefunde } from './wiederkehrend'
 import { tragenderBegriff, wortfolge } from './begriffe'
+import { marktName } from './maerkte'
 import { beurteile, messbare, begriffsBefund, beurteileSerpUmfeld, VOLUMEN_SCHWELLE, type BegriffsUrteil } from './keyword-pruefung'
 import { generateReport, sortFindings } from './report'
 import type { AnalysisResult, ModuleResult } from './types'
@@ -851,7 +852,7 @@ function assemble(input: {
       analyzedAt: new Date().toISOString(),
       pageType: input.pageType ?? null,
       language: input.pageLanguage ?? input.languageCode,
-      market: marketName(input.locationCode),
+      market: marktName(input.locationCode),
       modules: input.modules,
       providersUsed: [...input.providersUsed],
       skipped: input.skipped,
@@ -938,19 +939,6 @@ function guessPageType(signals: PageSignals): string {
   if (signals.faqBlocks.length > 3) return 'FAQ-Seite'
   if (signals.wordCount > 1200) return 'Ausführliche Inhaltsseite'
   return 'Landing Page'
-}
-
-/** Ländercodes von DataForSEO für die verbreitetsten Märkte. */
-const MARKETS: Record<number, string> = {
-  2276: 'Deutschland',
-  2040: 'Österreich',
-  2756: 'Schweiz',
-  2826: 'Vereinigtes Königreich',
-  2840: 'USA',
-}
-
-function marketName(code: number): string {
-  return MARKETS[code] ?? `Standort ${code}`
 }
 
 function safeDomain(url: string): string | null {

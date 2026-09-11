@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { createProjectAction, type StartState } from '@/lib/analysis/actions'
 import { Button, Card, CardHeader, Input, Label, Select } from '@/components/ui'
+import { MARKTGRUPPEN, BERICHTSSPRACHEN, STANDARD_MARKT } from '@/lib/analysis/maerkte'
 
 export function ProjectForm() {
   const [state, action, pending] = useActionState<StartState, FormData>(createProjectAction, {})
@@ -42,19 +43,29 @@ export function ProjectForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="project-market">Markt</Label>
-            <Select id="project-market" name="locationCode" defaultValue={2276}>
-              <option value={2276}>Deutschland</option>
-              <option value={2040}>Österreich</option>
-              <option value={2756}>Schweiz</option>
-              <option value={2826}>Vereinigtes Königreich</option>
-              <option value={2840}>USA</option>
+            <Select id="project-market" name="locationCode" defaultValue={STANDARD_MARKT}>
+              {MARKTGRUPPEN.map((gruppe) => (
+                <optgroup
+                  key={gruppe.name}
+                  label={gruppe.hinweis ? `${gruppe.name} — ${gruppe.hinweis}` : gruppe.name}
+                >
+                  {gruppe.laender.map((m) => (
+                    <option key={m.code} value={m.code}>
+                      {m.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
             </Select>
           </div>
           <div>
             <Label htmlFor="project-language">Sprache</Label>
             <Select id="project-language" name="languageCode" defaultValue="de">
-              <option value="de">Deutsch</option>
-              <option value="en">Englisch</option>
+              {BERICHTSSPRACHEN.map((s) => (
+                <option key={s.code} value={s.code}>
+                  {s.label}
+                </option>
+              ))}
             </Select>
           </div>
         </div>
