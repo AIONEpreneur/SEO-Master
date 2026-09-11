@@ -488,6 +488,48 @@ model KeywordResearch {
 }
 
 /**
+ * Ein bei diesem Server registrierter OAuth-Client (Claude, ChatGPT, …).
+ *
+ * MCP-Clients registrieren sich selbst (Dynamic Client Registration), bevor
+ * sie den Anmelde-Fluss starten. Es sind öffentliche Clients ohne Geheimnis;
+ * die Sicherheit liegt in PKCE und der geprüften Rücksprungadresse.
+ */
+model OAuthClient {
+  id           String   @id @default(cuid())
+  name         String
+  redirectUris String[]
+  createdAt    DateTime @default(now())
+
+  codes OAuthCode[]
+
+  @@map("oauth_clients")
+}
+
+/**
+ * Einmal-Code aus dem Anmelde-Fluss.
+ *
+ * Entsteht, wenn eine angemeldete Person den Zugriff bestätigt, und wird am
+ * Token-Endpunkt gegen einen Zugangsschlüssel eingetauscht – genau einmal,
+ * binnen zehn Minuten, mit PKCE-Nachweis. Gespeichert ist nur der Hash.
+ */
+model OAuthCode {
+  id             String   @id @default(cuid())
+  codeHash       String   @unique
+  clientId       String
+  userId         String
+  organizationId String
+  redirectUri    String
+  codeChallenge  String
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("oauth_codes")
+}
+
+/**
  * Ranking-Abfrage aus der Browser-Extension (SEO4U).
  *
  * Jede Abfrage im Popup – Rankings einer Domain oder einer exakten

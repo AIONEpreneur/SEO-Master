@@ -1,5 +1,6 @@
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
+import { env } from '@/lib/env'
 import { Card, CardHeader, Button } from '@/components/ui'
 import { TokenVerwaltung } from './token-verwaltung'
 import { widerrufeTokenAction } from './actions'
@@ -88,24 +89,31 @@ export default async function ExtensionPage() {
         <p className="mt-2 text-[13px] text-ink-muted">
           Über das Model Context Protocol greifen die KI-Werkzeuge selbst auf SEO-Master zu:
           gespeicherte Recherchen und Ranking-Abfragen abrufen (kostenlos) oder neue starten
-          (verbraucht Kontingent, wird hier gespeichert). Die MCP-Adresse erscheint zusammen mit
-          jedem neu erzeugten Schlüssel — sie enthält den Schlüssel und ist deshalb genauso
-          vertraulich zu behandeln.
+          (verbraucht Kontingent, wird hier gespeichert). Die Verbindung verlangt eine Anmeldung:
+          Beim Einrichten öffnet sich die SEO-Master-Anmeldung, und erst nach deiner Zustimmung
+          entsteht ein Zugangsschlüssel — er erscheint anschliessend in der Liste oben und lässt
+          sich dort jederzeit widerrufen.
         </p>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-[13px] text-ink-muted">
+        <div className="mt-3 rounded-lg bg-surface-muted px-3 py-2">
+          <p className="text-[12px] text-ink-subtle">Connector-Adresse</p>
+          <code className="text-[13px]">{`${env().APP_URL}/api/mcp`}</code>
+        </div>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-[13px] text-ink-muted">
           <li>
             <span className="font-medium">Claude:</span> Einstellungen → Connectors → „Eigenen
-            Connector hinzufügen“ → die MCP-Adresse einfügen. Danach stehen die SEO-Master-Werkzeuge
-            in jedem Chat zur Verfügung.
+            Connector hinzufügen“ → diese Adresse einfügen. Claude leitet zur Anmeldung hierher —
+            anmelden, „Zugriff erlauben“, fertig.
           </li>
           <li>
             <span className="font-medium">ChatGPT:</span> Einstellungen → Apps &amp; Connectors →
-            Entwicklermodus aktivieren → Connector mit der MCP-Adresse anlegen (ohne Authentifizierung —
-            der Schlüssel steckt in der Adresse).
+            Entwicklermodus aktivieren → Connector mit dieser Adresse und Authentifizierung „OAuth“
+            anlegen — der Anmelde-Fluss läuft genauso.
           </li>
         </ul>
         <p className="mt-2 text-[12px] text-ink-subtle">
-          Ein Widerruf des Schlüssels oben trennt auch diese Verbindung sofort.
+          Für Werkzeuge ohne OAuth-Unterstützung gibt es weiter den Weg über die Adresse mit
+          eingebautem Schlüssel (wird beim Erzeugen eines Schlüssels angezeigt) — auch dort ist der
+          Schlüssel die Anmeldung, nur eben ohne eigenen Anmelde-Dialog.
         </p>
       </Card>
     </div>

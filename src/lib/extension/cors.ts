@@ -11,7 +11,8 @@
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'authorization, content-type',
+  // mcp-protocol-version schicken MCP-Clients bei jeder Anfrage mit.
+  'access-control-allow-headers': 'authorization, content-type, mcp-protocol-version',
 }
 
 export function extAntwort(body: unknown, status = 200): Response {

@@ -40,7 +40,12 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
 
   await createSession(user.id)
   await db.auditLog.create({ data: { userId: user.id, action: 'auth.login' } })
-  redirect('/dashboard')
+
+  // Rücksprung nach der Anmeldung – etwa zur OAuth-Zustimmungsseite, wenn
+  // Claude oder ChatGPT die Verbindung anfragen. Nur eigene, relative Pfade:
+  // eine vollständige Adresse wäre ein offener Umleiter auf fremde Seiten.
+  const weiter = String(formData.get('weiter') ?? '')
+  redirect(weiter.startsWith('/') && !weiter.startsWith('//') ? weiter : '/dashboard')
 }
 
 export async function registerAction(_prev: FormState, formData: FormData): Promise<FormState> {

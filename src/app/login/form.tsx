@@ -4,12 +4,13 @@ import { useActionState } from 'react'
 import { loginAction, type FormState } from '@/lib/auth/actions'
 import { Button, Card, Input, Label } from '@/components/ui'
 
-export function LoginForm() {
+export function LoginForm({ weiter }: { weiter?: string }) {
   const [state, action, pending] = useActionState<FormState, FormData>(loginAction, {})
 
   return (
     <Card className="p-5">
       <form action={action} className="space-y-4">
+        {weiter && <input type="hidden" name="weiter" value={weiter} />}
         <div>
           <Label htmlFor="email">E-Mail</Label>
           <Input id="email" name="email" type="email" autoComplete="email" required autoFocus />

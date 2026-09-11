@@ -7,8 +7,16 @@ import { LoginForm } from './form'
 
 export const dynamic = 'force-dynamic'
 
-export default async function LoginPage() {
-  if (await getSession()) redirect('/dashboard')
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ weiter?: string }>
+}) {
+  const { weiter } = await searchParams
+  // Nur eigene, relative Pfade – sonst wäre die Anmeldung ein offener
+  // Umleiter auf fremde Seiten.
+  const ziel = weiter?.startsWith('/') && !weiter.startsWith('//') ? weiter : undefined
+  if (await getSession()) redirect(ziel ?? '/dashboard')
 
   // Bei einer frisch aufgesetzten Instanz gibt es noch kein Konto – dann
   // direkt zur Einrichtung führen, statt eine leere Anmeldung zu zeigen.
@@ -26,7 +34,7 @@ export default async function LoginPage() {
             Sichtbarkeitsanalyse für Websites und Social-Profile
           </p>
         </div>
-        <LoginForm />
+        <LoginForm weiter={ziel} />
         {registrierungOffen && (
           <p className="mt-6 text-center text-[13px] text-ink-muted">
             Noch kein Zugang?{' '}

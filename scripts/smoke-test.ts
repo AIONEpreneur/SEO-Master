@@ -24,6 +24,8 @@ import {
 } from '../src/lib/keywords/research'
 import { rechercheAlsText, rechercheAlsCsv } from '../src/lib/keywords/export'
 import { beantworteMcp } from '../src/lib/mcp/server'
+import { pkceStimmt, zulaessigeRedirectUri, anmeldeserverMetadaten, ressourcenMetadaten } from '../src/lib/mcp/oauth'
+import { createHash, randomBytes } from 'node:crypto'
 import type { TokenKontext } from '../src/lib/auth/api-token'
 import { deckungsgrad, enthaeltBegriff, grundform, teileMarke, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
 import { beurteile, begriffsBefund, beurteileSerpUmfeld, istZuAllgemein, messbare } from '../src/lib/analysis/keyword-pruefung'
@@ -789,6 +791,35 @@ async function main() {
   check(
     'konto_status nennt den Arbeitsbereich',
     (statusAufruf.result?.content?.[0]?.text ?? '').includes('Testbereich'),
+  )
+
+  section('Die MCP-Verbindung verlangt eine Anmeldung')
+
+  const verifier = randomBytes(32).toString('base64url')
+  const challenge = createHash('sha256').update(verifier).digest('base64url')
+  check('Der richtige PKCE-Nachweis wird angenommen', pkceStimmt(verifier, challenge))
+  check('Ein falscher Nachweis faellt durch', !pkceStimmt(randomBytes(32).toString('base64url'), challenge))
+  check('Ohne Nachweis kein Durchkommen', !pkceStimmt('', challenge) && !pkceStimmt(verifier, ''))
+
+  check(
+    'Ruecksprung nur zu https oder localhost',
+    zulaessigeRedirectUri('https://claude.ai/api/mcp/auth_callback') &&
+      zulaessigeRedirectUri('http://localhost:33418/callback') &&
+      !zulaessigeRedirectUri('http://angreifer.de/callback') &&
+      !zulaessigeRedirectUri('javascript:alert(1)'),
+  )
+
+  const anmeldeserver = anmeldeserverMetadaten('https://seo-master.example')
+  check(
+    'Die Discovery nennt Anmeldung, Token-Tausch und Registrierung',
+    anmeldeserver.authorization_endpoint.endsWith('/oauth/authorize') &&
+      anmeldeserver.token_endpoint.endsWith('/api/oauth/token') &&
+      anmeldeserver.registration_endpoint.endsWith('/api/oauth/register'),
+  )
+  check('Nur PKCE S256, keine Client-Geheimnisse', anmeldeserver.code_challenge_methods_supported.join() === 'S256' && anmeldeserver.token_endpoint_auth_methods_supported.join() === 'none')
+  check(
+    'Die Ressourcen-Discovery verweist auf den eigenen Anmeldeserver',
+    ressourcenMetadaten('https://seo-master.example').authorization_servers[0] === 'https://seo-master.example',
   )
 
   section('Eingebettete Frames sind nicht der Inhalt der Seite')
