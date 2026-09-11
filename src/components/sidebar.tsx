@@ -88,10 +88,7 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
         )}
       >
         <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[oklch(64%_0.24_295)] to-[oklch(54%_0.24_310)] text-[13px] font-bold text-white shadow-[0_3px_12px_-2px_oklch(56%_0.244_295_/_0.55)]">
-            S
-          </div>
-          <span className="text-sm font-semibold tracking-tight">SEO-Master</span>
+          <span className="font-display text-sm font-bold tracking-tight">SEO—Master</span>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -130,9 +127,11 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
                       href={item.href}
                       onClick={() => setOpen(false)}
                       className={cn(
-                        'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors',
+                        'flex items-center gap-2.5 px-2.5 py-2 text-[13px] font-medium transition-colors',
+                        // Der aktive Eintrag wie der gewählte Reiter der
+                        // Vorlage: Tinte als Block, Schrift in Creme.
                         active
-                          ? 'bg-brand-subtle text-brand shadow-[inset_2px_0_0_var(--color-brand)]'
+                          ? 'bg-ink text-canvas'
                           : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
                       )}
                     >

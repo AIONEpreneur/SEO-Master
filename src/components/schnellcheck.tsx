@@ -50,8 +50,10 @@ export function SchnellCheck() {
   }
 
   return (
-    <div className="kante mx-auto w-full max-w-xl rounded-2xl bg-[var(--flaeche)] p-5 text-left">
-      <p className="text-[13px] font-semibold">Wie sichtbar ist deine Seite? Prüf es jetzt — ohne Konto.</p>
+    <div className="schatten-hart w-full border-[1.5px] border-ink bg-[var(--flaeche)] p-5 text-left">
+      <p className="font-display text-[13px] font-bold">
+        Wie sichtbar ist deine Seite? Prüf es jetzt — ohne Konto.
+      </p>
       <form onSubmit={pruefe} className="mt-3 flex gap-2">
         <input
           type="text"
@@ -60,27 +62,27 @@ export function SchnellCheck() {
           onChange={(e) => setUrl(e.target.value)}
           placeholder="deine-website.de"
           aria-label="Web-Adresse für den Schnell-Check"
-          className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--linie-hell)] bg-transparent px-3.5 text-[14px] outline-none placeholder:text-[var(--schrift-matt)] focus:border-[var(--akzent)]"
+          className="h-11 min-w-0 flex-1 border-[1.5px] border-ink bg-transparent px-3.5 text-[14px] outline-none placeholder:text-[var(--schrift-leise)] focus:border-brand"
         />
         <button
           type="submit"
           disabled={laeuft}
-          className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-[var(--akzent)] px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="inline-flex h-11 shrink-0 items-center gap-2 border-[1.5px] border-ink bg-ink px-4 font-display text-[13px] font-bold text-[#E8E0D8] transition-all hover:border-brand hover:bg-brand disabled:opacity-60"
         >
           {laeuft ? <Loader2 size={15} className="animate-spin" /> : <ScanSearch size={15} />}
           {laeuft ? 'Prüft …' : 'Prüfen'}
         </button>
       </form>
 
-      {fehler && <p className="mt-3 text-[13px] text-[var(--warnung,#f87171)]">{fehler}</p>}
+      {fehler && <p className="mt-3 text-[13px] font-medium text-bad">{fehler}</p>}
 
       {ergebnis && (
         <div className="mt-4 space-y-3">
           <div className="grid grid-cols-3 gap-2">
             {Object.entries(ergebnis.scores).map(([modul, wert]) => (
-              <div key={modul} className="rounded-xl border border-[var(--linie-hell)] px-3 py-2.5 text-center">
-                <p className="text-lg font-bold tabular-nums">{wert.toFixed(1).replace('.', ',')}</p>
-                <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--schrift-matt)]">
+              <div key={modul} className="border-[1.5px] border-ink px-3 py-2.5 text-center">
+                <p className="font-display text-lg font-bold tabular-nums">{wert.toFixed(1).replace('.', ',')}</p>
+                <p className="font-display text-[10px] font-bold uppercase tracking-wider text-[var(--schrift-matt)]">
                   {modul}
                 </p>
               </div>
@@ -90,7 +92,7 @@ export function SchnellCheck() {
             <ul className="space-y-1.5">
               {ergebnis.befunde.map((titel) => (
                 <li key={titel} className="flex items-start gap-2 text-[13px] text-[var(--schrift-matt)]">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--akzent)]" />
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 bg-pink" />
                   {titel}
                 </li>
               ))}
@@ -98,8 +100,8 @@ export function SchnellCheck() {
           )}
           <p className="text-[12px] leading-relaxed text-[var(--schrift-matt)]">{ergebnis.hinweis}</p>
           <a
-            href="/login"
-            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--akzent)] hover:underline"
+            href="/register"
+            className="inline-flex items-center gap-1.5 border-b-2 border-pink font-display text-[13px] font-bold hover:text-brand"
           >
             Zur vollständigen Analyse
             <ArrowRight size={14} />
