@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getSession, echteSitzung } from '@/lib/auth/session'
 import { anzahlUngelesen } from '@/lib/neuigkeiten'
+import { offeneWuensche } from '@/lib/wuensche'
 import { getTheme } from '@/lib/theme'
 import { Sidebar } from '@/components/sidebar'
 import { AnsichtsBalken } from '@/components/ansichts-balken'
@@ -23,9 +24,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const konto = await echteSitzung()
   const ungelesen = konto ? await anzahlUngelesen(konto) : 0
 
+  // Nur für den Betrieb, und nur dort abgefragt: Eine Kundin soll nicht
+  // einmal sehen, dass es diese Zahl gibt.
+  const wuensche = session.isSuperAdmin ? await offeneWuensche() : 0
+
   return (
     <div className="flex min-h-dvh">
-      <Sidebar session={session} theme={theme} ungeleseneNeuigkeiten={ungelesen} />
+      <Sidebar
+        session={session}
+        theme={theme}
+        ungeleseneNeuigkeiten={ungelesen}
+        offeneWuensche={wuensche}
+      />
       <div className="relative min-w-0 flex-1 lg:pl-60">
         <AnsichtsBalken session={session} />
         <main className="relative mx-auto max-w-6xl px-4 pb-10 pt-20 lg:px-8 lg:py-8">{children}</main>

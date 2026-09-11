@@ -1,3 +1,4 @@
+import { db } from '@/lib/db'
 import type { WunschStatus } from '@prisma/client'
 
 /**
@@ -35,3 +36,15 @@ export const STATUS_ERKLAERUNG: Record<WunschStatus, string> = {
 }
 
 export const STATUS_WERTE: WunschStatus[] = ['OFFEN', 'GEPLANT', 'UMGESETZT', 'ABGELEHNT']
+
+/**
+ * Wie viele Wünsche unbeantwortet sind.
+ *
+ * Steht als Zahl neben dem Menüpunkt des Betriebs. Ohne sie müsste die
+ * Betreiberin daran denken, regelmässig nachzusehen — und genau das tut
+ * niemand. Ein Wunsch, der wochenlang unbemerkt liegt, ist schlimmer als
+ * gar kein Wunschformular: Er hat ein Versprechen gegeben.
+ */
+export async function offeneWuensche(): Promise<number> {
+  return db.wunsch.count({ where: { status: 'OFFEN' } })
+}

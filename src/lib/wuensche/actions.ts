@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { requireRole, echteSitzung } from '@/lib/auth/session'
+import { requireRole } from '@/lib/auth/session'
 import { requireSuperAdmin } from '@/lib/admin/wache'
 
 export type WunschState = { ok?: string; error?: string }
@@ -91,11 +91,4 @@ export async function beantworteWunsch(formData: FormData): Promise<void> {
 
   revalidatePath('/admin/wuensche')
   revalidatePath('/wuensche')
-}
-
-/** Für die Zahl in der Seitenleiste des Betriebs. */
-export async function offeneWuensche(): Promise<number> {
-  const user = await echteSitzung()
-  if (!user?.isSuperAdmin) return 0
-  return db.wunsch.count({ where: { status: 'OFFEN' } })
 }

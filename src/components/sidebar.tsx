@@ -77,11 +77,14 @@ export function Sidebar({
   session,
   theme,
   ungeleseneNeuigkeiten = 0,
+  offeneWuensche = 0,
 }: {
   session: SessionUser
   theme: Theme
   /** Ungelesene Einträge — die Zahl steht neben dem Menüpunkt. */
   ungeleseneNeuigkeiten?: number
+  /** Unbeantwortete Wünsche. Nur der Betrieb sieht diesen Punkt überhaupt. */
+  offeneWuensche?: number
 }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
@@ -172,16 +175,25 @@ export function Sidebar({
                         Null neben "Neuigkeiten" ist keine Information,
                         sondern ein Fleck.
                       */}
-                      {item.href === '/neuigkeiten' && ungeleseneNeuigkeiten > 0 && (
-                        <span
-                          className={cn(
-                            'shrink-0 rounded-full border-2 border-border px-1.5 text-[11px] font-bold tabular-nums',
-                            active ? 'bg-creme text-tinte' : 'bg-limette text-tinte',
-                          )}
-                        >
-                          {ungeleseneNeuigkeiten}
-                        </span>
-                      )}
+                      {(() => {
+                        const zahl =
+                          item.href === '/neuigkeiten'
+                            ? ungeleseneNeuigkeiten
+                            : item.href === '/admin/wuensche'
+                              ? offeneWuensche
+                              : 0
+                        if (zahl <= 0) return null
+                        return (
+                          <span
+                            className={cn(
+                              'shrink-0 rounded-full border-2 border-border px-1.5 text-[11px] font-bold tabular-nums',
+                              active ? 'bg-creme text-tinte' : 'bg-limette text-tinte',
+                            )}
+                          >
+                            {zahl}
+                          </span>
+                        )
+                      })()}
                     </Link>
                   )
                 })}
