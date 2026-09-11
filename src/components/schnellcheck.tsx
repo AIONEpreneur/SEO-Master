@@ -50,9 +50,18 @@ export function SchnellCheck() {
   }
 
   return (
-    <div className="kante mx-auto w-full max-w-xl rounded-2xl bg-[var(--flaeche)] p-5 text-left">
-      <p className="text-[13px] font-semibold">Wie sichtbar ist deine Seite? Prüf es jetzt — ohne Konto.</p>
-      <form onSubmit={pruefe} className="mt-3 flex gap-2">
+    <div className="schatten-gross rounded-3xl border-2 border-tinte bg-creme p-7 text-left sm:p-10">
+      <div className="flex flex-col gap-2">
+        <span className="self-start rounded-full border-2 border-tinte bg-rosa px-4 py-1.5 text-[12px] font-bold uppercase tracking-[0.08em]">
+          Sofort und ohne Konto
+        </span>
+        <h2 className="mt-2 text-[24px] sm:text-[32px]">Wie sichtbar ist deine Seite?</h2>
+        <p className="text-[15px] font-medium sm:text-[17px]">
+          Adresse eingeben, drei echte Werte bekommen. Dauert ein paar Sekunden.
+        </p>
+      </div>
+
+      <form onSubmit={pruefe} className="mt-6 flex flex-col gap-3 sm:flex-row">
         <input
           type="text"
           inputMode="url"
@@ -60,49 +69,61 @@ export function SchnellCheck() {
           onChange={(e) => setUrl(e.target.value)}
           placeholder="deine-website.de"
           aria-label="Web-Adresse für den Schnell-Check"
-          className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--linie-hell)] bg-transparent px-3.5 text-[14px] outline-none placeholder:text-[var(--schrift-matt)] focus:border-[var(--akzent)]"
+          className="h-14 min-w-0 flex-1 rounded-full border-2 border-tinte bg-sand px-6 text-[16px] font-medium outline-none placeholder:text-ink-subtle focus:border-rot"
         />
         <button
           type="submit"
           disabled={laeuft}
-          className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-[var(--akzent)] px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="lift inline-flex h-14 shrink-0 items-center justify-center gap-2 rounded-full border-2 border-tinte bg-tinte px-8 text-[16px] font-bold text-creme disabled:opacity-60"
         >
-          {laeuft ? <Loader2 size={15} className="animate-spin" /> : <ScanSearch size={15} />}
+          {laeuft ? <Loader2 size={17} className="animate-spin" /> : <ScanSearch size={17} />}
           {laeuft ? 'Prüft …' : 'Prüfen'}
         </button>
       </form>
 
-      {fehler && <p className="mt-3 text-[13px] text-[var(--warnung,#f87171)]">{fehler}</p>}
+      {fehler && (
+        <p className="mt-4 rounded-md border-2 border-tinte bg-rosa px-4 py-2.5 text-[14px] font-bold text-rot">
+          {fehler}
+        </p>
+      )}
 
       {ergebnis && (
-        <div className="mt-4 space-y-3">
-          <div className="grid grid-cols-3 gap-2">
-            {Object.entries(ergebnis.scores).map(([modul, wert]) => (
-              <div key={modul} className="rounded-xl border border-[var(--linie-hell)] px-3 py-2.5 text-center">
-                <p className="text-lg font-bold tabular-nums">{wert.toFixed(1).replace('.', ',')}</p>
-                <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--schrift-matt)]">
-                  {modul}
+        <div className="mt-6 flex flex-col gap-5">
+          <div className="grid grid-cols-3 gap-3">
+            {Object.entries(ergebnis.scores).map(([modul, wert], i) => (
+              <div
+                key={modul}
+                className={`rounded-xl border-2 border-tinte px-3 py-4 text-center ${
+                  ['bg-orange', 'bg-limette', 'bg-rosa'][i % 3]
+                }`}
+              >
+                <p className="font-display text-[26px] leading-none tabular-nums sm:text-[34px]">
+                  {wert.toFixed(1).replace('.', ',')}
                 </p>
+                <p className="mt-2 font-display text-[11px] uppercase tracking-[0.1em]">{modul}</p>
               </div>
             ))}
           </div>
+
           {ergebnis.befunde.length > 0 && (
-            <ul className="space-y-1.5">
+            <ul className="flex flex-col gap-2">
               {ergebnis.befunde.map((titel) => (
-                <li key={titel} className="flex items-start gap-2 text-[13px] text-[var(--schrift-matt)]">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--akzent)]" />
+                <li key={titel} className="flex items-start gap-3 text-[15px] font-medium">
+                  <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-tinte bg-orange" />
                   {titel}
                 </li>
               ))}
             </ul>
           )}
-          <p className="text-[12px] leading-relaxed text-[var(--schrift-matt)]">{ergebnis.hinweis}</p>
+
+          <p className="text-[14px] font-medium leading-relaxed text-ink-muted">{ergebnis.hinweis}</p>
+
           <a
-            href="/login"
-            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--akzent)] hover:underline"
+            href="/register"
+            className="lift inline-flex self-start items-center gap-2 rounded-full border-2 border-tinte bg-limette px-6 py-3.5 text-[15px] font-bold"
           >
             Zur vollständigen Analyse
-            <ArrowRight size={14} />
+            <ArrowRight size={16} />
           </a>
         </div>
       )}

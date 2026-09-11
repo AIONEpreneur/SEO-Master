@@ -20,7 +20,9 @@ export function LoginForm({ weiter }: { weiter?: string }) {
           <Input id="password" name="password" type="password" autoComplete="current-password" required />
         </div>
         {state.error && (
-          <p className="rounded-lg bg-bad-subtle px-3 py-2 text-[13px] text-bad">{state.error}</p>
+          <p className="rounded-md border-2 border-tinte bg-rosa px-3 py-2 text-[13px] font-bold text-rot">
+            {state.error}
+          </p>
         )}
         <Button type="submit" className="w-full" disabled={pending}>
           {pending ? 'Wird geprüft…' : 'Anmelden'}

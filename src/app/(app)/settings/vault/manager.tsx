@@ -104,7 +104,7 @@ export function VaultManager({
       {state.success && (
         <p className="rounded-lg bg-good-subtle px-4 py-3 text-[13px] text-good">{state.success}</p>
       )}
-      {state.error && <p className="rounded-lg bg-bad-subtle px-4 py-3 text-[13px] text-bad">{state.error}</p>}
+      {state.error && <p className="rounded-md border-2 border-tinte bg-rosa px-4 py-3 text-[13px] font-bold text-rot">{state.error}</p>}
 
       {/*
         Die Trennung ist keine Kosmetik. Vorher standen alle sechs Anbieter

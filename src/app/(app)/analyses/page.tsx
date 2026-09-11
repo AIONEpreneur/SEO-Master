@@ -100,7 +100,7 @@ export default async function AnalysesPage() {
                           <button
                             type="submit"
                             aria-label={`Lauf zu ${shorten(analysis.targetUrl)} löschen`}
-                            className="rounded-lg p-1.5 text-ink-subtle transition-colors hover:bg-bad-subtle hover:text-bad"
+                            className="rounded-full border-2 border-transparent p-1.5 text-ink-subtle transition-colors hover:border-tinte hover:bg-rosa hover:text-rot"
                           >
                             <Trash2 size={15} />
                           </button>

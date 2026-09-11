@@ -42,7 +42,7 @@ export function ThemeToggle({ initial }: { initial: Theme }) {
     <div
       role="radiogroup"
       aria-label="Erscheinungsbild"
-      className="flex gap-0.5 rounded-lg border border-border bg-surface-muted p-0.5"
+      className="flex gap-1 rounded-full border-2 border-border bg-surface-muted p-1"
     >
       {OPTIONEN.map((option) => {
         const gewaehlt = aktiv === option.wert
@@ -55,13 +55,13 @@ export function ThemeToggle({ initial }: { initial: Theme }) {
             title={option.label}
             onClick={() => waehle(option.wert)}
             className={cn(
-              'flex h-7 flex-1 items-center justify-center rounded-md transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
+              'flex h-7 flex-1 items-center justify-center rounded-full transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rot',
               // Im dunklen Erscheinungsbild liegen Fläche und gedämpfte Fläche
               // dicht beieinander; die Markierung braucht deshalb Farbe,
               // nicht nur einen Helligkeitsunterschied.
               gewaehlt
-                ? 'bg-brand-subtle text-brand'
+                ? 'bg-tinte text-creme'
                 : 'text-ink-subtle hover:bg-surface hover:text-ink-muted',
             )}
           >

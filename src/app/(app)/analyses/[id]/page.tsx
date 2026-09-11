@@ -141,7 +141,7 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
       {isRunning && <ProgressWatcher analysisId={analysis.id} initialProgress={analysis.progress} initialStep={analysis.currentStep} />}
 
       {analysis.status === 'FAILED' && (
-        <Card className="border-bad/30 bg-bad-subtle p-4">
+        <Card className="bg-rosa p-4">
           <p className="text-[13px] font-medium">Der Lauf ist fehlgeschlagen</p>
           <p className="mt-1 text-[13px] text-ink-muted">{analysis.error}</p>
           <form action={restartAnalysisAction} className="mt-3">

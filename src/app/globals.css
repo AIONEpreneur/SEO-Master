@@ -1,78 +1,120 @@
 @import "tailwindcss";
 
-/*
- * Farbsystem der Anwendung. Ein Satz Token, in beiden Erscheinungsbildern
- * definiert – die Oberfläche greift ausschliesslich auf die Token zu.
+/* ---------------------------------------------------------------------------
+ * Schriften der Vorlage — selbst ausgeliefert statt über Google.
  *
- * Markenton: #853FEF (Velvet Dots), in OKLCH oklch(56% 0.244 295). Weiss
- * darauf erreicht 5,31:1 und ist damit auch in kleinen Schriftgraden lesbar.
+ * Die Vorlage bindet sie per <link> bei fonts.googleapis.com ein. Hier liegen
+ * sie im eigenen Ordner: Die Anwendung hat eine Datenschutzerklärung, die
+ * zusichert, dass keine fremden Server mitlesen — ein Font-Abruf würde die
+ * IP jeder Besucherin an Google senden.
  *
- * Die Neutraltöne tragen einen leichten Stich in denselben Farbwinkel (295).
- * Ein reines Grau neben einem gesättigten Violett wirkt schmutzig; mit dem
- * gemeinsamen Winkel gehören beide sichtbar zusammen.
- */
+ * Space Grotesk ist variabel (400–700 in einer Datei), Archivo Black hat nur
+ * einen Schnitt.
+ * ------------------------------------------------------------------------ */
+@font-face {
+  font-family: 'Archivo Black'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(/fonts/archivo-black-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2212, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Archivo Black'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(/fonts/archivo-black-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+1E00-1E9F, U+2020, U+20A0-20C0, U+2113, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Space Grotesk'; font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url(/fonts/space-grotesk-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2212, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Space Grotesk'; font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url(/fonts/space-grotesk-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+1E00-1E9F, U+2020, U+20A0-20C0, U+2113, U+A720-A7FF;
+}
+
+/* ---------------------------------------------------------------------------
+ * Die Farben der Vorlage, unverändert übernommen.
+ *
+ *   Lila    #AC8EF0   die Grundfläche
+ *   Tinte   #161616   Schrift und jede Kontur (immer 2 px)
+ *   Creme   #FFFDF8   Karten, Pillen, Schrift auf Dunkel
+ *   Sand    #FBF3E4   ruhigere Karten
+ *   Orange  #F6A44B   Akzentkarte eins
+ *   Limette #C9E265   Akzentkarte zwei
+ *   Rosa    #F7C0DC   Akzentkarte drei
+ *   Blau    #A9C6E8   Diagrammbalken
+ *   Rot     #C93B2B   Hervorhebung und Verweis beim Zeigen
+ *
+ * Der Look lebt von drei Regeln: 2-px-Kontur in Tinte, harter Schatten ohne
+ * Weichzeichner, grosszügige Rundung. Alles andere folgt daraus.
+ * ------------------------------------------------------------------------ */
 @theme {
-  --color-canvas: oklch(99% 0.004 295);
-  --color-surface: oklch(100% 0 0);
-  --color-surface-muted: oklch(97% 0.006 295);
-  --color-border: oklch(91% 0.009 295);
-  --color-border-strong: oklch(84% 0.014 295);
+  --color-lila: #AC8EF0;
+  --color-tinte: #161616;
+  --color-creme: #FFFDF8;
+  --color-sand: #FBF3E4;
+  --color-orange: #F6A44B;
+  --color-limette: #C9E265;
+  --color-rosa: #F7C0DC;
+  --color-blau: #A9C6E8;
+  --color-rot: #C93B2B;
 
-  --color-ink: oklch(21% 0.022 295);
-  --color-ink-muted: oklch(48% 0.017 295);
-  --color-ink-subtle: oklch(62% 0.014 295);
+  --color-canvas: #AC8EF0;
+  --color-surface: #FFFDF8;
+  --color-surface-muted: #FBF3E4;
+  --color-border: #161616;
+  --color-border-strong: #161616;
 
-  --color-brand: oklch(56% 0.244 295);
-  --color-brand-hover: oklch(50% 0.244 295);
-  --color-brand-subtle: oklch(95% 0.035 295);
+  --color-ink: #161616;
+  --color-ink-muted: #4A4550;
+  --color-ink-subtle: #6E6875;
 
-  --color-good: oklch(58% 0.14 152);
-  --color-good-subtle: oklch(95% 0.04 152);
-  --color-warn: oklch(70% 0.15 75);
-  --color-warn-subtle: oklch(96% 0.05 85);
-  --color-bad: oklch(56% 0.19 25);
-  --color-bad-subtle: oklch(95% 0.03 25);
+  --color-brand: #C93B2B;
+  --color-brand-hover: #A82D20;
+  --color-brand-subtle: #F7C0DC;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  /* Bewertungen sprechen die Palette der Vorlage: Limette trägt das Gute,
+     Orange die Warnung, Rosa mit rotem Text das Kritische. */
+  --color-good: #161616;
+  --color-good-subtle: #C9E265;
+  --color-warn: #161616;
+  --color-warn-subtle: #F6A44B;
+  --color-bad: #C93B2B;
+  --color-bad-subtle: #F7C0DC;
+
+  --font-sans: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Archivo Black', 'Arial Black', sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Die Rundungen der Vorlage: Karten 24–28, grosse Blöcke 36, Pillen 999. */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-2xl: 28px;
+  --radius-3xl: 36px;
 }
 
 /*
  * Dunkles Erscheinungsbild.
  *
- * Drei Zustände sind zu bedienen:
- *   1. keine ausdrückliche Wahl  → der Systemeinstellung folgen
- *   2. ausdrücklich dunkel        → data-theme="dark" am <html>
- *   3. ausdrücklich hell          → data-theme="light" am <html>
- *
- * Die Farbwerte stehen deshalb einmal als --dunkel-* fest und werden an zwei
- * Stellen zugewiesen. Die Systemregel schliesst eine ausdrückliche Wahl von
- * "hell" aus, damit die Wahl der Person das dunkle Betriebssystem schlägt.
- *
- * Die Token selbst werden über :root gesetzt, nicht über einen zweiten
- * @theme-Block: @theme erzeugt die Utility-Klassen und gilt immer global.
+ * Die Vorlage kennt keines — der Arbeitsbereich schon, und wer abends daran
+ * sitzt, soll nicht angeleuchtet werden. Übertragen wird die Regel, nicht die
+ * Farbe: Die Fläche wird dunkel, die Kontur wechselt von Tinte auf Creme, und
+ * der harte Schatten fällt in Lila statt in Schwarz. Die Akzentfarben bleiben,
+ * sie tragen den Look.
  */
 :root {
-  --dunkel-canvas: oklch(17% 0.014 295);
-  --dunkel-surface: oklch(21% 0.016 295);
-  --dunkel-surface-muted: oklch(25% 0.017 295);
-  --dunkel-border: oklch(30% 0.019 295);
-  --dunkel-border-strong: oklch(38% 0.022 295);
-
-  --dunkel-ink: oklch(96% 0.006 295);
-  --dunkel-ink-muted: oklch(72% 0.014 295);
-  --dunkel-ink-subtle: oklch(58% 0.014 295);
-
-  --dunkel-brand: oklch(72% 0.155 295);
-  --dunkel-brand-hover: oklch(78% 0.145 295);
-  --dunkel-brand-subtle: oklch(30% 0.065 295);
-
-  --dunkel-good: oklch(72% 0.15 152);
-  --dunkel-good-subtle: oklch(27% 0.05 152);
-  --dunkel-warn: oklch(78% 0.14 80);
-  --dunkel-warn-subtle: oklch(29% 0.05 80);
-  --dunkel-bad: oklch(68% 0.17 25);
-  --dunkel-bad-subtle: oklch(28% 0.06 25);
+  --dunkel-canvas: #171320;
+  --dunkel-surface: #221C30;
+  --dunkel-surface-muted: #2C2440;
+  --dunkel-border: #FFFDF8;
+  --dunkel-ink: #FFFDF8;
+  --dunkel-ink-muted: #C9C2D6;
+  --dunkel-ink-subtle: #9A93A8;
+  --dunkel-brand: #F6A44B;
+  --dunkel-brand-hover: #F8B76E;
+  --dunkel-brand-subtle: #4A3320;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -81,19 +123,13 @@
     --color-surface: var(--dunkel-surface);
     --color-surface-muted: var(--dunkel-surface-muted);
     --color-border: var(--dunkel-border);
-    --color-border-strong: var(--dunkel-border-strong);
+    --color-border-strong: var(--dunkel-border);
     --color-ink: var(--dunkel-ink);
     --color-ink-muted: var(--dunkel-ink-muted);
     --color-ink-subtle: var(--dunkel-ink-subtle);
     --color-brand: var(--dunkel-brand);
     --color-brand-hover: var(--dunkel-brand-hover);
     --color-brand-subtle: var(--dunkel-brand-subtle);
-    --color-good: var(--dunkel-good);
-    --color-good-subtle: var(--dunkel-good-subtle);
-    --color-warn: var(--dunkel-warn);
-    --color-warn-subtle: var(--dunkel-warn-subtle);
-    --color-bad: var(--dunkel-bad);
-    --color-bad-subtle: var(--dunkel-bad-subtle);
   }
 }
 
@@ -102,19 +138,13 @@
   --color-surface: var(--dunkel-surface);
   --color-surface-muted: var(--dunkel-surface-muted);
   --color-border: var(--dunkel-border);
-  --color-border-strong: var(--dunkel-border-strong);
+  --color-border-strong: var(--dunkel-border);
   --color-ink: var(--dunkel-ink);
   --color-ink-muted: var(--dunkel-ink-muted);
   --color-ink-subtle: var(--dunkel-ink-subtle);
   --color-brand: var(--dunkel-brand);
   --color-brand-hover: var(--dunkel-brand-hover);
   --color-brand-subtle: var(--dunkel-brand-subtle);
-  --color-good: var(--dunkel-good);
-  --color-good-subtle: var(--dunkel-good-subtle);
-  --color-warn: var(--dunkel-warn);
-  --color-warn-subtle: var(--dunkel-warn-subtle);
-  --color-bad: var(--dunkel-bad);
-  --color-bad-subtle: var(--dunkel-bad-subtle);
 }
 
 html { color-scheme: light dark; }
@@ -125,276 +155,192 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-weight: 500;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---------------------------------------------------------------------------
- * Aussenauftritt
- *
- * Die öffentliche Seite legt sich bewusst auf ein dunkles Erscheinungsbild
- * fest, unabhängig von der Einstellung im Arbeitsbereich: Sie ist eine
- * Visitenkarte, kein Werkzeug, und soll bei allen Besuchern gleich aussehen.
- * Deshalb eigene Token statt der umschaltbaren – sonst würde die Seite bei
- * hellem Systemthema in einem Zustand erscheinen, für den sie nicht
- * gestaltet ist.
- * ------------------------------------------------------------------------ */
-.aussenauftritt {
-  --grund: oklch(14% 0.016 295);
-  --grund-tief: oklch(11% 0.014 295);
-  --flaeche: oklch(18% 0.019 295);
-  --linie: oklch(27% 0.024 295);
-  --linie-hell: oklch(36% 0.032 295);
-  --schrift: oklch(97% 0.006 295);
-  --schrift-matt: oklch(74% 0.017 295);
-  --schrift-leise: oklch(58% 0.018 295);
-  --ton: oklch(62% 0.235 295);
-  --ton-hell: oklch(74% 0.17 295);
-
-  background: var(--grund);
-  color: var(--schrift);
-  color-scheme: dark;
-}
-
 /*
- * Der Lichtschein hinter dem Aufmacher.
- *
- * Zwei weiche Farbkreise statt eines Bildes: Sie kosten keine Ladezeit,
- * bleiben in jeder Bildschirmgrösse scharf und lassen sich am Markenton
- * ausrichten. `pointer-events: none`, damit sie keine Klicks abfangen.
+ * Überschriften: Archivo Black in Versalien — das Erkennungszeichen des
+ * Looks. Die enge Zeilenhöhe stammt aus der Vorlage; ohne sie zerfällt eine
+ * mehrzeilige Schlagzeile.
  */
-.lichtschein {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.lichtschein::before,
-.lichtschein::after {
-  content: '';
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(90px);
-}
-.lichtschein::before {
-  top: -22rem;
-  left: 50%;
-  width: 52rem;
-  height: 42rem;
-  transform: translateX(-50%);
-  background: radial-gradient(circle, oklch(56% 0.244 295 / 0.42), transparent 68%);
-}
-.lichtschein::after {
-  top: -12rem;
-  right: -14rem;
-  width: 34rem;
-  height: 30rem;
-  background: radial-gradient(circle, oklch(62% 0.2 320 / 0.26), transparent 70%);
-}
-
-/* Feiner heller Rand oben auf Karten – lässt Flächen erhaben wirken. */
-.kante {
-  position: relative;
-  border: 1px solid var(--linie);
-  background:
-    linear-gradient(to bottom, oklch(100% 0 0 / 0.05), transparent 40%),
-    var(--flaeche);
-}
-.kante::before {
-  content: '';
-  position: absolute;
-  inset-inline: 15%;
-  top: -1px;
-  height: 1px;
-  background: linear-gradient(to right, transparent, oklch(70% 0.2 295 / 0.55), transparent);
-}
-
-/* Überschriftenakzent im Markenverlauf. */
-.tonverlauf {
-  background: linear-gradient(100deg, oklch(72% 0.19 295), oklch(66% 0.24 315));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-/*
- * Raster im Hintergrund. Sehr schwach gehalten – es soll Tiefe andeuten,
- * nicht gelesen werden. Die Maske blendet es zu den Rändern hin aus, damit
- * es nirgends hart abbricht.
- */
-.raster {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(to right, oklch(100% 0 0 / 0.028) 1px, transparent 1px),
-    linear-gradient(to bottom, oklch(100% 0 0 / 0.028) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black, transparent 75%);
-}
-
-/*
- * Schwacher Lichtschein für die Abschnitte unterhalb des Aufmachers.
- *
- * Ohne ihn wirken die unteren Bereiche wie schwarze Kästen untereinander.
- * Deutlich zurückhaltender als im Aufmacher: Er soll die Abschnitte
- * voneinander abheben, nicht mit den Karten um Aufmerksamkeit ringen.
- */
-.schimmer::before {
-  content: '';
-  position: absolute;
-  top: -6rem;
-  left: 50%;
-  width: 46rem;
-  height: 26rem;
-  transform: translateX(-50%);
-  border-radius: 9999px;
-  background: radial-gradient(ellipse, oklch(56% 0.244 295 / 0.13), transparent 70%);
-  filter: blur(70px);
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .steigt {
-    animation: steigt 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  @keyframes steigt {
-    from { opacity: 0; transform: translateY(14px); }
-    to   { opacity: 1; transform: none; }
-  }
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-transform: uppercase;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
 }
 
 /* ---------------------------------------------------------------------------
- * Flächen im Arbeitsbereich
+ * Die Karte der Vorlage.
  *
- * Eine Karte, die sich nur durch eine Linie vom Hintergrund abhebt, wirkt im
- * dunklen Erscheinungsbild flach – alles liegt auf derselben Ebene. Der feine
- * Lichtsaum an der Oberkante und der leichte Verlauf geben Tiefe, ohne mit
- * Schatten zu arbeiten, die auf dunklem Grund ohnehin nicht sichtbar wären.
- *
- * Im hellen Erscheinungsbild kehrt sich das um: Dort trägt ein weicher
- * Schatten, und der Lichtsaum entfällt.
+ * Zwei Pixel Kontur, harter Schatten ohne Weichzeichner, grosse Rundung.
+ * Der Schatten ist eine Fläche, kein Verlauf — das ist der halbe Look.
  * ------------------------------------------------------------------------ */
 .flaeche {
   position: relative;
   background: var(--color-surface);
-  box-shadow: 0 1px 2px oklch(20% 0.02 295 / 0.05), 0 4px 12px -4px oklch(20% 0.02 295 / 0.06);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: 5px 5px 0 var(--color-border);
 }
 
-:root[data-theme="dark"] .flaeche,
-.flaeche:where(:root:not([data-theme="light"]) *) {
-  background: linear-gradient(to bottom, oklch(100% 0 0 / 0.028), transparent 45%), var(--color-surface);
-  box-shadow: none;
+:root[data-theme="dark"] .flaeche {
+  box-shadow: 5px 5px 0 var(--color-lila);
 }
-
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .flaeche {
-    background: linear-gradient(to bottom, oklch(100% 0 0 / 0.028), transparent 45%), var(--color-surface);
-    box-shadow: none;
+    box-shadow: 5px 5px 0 var(--color-lila);
   }
 }
 
-/* Der Lichtsaum nur im dunklen Erscheinungsbild – auf Weiss wäre er unsichtbar. */
-:root[data-theme="dark"] .flaeche::after {
-  content: '';
-  position: absolute;
-  inset-inline: 12%;
-  top: -1px;
-  height: 1px;
-  border-radius: 9999px;
-  background: linear-gradient(to right, transparent, oklch(70% 0.2 295 / 0.4), transparent);
-  pointer-events: none;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .flaeche::after {
-    content: '';
-    position: absolute;
-    inset-inline: 12%;
-    top: -1px;
-    height: 1px;
-    border-radius: 9999px;
-    background: linear-gradient(to right, transparent, oklch(70% 0.2 295 / 0.4), transparent);
-    pointer-events: none;
+/* Für farbige Flächen, die nicht .flaeche sind. */
+.schatten { box-shadow: 5px 5px 0 var(--color-tinte); }
+.schatten-gross { box-shadow: 7px 7px 0 var(--color-tinte); }
+
+/* ---------------------------------------------------------------------------
+ * Bewegung, wie die Vorlage sie vorgibt.
+ * ------------------------------------------------------------------------ */
+
+/* Knöpfe heben sich beim Zeigen an, beim Drücken gehen sie hinein — als
+   würde man sie tatsächlich anfassen. */
+.lift { transition: transform 0.16s ease; }
+.lift:hover { transform: translate(-3px, -3px); }
+.lift:active { transform: translate(2px, 2px); }
+
+/* Karten heben sich weiter an, und der Schatten wächst mit. */
+.karte-hover { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.karte-hover:hover { transform: translate(-4px, -4px); box-shadow: 8px 8px 0 var(--color-tinte); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .rise { animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .rise-1 { animation-delay: 0.05s; }
+  .rise-2 { animation-delay: 0.15s; }
+  .rise-3 { animation-delay: 0.25s; }
+  .rise-4 { animation-delay: 0.35s; }
+  .rise-5 { animation-delay: 0.45s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+
+  .float-a { animation: floatA 5s ease-in-out infinite; }
+  @keyframes floatA { 0%, 100% { transform: rotate(-3deg) translateY(0); } 50% { transform: rotate(-3deg) translateY(-9px); } }
+  .float-b { animation: floatB 6s ease-in-out 0.8s infinite; }
+  @keyframes floatB { 0%, 100% { transform: rotate(2.5deg) translateY(0); } 50% { transform: rotate(2.5deg) translateY(-7px); } }
+  .float-c { animation: floatC 5.5s ease-in-out 0.4s infinite; }
+  @keyframes floatC { 0%, 100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(-2deg) translateY(-6px); } }
+
+  .twinkle { animation: twinkle 3.2s ease-in-out infinite; transform-origin: 50% 50%; }
+  .twinkle-2 { animation-delay: 1.4s; }
+  @keyframes twinkle {
+    0%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
+    50% { opacity: 0.55; transform: scale(0.72) rotate(18deg); }
   }
+
+  .bars > div { transform-origin: bottom; animation: growbar 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both, sway 4.6s ease-in-out infinite; }
+  .bars > div:nth-child(1) { animation-delay: 0.5s, 1.6s; animation-duration: 0.9s, 4.2s; }
+  .bars > div:nth-child(2) { animation-delay: 0.62s, 2.1s; animation-duration: 0.9s, 5.1s; }
+  .bars > div:nth-child(3) { animation-delay: 0.74s, 1.8s; animation-duration: 0.9s, 3.8s; }
+  .bars > div:nth-child(4) { animation-delay: 0.86s, 2.4s; animation-duration: 0.9s, 4.6s; }
+  .bars > div:nth-child(5) { animation-delay: 0.98s, 1.9s; animation-duration: 0.9s, 5.4s; }
+  @keyframes growbar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  @keyframes sway { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.68); } }
+
+  .spin { display: inline-block; animation: spin 10s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .pop { animation: pop 5s ease-in-out 2.2s infinite; }
+  @keyframes pop {
+    0%, 86%, 100% { transform: scale(1); }
+    91% { transform: scale(1.16); }
+    96% { transform: scale(0.96); }
+  }
+
+  .marquee-track { animation: marquee 26s linear infinite; }
+  @keyframes marquee { to { transform: translateX(-50%); } }
+
+  .animate-pulse-soft { animation: pulse-soft 1.8s ease-in-out infinite; }
+  @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+}
+
+/* ---------------------------------------------------------------------------
+ * Aussenauftritt: die Landingpage.
+ *
+ * Festgelegt auf die Lila-Fläche der Vorlage, unabhängig vom Erscheinungsbild
+ * des Arbeitsbereichs — die Seite ist eine Visitenkarte und sieht bei allen
+ * gleich aus.
+ * ------------------------------------------------------------------------ */
+.aussenauftritt {
+  background: #AC8EF0;
+  color: #161616;
+  color-scheme: light;
 }
 
 /*
- * Rechtstexte.
+ * Verweise bekommen hier bewusst KEINE eigene Regel.
  *
- * Sie werden gelesen, nicht überflogen: grosszügige Zeilenhöhe, klare
- * Abstände zwischen den Abschnitten, ruhige Farbe. Bewusst schmal gesetzt –
- * über etwa 70 Zeichen je Zeile findet das Auge den Zeilenanfang schlechter.
+ * Die Vorlage setzt `a { color: #161616 }` — das geht dort auf, weil jeder
+ * Knopf seine Farbe inline mitbringt. Hier sind die Knöpfe selbst Verweise,
+ * und ein Selektor wie `.aussenauftritt a` ist spezifischer als jede
+ * Farbklasse: Die Beschriftung wird Tinte auf Tinte und verschwindet. Ohne
+ * Regel gilt der Vorgabewert von Tailwind (`color: inherit`) — der
+ * Fliesstext-Link ist dann Tinte, der Knopf behält seine eigene Farbe.
+ */
+
+/*
+ * Rechtstexte. Sie werden gelesen, nicht überflogen: ruhige Farbe,
+ * grosszügige Zeilenhöhe, bewusst schmal gesetzt.
  */
 .rechtstext {
-  color: var(--schrift-matt);
-  font-size: 15px;
-  line-height: 1.75;
+  font-size: 16px;
+  line-height: 1.7;
+  font-weight: 500;
 }
 .rechtstext h2 {
   margin: 2.75rem 0 0.9rem;
-  color: var(--schrift);
-  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  text-transform: uppercase;
 }
 .rechtstext h2:first-child { margin-top: 0; }
 .rechtstext p { margin: 0 0 1.1rem; max-width: 65ch; }
 .rechtstext ul { margin: 0 0 1.1rem; padding-left: 1.15rem; max-width: 65ch; }
 .rechtstext li { margin-bottom: 0.45rem; }
-.rechtstext strong { color: var(--schrift); font-weight: 600; }
+.rechtstext strong { font-weight: 700; }
 .rechtstext code {
   padding: 0.1em 0.4em;
-  border-radius: 5px;
-  background: oklch(100% 0 0 / 0.06);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  border: 2px solid #161616;
+  border-radius: 6px;
+  background: #FFFDF8;
+  font-family: var(--font-mono);
   font-size: 0.86em;
   word-break: break-all;
 }
 
 /* Berichte werden als Markdown gerendert und brauchen eigene Typografie. */
-.prose-report {
-  line-height: 1.7;
-}
-.prose-report h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin: 0 0 1rem;
-  letter-spacing: -0.02em;
-}
+.prose-report { line-height: 1.7; }
+.prose-report h1 { font-size: 1.6rem; margin: 0 0 1rem; }
 .prose-report h2 {
-  font-size: 1.3rem;
-  font-weight: 650;
+  font-size: 1.2rem;
   margin: 2.25rem 0 0.75rem;
   padding-top: 1.25rem;
-  border-top: 1px solid var(--color-border);
-  letter-spacing: -0.01em;
+  border-top: 2px solid var(--color-border);
 }
-.prose-report h3 {
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin: 1.5rem 0 0.5rem;
-}
-.prose-report p {
-  margin: 0 0 1rem;
-}
+.prose-report h3 { font-size: 1rem; margin: 1.5rem 0 0.5rem; }
+.prose-report p { margin: 0 0 1rem; }
 .prose-report ul,
-.prose-report ol {
-  margin: 0 0 1rem 1.25rem;
-  padding-left: 0.5rem;
-}
-.prose-report li {
-  margin-bottom: 0.4rem;
-}
+.prose-report ol { margin: 0 0 1rem 1.25rem; padding-left: 0.5rem; }
+.prose-report li { margin-bottom: 0.4rem; }
 .prose-report ul { list-style: disc; }
 .prose-report ol { list-style: decimal; }
-.prose-report strong { font-weight: 650; }
+.prose-report strong { font-weight: 700; }
 .prose-report em { color: var(--color-ink-muted); font-style: normal; font-size: 0.9em; }
 .prose-report code {
   font-family: var(--font-mono);
   font-size: 0.85em;
   background: var(--color-surface-muted);
-  padding: 0.15em 0.4em;
-  border-radius: 4px;
+  border: 2px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.1em 0.4em;
 }
 .prose-report table {
   width: 100%;
@@ -404,9 +350,9 @@ body {
 }
 .prose-report th {
   text-align: left;
-  font-weight: 600;
+  font-weight: 700;
   padding: 0.6rem 0.75rem;
-  border-bottom: 2px solid var(--color-border-strong);
+  border-bottom: 2px solid var(--color-border);
   background: var(--color-surface-muted);
 }
 .prose-report td {
@@ -414,22 +360,11 @@ body {
   border-bottom: 1px solid var(--color-border);
   vertical-align: top;
 }
-.prose-report hr {
-  border: 0;
-  border-top: 1px solid var(--color-border);
-  margin: 2rem 0;
-}
+.prose-report tr:last-child td { border-bottom: 0; }
+.prose-report hr { border: 0; border-top: 2px solid var(--color-border); margin: 2rem 0; }
 
 /* Breite Inhalte dürfen für sich scrollen, nie die ganze Seite. */
 .scroll-x {
   overflow-x: auto;
   max-width: 100%;
-}
-
-@keyframes pulse-soft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
-}
-.animate-pulse-soft {
-  animation: pulse-soft 1.8s ease-in-out infinite;
 }

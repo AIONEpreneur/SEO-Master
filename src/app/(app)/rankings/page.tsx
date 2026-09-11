@@ -75,7 +75,7 @@ export default async function RankingsPage() {
                           <button
                             type="submit"
                             aria-label={`Abfrage zu ${ohneProtokoll(l.target)} löschen`}
-                            className="rounded-lg p-1.5 text-ink-subtle transition-colors hover:bg-bad-subtle hover:text-bad"
+                            className="rounded-full border-2 border-transparent p-1.5 text-ink-subtle transition-colors hover:border-tinte hover:bg-rosa hover:text-rot"
                           >
                             <Trash2 size={15} />
                           </button>

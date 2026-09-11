@@ -65,11 +65,13 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
   return (
     <>
       {/* Kopfzeile für schmale Bildschirme */}
-      <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface px-4 lg:hidden">
-        <span className="text-sm font-semibold">SEO-Master</span>
+      <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b-2 border-border bg-surface px-4 lg:hidden">
+        <span className="rounded-full border-2 border-border bg-creme px-3.5 py-1 text-[13px] font-bold text-tinte">
+          seo-master
+        </span>
         <button
           onClick={() => setOpen(!open)}
-          className="rounded-lg p-2 hover:bg-surface-muted"
+          className="lift rounded-full border-2 border-border bg-surface p-2"
           aria-label={open ? 'Menü schliessen' : 'Menü öffnen'}
         >
           {open ? <X size={18} /> : <Menu size={18} />}
@@ -77,21 +79,21 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />
+        <div className="fixed inset-0 z-30 bg-tinte/40 lg:hidden" onClick={() => setOpen(false)} />
       )}
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-border bg-surface transition-transform',
+          'fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r-2 border-border bg-surface transition-transform',
           open ? 'translate-x-0' : '-translate-x-full',
           'lg:translate-x-0',
         )}
       >
-        <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[oklch(64%_0.24_295)] to-[oklch(54%_0.24_310)] text-[13px] font-bold text-white shadow-[0_3px_12px_-2px_oklch(56%_0.244_295_/_0.55)]">
-            S
-          </div>
-          <span className="text-sm font-semibold tracking-tight">SEO-Master</span>
+        {/* Der Name als Pille mit Kontur — wie das Logo der Vorlage. */}
+        <div className="flex h-16 shrink-0 items-center border-b-2 border-border px-4">
+          <span className="rounded-full border-2 border-border bg-creme px-4 py-1.5 text-[14px] font-bold text-tinte shadow-[2px_2px_0_var(--color-border)]">
+            seo-master
+          </span>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -113,10 +115,10 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
             ...(session.isSuperAdmin ? [BETRIEB] : []),
           ].map((group) => (
             <div key={group.label} className="mb-5">
-              <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+              <p className="mb-2 px-2 font-display text-[11px] uppercase tracking-wider text-ink-subtle">
                 {group.label}
               </p>
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {group.items.map((item) => {
                   // "/analyses" darf nicht mitleuchten, wenn "/analyses/new" aktiv ist.
                   const active =
@@ -130,10 +132,13 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
                       href={item.href}
                       onClick={() => setOpen(false)}
                       className={cn(
-                        'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors',
+                        'flex items-center gap-2.5 rounded-full px-3 py-2 text-[13px] transition-colors',
+                        // Der aktive Eintrag ist eine gefüllte Pille mit
+                        // Kontur — dieselbe Form wie die Marken-Pillen der
+                        // Vorlage, nur umgedreht.
                         active
-                          ? 'bg-brand-subtle text-brand shadow-[inset_2px_0_0_var(--color-brand)]'
-                          : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
+                          ? 'border-2 border-border bg-tinte font-bold text-creme'
+                          : 'border-2 border-transparent font-medium text-ink-muted hover:border-border hover:bg-surface-muted hover:text-ink',
                       )}
                     >
                       <item.icon size={16} className="shrink-0" />
@@ -146,7 +151,7 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
           ))}
         </nav>
 
-        <div className="shrink-0 border-t border-border p-3">
+        <div className="shrink-0 border-t-2 border-border p-3">
           {/*
             Der Fuss der Leiste stand bisher weitgehend leer. Das Guthaben
             gehört an eine Stelle, die immer sichtbar ist: Es entscheidet
@@ -155,13 +160,13 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
           {siehtAbrechnung(session) ? (
             <Link
               href="/settings/usage"
-              className="mb-3 flex items-center justify-between rounded-lg border border-border px-2.5 py-2 transition-colors hover:bg-surface-muted"
+              className="lift mb-3 flex items-center justify-between rounded-xl border-2 border-border bg-limette px-3 py-2.5"
             >
-              <span className="flex items-center gap-2 text-[12px] text-ink-muted">
-                <Coins size={14} className="text-brand" />
+              <span className="flex items-center gap-2 text-[12px] font-bold text-tinte">
+                <Coins size={14} />
                 Guthaben
               </span>
-              <span className="text-[12px] font-semibold tabular-nums">
+              <span className="font-display text-[13px] text-tinte tabular-nums">
                 {session.credits >= 100000 ? '∞' : session.credits.toLocaleString('de-DE')}
               </span>
             </Link>
@@ -169,12 +174,12 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
             // Fuer Kundinnen dieselbe Information in ihrer Sprache: Credits
             // sind Cent an Anbieterkosten, Analysen sind das, was sie gekauft
             // haben.
-            <div className="mb-3 flex items-center justify-between rounded-lg border border-border px-2.5 py-2">
-              <span className="flex items-center gap-2 text-[12px] text-ink-muted">
-                <ScanSearch size={14} className="text-brand" />
+            <div className="mb-3 flex items-center justify-between rounded-xl border-2 border-border bg-limette px-3 py-2.5">
+              <span className="flex items-center gap-2 text-[12px] font-bold text-tinte">
+                <ScanSearch size={14} />
                 Analysen frei
               </span>
-              <span className="text-[12px] font-semibold tabular-nums">
+              <span className="font-display text-[13px] text-tinte tabular-nums">
                 {verbleibendeAnalysen(session.credits, KOSTEN_ANALYSE).toLocaleString('de-DE')}
               </span>
             </div>
@@ -184,13 +189,13 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
             <ThemeToggle initial={theme} />
           </div>
           <div className="mb-2 px-2">
-            <p className="truncate text-[13px] font-medium">{session.name ?? session.email}</p>
+            <p className="truncate text-[13px] font-bold">{session.name ?? session.email}</p>
             <p className="truncate text-[12px] text-ink-subtle">{session.organizationName}</p>
           </div>
           <form action={logoutAction}>
             <button
               type="submit"
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+              className="flex w-full items-center gap-2.5 rounded-full border-2 border-transparent px-3 py-2 text-[13px] font-medium text-ink-muted transition-colors hover:border-border hover:bg-surface-muted hover:text-ink"
             >
               <LogOut size={16} />
               Abmelden

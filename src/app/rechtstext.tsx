@@ -13,20 +13,20 @@ export function Rechtstext({ titel, stand, children }: { titel: string; stand: s
       <div className="mx-auto max-w-3xl px-5 py-14">
         <Link
           href="/"
-          className="mb-10 inline-flex items-center gap-1.5 text-[13px] text-[var(--schrift-matt)] transition-colors hover:text-[var(--schrift)]"
+          className="lift mb-10 inline-flex items-center gap-2 rounded-full border-2 border-tinte bg-creme px-5 py-2.5 text-[14px] font-bold"
         >
-          <ArrowLeft size={14} />
+          <ArrowLeft size={15} />
           Zur Startseite
         </Link>
 
-        <h1 className="kopf text-4xl font-bold tracking-tight" style={{ fontFamily: '"Space Grotesk", "IBM Plex Sans", sans-serif' }}>
-          {titel}
-        </h1>
-        <p className="mono mt-3 text-[11px] uppercase tracking-[0.15em] text-[var(--schrift-leise)]">
+        <h1 className="text-[32px] sm:text-[40px]">{titel}</h1>
+        <span className="mt-4 inline-block rounded-full border-2 border-tinte bg-creme px-4 py-1.5 text-[12px] font-bold uppercase tracking-[0.1em]">
           Stand: {stand}
-        </p>
+        </span>
 
-        <div className="rechtstext mt-12">{children}</div>
+        <div className="rechtstext mt-10 rounded-3xl border-2 border-tinte bg-creme p-7 shadow-[6px_6px_0_#161616] sm:p-10">
+          {children}
+        </div>
       </div>
     </div>
   )

@@ -276,7 +276,7 @@ export function NewAnalysisForm({
       )}
 
       {state.error && (
-        <p className="rounded-lg bg-bad-subtle px-4 py-3 text-[13px] text-bad">{state.error}</p>
+        <p className="rounded-md border-2 border-tinte bg-rosa px-4 py-3 text-[13px] font-bold text-rot">{state.error}</p>
       )}
 
       <div className="flex items-center gap-3">

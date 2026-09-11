@@ -62,7 +62,7 @@ export function ProjectForm() {
           <Label htmlFor="description">Notiz (optional)</Label>
           <Input id="description" name="description" placeholder="Worum geht es bei diesem Projekt?" />
         </div>
-        {state.error && <p className="rounded-lg bg-bad-subtle px-3 py-2 text-[13px] text-bad">{state.error}</p>}
+        {state.error && <p className="rounded-md border-2 border-tinte bg-rosa px-3 py-2 text-[13px] font-bold text-rot">{state.error}</p>}
         <Button type="submit" size="sm" disabled={pending}>
           {pending ? 'Wird angelegt…' : 'Projekt anlegen'}
         </Button>
