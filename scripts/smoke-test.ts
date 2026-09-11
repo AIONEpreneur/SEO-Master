@@ -10,7 +10,7 @@
  * Aufruf:  npm run smoke
  *          npm run smoke -- https://eigene-seite.de   (gegen eine Live-Seite)
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { seal, open, hintOf } from '../src/lib/crypto/vault'
 import { extractSignals, gerenderterText } from '../src/lib/analysis/extract'
@@ -872,6 +872,63 @@ async function main() {
     'Ohne Tageszeit bleibt es allgemein',
     begruessung('Kirsten Biema') === 'Hallo, Kirsten' && begruessung(null) === 'Schön, dass du da bist',
     'so rendert der Server, bevor der Browser die Stunde kennt',
+  )
+
+  // --- Die Tür zum Arbeitsbereich -------------------------------------------
+  //
+  // Die Landingpage ist öffentlich und soll es sein. Alles dahinter nicht.
+  // Eine neue Seite unter (app), bei der die Sitzungsprüfung vergessen wird,
+  // fällt niemandem auf: Sie funktioniert ja — für die Entwicklerin, die
+  // angemeldet ist. Erst eine Fremde sähe fremde Daten, und die sagt es nicht.
+  //
+  // Geprüft wird deshalb am Quelltext: Jede Seite im angemeldeten Bereich
+  // muss die Sitzung verlangen. Das Layout tut es bereits für alle; diese
+  // Prüfung hält den Schutz auch dann, wenn jemand am Layout etwas ändert.
+  section('Hinter der Landingpage steht überall eine Anmeldung')
+
+  const appOrdner2 = join(dir, '..', '..', 'src', 'app', '(app)')
+  const seiten: string[] = []
+  const sammle = (ordner: string) => {
+    for (const eintrag of readdirSync(ordner, { withFileTypes: true })) {
+      const voll = join(ordner, eintrag.name)
+      if (eintrag.isDirectory()) sammle(voll)
+      else if (eintrag.name === 'page.tsx') seiten.push(voll)
+    }
+  }
+  sammle(appOrdner2)
+
+  check('Seiten im Arbeitsbereich gefunden', seiten.length >= 10, `${seiten.length} Seiten`)
+
+  const WACHEN = ['requireSession', 'requireRole', 'requireSuperAdmin', 'echteSitzung']
+  const ohneWache = seiten.filter((datei) => {
+    const quelle = readFileSync(datei, 'utf8')
+    return !WACHEN.some((w) => quelle.includes(w))
+  })
+  check(
+    'Jede Seite verlangt eine Sitzung',
+    ohneWache.length === 0,
+    ohneWache.length
+      ? ohneWache.map((d) => d.split('/(app)/')[1]).join(', ')
+      : `${seiten.length} Seiten geprüft`,
+  )
+
+  // Das Layout ist der zweite Riegel. Fällt er, greifen die Seiten selbst —
+  // aber ein fehlender Riegel gehört gemeldet, nicht stillschweigend ersetzt.
+  const appLayout = readFileSync(join(appOrdner2, 'layout.tsx'), 'utf8')
+  check(
+    'Das Layout weist ohne Sitzung ab',
+    /getSession\(\)/.test(appLayout) && /redirect\('\/login'\)/.test(appLayout),
+    'ein Riegel vor allem, was unter (app) liegt',
+  )
+
+  // Die Landingpage darf nicht zum Arbeitsbereich einladen, solange niemand
+  // hineinkommt. Sonst klickt jemand "Kostenlos starten" und landet vor
+  // einer verschlossenen Tür.
+  const startseite = readFileSync(join(dir, '..', '..', 'src', 'app', 'page.tsx'), 'utf8')
+  check(
+    'Bei geschlossener Registrierung sagt die Startseite das auch',
+    startseite.includes('inErprobung') && startseite.includes('geschlossene'),
+    'kein "Kostenlos starten" vor einer verschlossenen Tür',
   )
 
   // --- Webhook --------------------------------------------------------------

@@ -127,8 +127,35 @@ export default async function Startseite() {
   const startHref = session ? '/dashboard' : registrierungOffen ? '/register' : '/login'
   const startLabel = session ? 'Zum Arbeitsbereich' : registrierungOffen ? 'Kostenlos starten' : 'Anmelden'
 
+  /*
+    Solange die Registrierung geschlossen ist, darf die Seite nichts
+    versprechen, was niemand einlösen kann.
+
+    Vorher stand hier "Kostenlos starten", "ohne Zahldaten, in zwei Minuten"
+    und "Du bekommst sofort einen eigenen Arbeitsbereich" — und jeder Knopf
+    führte auf eine Anmeldung, an der alle scheitern. Das ist keine
+    Kleinigkeit: Eine Seite, die zum Mitmachen einlädt und die Tür
+    verschlossen hält, verbrennt genau die Leute, die es versucht haben.
+
+    Die Seite selbst bleibt sichtbar. Sie ist die Beschreibung des Produkts,
+    und die stimmt auch dann, wenn noch niemand hineinkommt.
+  */
+  const inErprobung = !session && !registrierungOffen
+
   return (
     <div className="aussenauftritt min-h-dvh overflow-x-hidden">
+      {/*
+        Der Hinweis steht ganz oben und nicht im Kleingedruckten: Wer die
+        Seite öffnet, soll in der ersten Sekunde wissen, woran er ist — und
+        nicht erst nach dem Klick auf einen Knopf, der ihn abweist.
+      */}
+      {inErprobung && (
+        <p className="border-b-2 border-tinte bg-sand px-5 py-2.5 text-center text-[13px] font-bold text-tinte sm:px-10">
+          SEO-Master ist zurzeit in geschlossener Erprobung. Zugänge gibt es auf Anfrage — wer
+          schon einen hat, meldet sich an.
+        </p>
+      )}
+
       {/* ================= KOPF ================= */}
       <header className="flex items-center justify-between px-5 pt-6 sm:px-10 lg:px-16 lg:pt-7">
         <Link
@@ -139,7 +166,7 @@ export default async function Startseite() {
         </Link>
         <div className="flex items-center gap-3 sm:gap-4">
           <span className="hidden rounded-full border-2 border-tinte bg-orange px-5 py-2.5 text-[15px] font-bold lg:block">
-            Kostenlos umschauen
+            {inErprobung ? 'Geschlossene Erprobung' : 'Kostenlos umschauen'}
           </span>
           {!session && registrierungOffen && (
             <Link href="/login" className="hidden text-[15px] font-bold sm:block">
@@ -303,13 +330,19 @@ export default async function Startseite() {
                 href={registrierungOffen ? '/register' : '/login'}
                 className="lift mt-7 rounded-full border-2 border-tinte bg-tinte px-6 py-4 text-center text-[16px] font-bold text-creme"
               >
-                {tarif.kennung === 'FREE' ? 'Kostenlos starten' : `Mit ${tarif.name} starten`}
+                {inErprobung
+                  ? 'Anmelden'
+                  : tarif.kennung === 'FREE'
+                    ? 'Kostenlos starten'
+                    : `Mit ${tarif.name} starten`}
               </Link>
-              {tarif.kennung !== 'FREE' && (
-                <p className="mt-3 text-[13px] font-medium">
-                  Erst kostenlos anlegen, dann im Konto buchen — jederzeit kündbar.
-                </p>
-              )}
+              <p className="mt-3 text-[13px] font-medium">
+                {inErprobung
+                  ? 'Noch nicht buchbar — die Anwendung ist in geschlossener Erprobung.'
+                  : tarif.kennung === 'FREE'
+                    ? 'Ohne Zahldaten. Startguthaben ist dabei.'
+                    : 'Erst kostenlos anlegen, dann im Konto buchen — jederzeit kündbar.'}
+              </p>
             </div>
           ))}
         </div>
@@ -376,10 +409,18 @@ export default async function Startseite() {
           <Funke size={30} className="twinkle twinkle-2 absolute bottom-10 right-10" fill="#F6A44B" />
 
           <h2 className="max-w-[800px] text-[28px] leading-tight sm:text-[40px] lg:text-[48px]">
-            {session ? 'Bereit für den nächsten Lauf' : 'Schau dir deine Sichtbarkeit an'}
+            {session
+              ? 'Bereit für den nächsten Lauf'
+              : inErprobung
+                ? 'Bald zu haben'
+                : 'Schau dir deine Sichtbarkeit an'}
           </h2>
           <span className="rounded-full border-2 border-tinte bg-creme px-6 py-3 text-[15px] font-bold">
-            {session ? 'Alles an einem Ort' : 'kostenlos · ohne Zahldaten · in zwei Minuten'}
+            {session
+              ? 'Alles an einem Ort'
+              : inErprobung
+                ? 'geschlossene Erprobung · neue Zugänge folgen'
+                : 'kostenlos · ohne Zahldaten · in zwei Minuten'}
           </span>
           <Link
             href={startHref}
@@ -390,7 +431,9 @@ export default async function Startseite() {
           <p className="text-[15px] font-medium">
             {session
               ? 'Alle Analysen, Recherchen und Berichte warten auf dich.'
-              : 'Du bekommst sofort einen eigenen Arbeitsbereich.'}
+              : inErprobung
+                ? 'Zugänge gibt es zurzeit nur auf Anfrage. Wer schon einen hat, meldet sich hier an.'
+                : 'Du bekommst sofort einen eigenen Arbeitsbereich.'}
           </p>
         </div>
       </section>
