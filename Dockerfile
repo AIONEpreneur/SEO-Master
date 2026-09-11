@@ -56,6 +56,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/src ./src
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 
+# Der Ablageordner für Profilbilder muss im Abbild liegen, und zwar mit dem
+# richtigen Besitzer.
+#
+# Ein benanntes Docker-Volume entsteht sonst leer und gehört root. Der Dienst
+# läuft aber als nextjs (1001) und darf dann nicht hineinschreiben — das
+# Hochladen scheiterte mit EACCES. Legt das Abbild den Ordner selbst an,
+# übernimmt Docker beim ersten Einhängen dessen Besitzer in das Volume.
+RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0

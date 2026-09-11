@@ -6,8 +6,9 @@ import { useState } from 'react'
 import {
   LayoutDashboard, FolderKanban, ScanSearch, FileText, Users2,
   KeyRound, Receipt, Menu, X, LogOut, Swords, TrendingUp, Coins, ShieldCheck, Puzzle, ListOrdered,
-  UserRound, LifeBuoy,
+  UserRound, LifeBuoy, Eye,
 } from 'lucide-react'
+import { vorschauBereichAction } from '@/lib/auth/ansicht'
 import { Avatar } from '@/components/avatar'
 import { cn } from '@/lib/utils/cn'
 import { logoutAction } from '@/lib/auth/actions'
@@ -187,6 +188,31 @@ export function Sidebar({ session, theme }: { session: SessionUser; theme: Theme
                 {verbleibendeAnalysen(session.credits, KOSTEN_ANALYSE).toLocaleString('de-DE')}
               </span>
             </div>
+          )}
+
+          {/*
+            Der Umschalter in die Kundensicht stand bisher nur unter
+            Betrieb → Arbeitsbereiche. Dort wird er beim Bauen nicht
+            gefunden: Wer prüfen will, wie sich eine Änderung für eine
+            Kundin anfühlt, will das sofort sehen und nicht über zwei
+            Seiten dorthin navigieren.
+
+            Der Rückweg steht bewusst nicht hier, sondern im Balken über
+            der App — in der Kundensicht gilt `isSuperAdmin` als falsch,
+            und genau das soll sie ja zeigen. Der Balken ist klebend und
+            damit immer erreichbar.
+          */}
+          {session.isSuperAdmin && (
+            <form action={vorschauBereichAction} className="mb-3">
+              <button
+                type="submit"
+                title="Wechselt in einen eigenen Arbeitsbereich mit Kundentarif — ohne Datentresor, ohne Verbrauch, mit Kontingent statt Guthaben."
+                className="lift flex w-full items-center gap-2 rounded-xl border-2 border-border bg-rosa px-3 py-2.5 text-[12px] font-bold text-tinte"
+              >
+                <Eye size={14} />
+                Kundensicht
+              </button>
+            </form>
           )}
 
           <div className="mb-3 px-0.5">

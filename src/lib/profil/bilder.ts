@@ -62,8 +62,34 @@ export async function legeBildAb(datei: File): Promise<Ablageergebnis> {
 
   const name = `${crypto.randomBytes(16).toString('hex')}.${endung}`
   const ordner = verzeichnis()
-  await mkdir(ordner, { recursive: true })
-  await writeFile(join(ordner, name), inhalt)
+
+  // Hier war der Fehler, den niemand sehen konnte: Schlug das Schreiben fehl,
+  // flog die Ausnahme aus der Server-Aktion heraus. Der Server antwortete mit
+  // 500, und im Formular stand — nichts. Kein Bild, keine Meldung, kein
+  // Anhaltspunkt. Ein Fehlschlag muss etwas sagen, sonst sieht er aus wie
+  // ein Nichtstun.
+  try {
+    await mkdir(ordner, { recursive: true })
+    await writeFile(join(ordner, name), inhalt)
+  } catch (fehler) {
+    // Der echte Grund gehört ins Protokoll, nicht auf den Bildschirm: Er
+    // nennt Pfade des Servers.
+    console.error(`[profilbild] Schreiben nach ${ordner} fehlgeschlagen:`, fehler)
+    const code = (fehler as NodeJS.ErrnoException)?.code
+    if (code === 'EACCES' || code === 'EPERM') {
+      return {
+        ok: false,
+        grund:
+          'Das Bild konnte nicht gespeichert werden: Der Ablageordner ist für die Anwendung nicht beschreibbar. ' +
+          'Das ist eine Sache der Serverkonfiguration, nicht deines Bildes.',
+      }
+    }
+    return {
+      ok: false,
+      grund: 'Das Bild konnte nicht gespeichert werden. Bitte später erneut versuchen.',
+    }
+  }
+
   return { ok: true, datei: name }
 }
 

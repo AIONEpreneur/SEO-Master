@@ -18,6 +18,7 @@ import { analyzeSeo } from '../src/lib/analysis/seo'
 import { analyzeAeo } from '../src/lib/analysis/aeo'
 import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
+import { legeBildAb, nameIstGueltig, HOECHSTGROESSE } from '../src/lib/profil/bilder'
 import { analyzeSocial } from '../src/lib/analysis/social'
 import {
   fuehreZusammen, fasseZusammen, leseVerlauf, lohnendeBegriffe, vergleichsform,
@@ -545,6 +546,75 @@ async function main() {
     'icon.svg trägt die Fassung für kleine Grössen',
     (tabZeichen.match(/<path/g) ?? []).length === 1 && !tabZeichen.includes('stroke-linejoin'),
     'ein Funke, keine Kontur darum',
+  )
+
+  // --- Profilbilder ---------------------------------------------------------
+  //
+  // Der Fehlbefund: Ein Bild liess sich auswählen, aber nichts passierte —
+  // keine Meldung, kein Bild. Ursache war das Schreiben in einen Ordner, der
+  // dem Dienst nicht gehört: Die Ausnahme flog aus der Server-Aktion heraus,
+  // der Server antwortete mit 500, und das Formular blieb stumm.
+  //
+  // Ein Fehlschlag muss etwas sagen. Sonst sieht er aus wie ein Nichtstun,
+  // und gesucht wird dann beim Bild statt beim Server.
+  section('Profilbilder melden, wenn etwas schiefgeht')
+
+  const bilderQuelle = readFileSync(
+    join(dir, '..', '..', 'src', 'lib', 'profil', 'bilder.ts'),
+    'utf8',
+  )
+  const schreibBlock = bilderQuelle.slice(bilderQuelle.indexOf('const name ='))
+  check(
+    'Das Schreiben ist abgesichert',
+    /try\s*\{[\s\S]*writeFile[\s\S]*\}\s*catch/.test(schreibBlock),
+    'mkdir und writeFile liegen in try/catch',
+  )
+  check(
+    'Fehlende Schreibrechte werden benannt',
+    schreibBlock.includes('EACCES') && schreibBlock.includes('nicht beschreibbar'),
+    'EACCES sagt: Serverkonfiguration, nicht das Bild',
+  )
+
+  // Die Prüfungen vor dem Schreiben — sie brauchen keine Ablage und laufen
+  // deshalb hier wirklich, nicht nur als Textsuche.
+  const alsDatei = (bytes: number[], typ: string, name = 'probe') =>
+    new File([new Uint8Array(bytes)], name, { type: typ })
+
+  const PNG_KOPF = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]
+
+  const falscherTyp = await legeBildAb(alsDatei(PNG_KOPF, 'image/gif'))
+  check(
+    'GIF wird abgelehnt',
+    !falscherTyp.ok && falscherTyp.grund.includes('JPG, PNG oder WebP'),
+    falscherTyp.ok ? 'angenommen' : falscherTyp.grund,
+  )
+
+  // Die Endung behauptet PNG, der Inhalt ist Text. Der angegebene Typ ist
+  // nur eine Behauptung des Browsers — die Signatur nicht.
+  const gelogen = await legeBildAb(alsDatei([...Buffer.from('<?php evil ?>')], 'image/png'))
+  check(
+    'Eine Datei, die nur behauptet ein Bild zu sein, wird abgelehnt',
+    !gelogen.ok && gelogen.grund.includes('kein gültiges Bild'),
+    gelogen.ok ? 'angenommen' : gelogen.grund,
+  )
+
+  const zuGross = await legeBildAb(
+    alsDatei(new Array(HOECHSTGROESSE + 1).fill(0x89), 'image/png'),
+  )
+  check(
+    'Über 2 MB wird abgelehnt',
+    !zuGross.ok && zuGross.grund.includes('2 MB'),
+    zuGross.ok ? 'angenommen' : zuGross.grund,
+  )
+
+  // Der Name kommt nie aus dem Upload: Ein Name aus der Anfrage könnte
+  // Pfadanteile enthalten und aus dem Ordner ausbrechen.
+  check(
+    'Nur selbst vergebene Dateinamen werden ausgeliefert',
+    !nameIstGueltig('../../etc/passwd') &&
+      !nameIstGueltig('bild.png') &&
+      nameIstGueltig('0123456789abcdef0123456789abcdef.png'),
+    '32 Hex-Zeichen und eine erlaubte Endung',
   )
 
   // --- Wortformen -----------------------------------------------------------

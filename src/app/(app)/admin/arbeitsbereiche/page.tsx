@@ -54,9 +54,10 @@ export default async function ArbeitsbereicheSeite() {
             {hatVorschau ? 'In die Kundensicht wechseln' : 'Vorschau-Bereich anlegen'}
           </p>
           <p className="mt-1 text-[13px] text-ink-muted">
-            Ein eigener Arbeitsbereich mit Kundentarif. Dort erleben Sie die App genau so wie eine Kundin —
+            Ein eigener Arbeitsbereich mit Kundentarif. Dort erlebst du die App genau so wie eine Kundin —
             ohne Datentresor, ohne Verbrauch, mit Kontingent statt Guthaben. Analysen darin verbrauchen
-            echtes Guthaben, deshalb ein knapper Startbetrag.
+            echtes Guthaben, deshalb ein knapper Startbetrag. Derselbe Schalter sitzt unten in der
+            Seitenleiste.
           </p>
         </div>
         <form action={vorschauBereichAction} className="shrink-0">
