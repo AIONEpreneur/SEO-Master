@@ -4,7 +4,7 @@ import { DataForSeoClient } from '@/lib/connectors/dataforseo'
 import { FirecrawlClient } from '@/lib/connectors/firecrawl'
 import { ApifyClient, detectPlatform, DEFAULT_ACTORS, actorInput, normalizeProfile } from '@/lib/connectors/apify'
 import { PageSpeedClient } from '@/lib/connectors/pagespeed'
-import { extractSignals, type PageSignals } from './extract'
+import { extractSignals, gerenderterText, type PageSignals } from './extract'
 import { analyzeSeo } from './seo'
 import { analyzeAeo } from './aeo'
 import { analyzeGeo, parseRobots } from './geo'
@@ -14,7 +14,7 @@ import { analyzeSocial } from './social'
 import { waehleSeiten, seitenErgebnis, type SeitenErgebnis } from './seiten'
 import { wiederkehrendeBefunde } from './wiederkehrend'
 import { tragenderBegriff, wortfolge } from './begriffe'
-import { beurteile, messbare, begriffsBefund, VOLUMEN_SCHWELLE, type BegriffsUrteil } from './keyword-pruefung'
+import { beurteile, messbare, begriffsBefund, beurteileSerpUmfeld, VOLUMEN_SCHWELLE, type BegriffsUrteil } from './keyword-pruefung'
 import { generateReport, sortFindings } from './report'
 import type { AnalysisResult, ModuleResult } from './types'
 import type { Provider } from '@prisma/client'
@@ -154,7 +154,12 @@ export async function runAnalysis(params: {
         if (!html && scraped?.html && /<head[\s>]/i.test(scraped.html)) {
           html = scraped.html
         }
-        renderedText = scraped?.markdown ?? null
+        // Der gerenderte Text kommt aus dem gerenderten HTML, nicht aus dem
+        // Markdown: Markdown liest eingebettete Frames (Newsletter-Formulare,
+        // Buchungs-Widgets) mit, und deren Text ist nicht der Inhalt der
+        // Seite. Nur ohne sie misst der Vergleich mit dem rohen HTML die
+        // JavaScript-Abhängigkeit der Seite selbst.
+        renderedText = scraped?.html ? gerenderterText(scraped.html) : scraped?.markdown ?? null
         statusCode = scraped?.metadata?.statusCode ?? null
         firecrawlMeta = scraped?.metadata ?? null
         raw.firecrawl = { metadata: scraped?.metadata, markdownLength: scraped?.markdown?.length }
@@ -446,6 +451,33 @@ export async function runAnalysis(params: {
 
   await Promise.all(collectors)
 
+  // Abgeleitete Begriffe müssen sich am Suchergebnis beweisen.
+  //
+  // Ein selbst abgeleiteter Begriff ist eine Vermutung. Hat er Suchvolumen,
+  // aber die erste Ergebnisseite handelt von etwas völlig anderem (der Fall
+  // "ich zeige dir": ein Schlagertitel), dann würde die Platzierungsnote ein
+  // fremdes Thema messen und die Gesamtnote drücken. Solche Begriffe werden
+  // als themenfremd markiert und ihr Suchergebnis nicht bewertet – der
+  // Hinweis darauf erscheint im Bericht. Vorgegebene Begriffe bleiben
+  // unangetastet: Wer einen Begriff eintippt, hat entschieden.
+  if (keywordQuelle === 'abgeleitet' && serps.length > 0) {
+    const seitenText = [signals.title, ...signals.h1, ...signals.h2].filter(Boolean).join(' ')
+    for (let i = serps.length - 1; i >= 0; i--) {
+      const umfeld = beurteileSerpUmfeld({ keyword: serps[i].keyword, result: serps[i].result, seitenText })
+      if (umfeld.passt) continue
+      const urteil = begriffsUrteile.find((u) => u.begriff === serps[i].keyword)
+      if (urteil) {
+        urteil.urteil = 'themenfremd'
+        urteil.grund =
+          `Die Suchergebnisse zu diesem Begriff handeln von etwas anderem – nur ${umfeld.verwandte} von ` +
+          `${umfeld.geprueft} vorderen Treffern haben mit dem Seiteninhalt zu tun. Der Begriff wurde aus der ` +
+          'Seite abgeleitet; als Suchanfrage bedeutet er offenbar etwas anderes, eine Platzierung dafür wäre ohne Aussage.'
+      }
+      raw.themenfremdeBegriffe = [...((raw.themenfremdeBegriffe as string[] | undefined) ?? []), serps[i].keyword]
+      serps.splice(i, 1)
+    }
+  }
+
   // --- Phase 2b: Weitere Seiten der Website --------------------------------
   //
   // Läuft nach den Markt-Erhebungen, denn die gelten je Domain und werden
@@ -463,26 +495,58 @@ export async function runAnalysis(params: {
       const adressen = waehleSeiten({ startUrl: targetUrl, gefunden, limit: seitenLimit })
       raw.seitenauswahl = { gefunden: gefunden.length, gewaehlt: adressen.length, nichtLadbar }
 
+      // Eine Unterseite laden – mit zweitem Versuch über den Schrägstrich.
+      //
+      // Der häufigste Grund, warum eine existierende Seite als "nicht ladbar"
+      // erschien, war keine kaputte Seite, sondern die Adressform: Server mit
+      // Ordner-Adressen beantworten die jeweils andere Schrägstrich-Fassung
+      // mit einer Weiterleitung oder direkt mit 404. Deshalb gilt: Ein
+      // Fehlerstatus wird nie ausgewertet (eine 404-Seite ist kein Inhalt),
+      // sondern löst genau einen Versuch mit der anderen Fassung aus.
+      const ladeSeite = async (adresse: string) => {
+        const versuche = [adresse]
+        const mitSchraegstrich = adresse.includes('?')
+          ? null
+          : adresse.endsWith('/')
+            ? adresse.slice(0, -1)
+            : `${adresse}/`
+        if (mitSchraegstrich) versuche.push(mitSchraegstrich)
+
+        for (const versuch of versuche) {
+          try {
+            const geladen = await firecrawl.scrape(versuch)
+            const status = geladen?.metadata?.statusCode ?? null
+            if (status !== null && status >= 400) continue
+            const seitenHtml = geladen?.rawHtml ?? geladen?.html
+            if (!seitenHtml) continue
+            return { geladen, seitenHtml }
+          } catch {
+            continue
+          }
+        }
+        return null
+      }
+
       // Gebündelt zu vieren: schnell genug, ohne die Zielseite zu fluten.
       for (let i = 0; i < adressen.length; i += 4) {
         const gruppe = adressen.slice(i, i + 4)
         const ergebnisse = await Promise.all(
           gruppe.map(async (adresse): Promise<SeitenErgebnis | null> => {
-            try {
-              const geladen = await firecrawl.scrape(adresse)
-              const seitenHtml = geladen?.rawHtml ?? geladen?.html
-              if (!seitenHtml) return null
-              const s = extractSignals({ url: adresse, html: seitenHtml, renderedText: geladen?.markdown ?? null })
-              return seitenErgebnis({
-                url: adresse,
-                signals: s,
-                seo: analyzeSeo({ signals: s }),
-                aeo: analyzeAeo({ signals: s, serp: null, peopleAlsoAsk: [] }),
-                geo: analyzeGeo({ signals: s, backlinks: null, llmMentions: null, robotsTxt: robots }),
-              })
-            } catch {
-              return null
-            }
+            const ergebnis = await ladeSeite(adresse)
+            if (!ergebnis) return null
+            const { geladen, seitenHtml } = ergebnis
+            const s = extractSignals({
+              url: adresse,
+              html: seitenHtml,
+              renderedText: geladen?.html ? gerenderterText(geladen.html) : geladen?.markdown ?? null,
+            })
+            return seitenErgebnis({
+              url: adresse,
+              signals: s,
+              seo: analyzeSeo({ signals: s }),
+              aeo: analyzeAeo({ signals: s, serp: null, peopleAlsoAsk: [] }),
+              geo: analyzeGeo({ signals: s, backlinks: null, llmMentions: null, robotsTxt: robots }),
+            })
           }),
         )
         // Ein blosser Zähler ("3 Seiten liessen sich nicht laden") ist nicht
@@ -590,8 +654,13 @@ export async function runAnalysis(params: {
           }),
         )
 
+        // Profile nur für die belastbaren Wettbewerber – nicht für die rohe
+        // Liste. Die Profile haben in der Auswertung Vorrang; aus der rohen
+        // Liste gebaut hebelten sie den Überschneidungs-Filter wieder aus,
+        // und eine Domain mit einem einzigen gemeinsamen Keyword stand als
+        // "stärkste Wettbewerberin" im Bericht.
         const profiles: CompetitorProfile[] = await Promise.all(
-          (competitors?.items ?? []).slice(0, 6).map(async (c) => {
+          belastbar.slice(0, 6).map(async (c) => {
             const d = (c.domain ?? '').replace(/^www\./, '')
             let refDomains: number | null = null
             try {

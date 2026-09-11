@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { seal, open, hintOf } from '../src/lib/crypto/vault'
-import { extractSignals } from '../src/lib/analysis/extract'
+import { extractSignals, gerenderterText } from '../src/lib/analysis/extract'
 import { analyzeSeo } from '../src/lib/analysis/seo'
 import { analyzeAeo } from '../src/lib/analysis/aeo'
 import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
@@ -23,7 +23,7 @@ import {
   fuehreZusammen, fasseZusammen, leseVerlauf, lohnendeBegriffe, vergleichsform,
 } from '../src/lib/keywords/research'
 import { deckungsgrad, enthaeltBegriff, grundform, teileMarke, tragenderBegriff, wortfolge } from '../src/lib/analysis/begriffe'
-import { beurteile, begriffsBefund, istZuAllgemein, messbare } from '../src/lib/analysis/keyword-pruefung'
+import { beurteile, begriffsBefund, beurteileSerpUmfeld, istZuAllgemein, messbare } from '../src/lib/analysis/keyword-pruefung'
 import { beurteileKanonisch, kanonischerBefund, kanonischeNote } from '../src/lib/analysis/kanonisch'
 import { bezeichnung, wiederkehrendeBefunde } from '../src/lib/analysis/wiederkehrend'
 import { VERWENDETE_ANBIETER } from '../src/lib/connectors/credentials'
@@ -617,6 +617,100 @@ function main() {
   check(
     'Stattdessen der Hinweis auf die Eingabe',
     serpOhneNachfrage.findings.some((f) => f.id === 'keyword-ohne-nachfrage'),
+  )
+
+  section('Ein abgeleiteter Begriff muss sich am Suchergebnis beweisen')
+
+  // Der echte Fall: Aus einer Ueberschrift wurde "ich zeige dir" abgeleitet.
+  // Der Begriff hat Suchvolumen – aber die erste Ergebnisseite gehoert einem
+  // Schlager. Die Note haette ein Lied gemessen, nicht die Website.
+  const seitenText = 'KI-Beratung für Solopreneurinnen — KI aber richtig einsetzen im Business'
+  const schlagerSerp = {
+    keyword: 'ich zeige dir',
+    items: Array.from({ length: 10 }, (_, i) => ({
+      type: 'organic',
+      title: `Ich zeig dir meine Welt – Andrea Jürgens Songtext ${i}`,
+      description: 'Liedtext, Lyrics und Video zum Schlager-Klassiker.',
+    })),
+  }
+  const schlagerUmfeld = beurteileSerpUmfeld({ keyword: 'ich zeige dir', result: schlagerSerp, seitenText })
+  check(
+    'Ein Schlager-Suchergebnis gilt als themenfremd',
+    !schlagerUmfeld.passt,
+    `${schlagerUmfeld.verwandte} von ${schlagerUmfeld.geprueft} Treffern verwandt`,
+  )
+
+  const passendesSerp = {
+    keyword: 'ki beratung',
+    items: Array.from({ length: 10 }, (_, i) => ({
+      type: 'organic',
+      title: `KI-Beratung für kleine Unternehmen und Solopreneure ${i}`,
+      description: 'KI richtig im Business einsetzen – Beratung und Begleitung.',
+    })),
+  }
+  check(
+    'Ein passendes Suchergebnis bleibt bewertbar',
+    beurteileSerpUmfeld({ keyword: 'ki beratung', result: passendesSerp, seitenText }).passt,
+  )
+  check(
+    'Ohne Treffer wird nicht aussortiert',
+    beurteileSerpUmfeld({ keyword: 'irgendwas', result: { keyword: 'irgendwas', items: [] }, seitenText }).passt,
+    'Aussortieren braucht einen Beleg',
+  )
+  check(
+    'Die Woerter des Begriffs selbst zaehlen nicht als Verwandtschaft',
+    !beurteileSerpUmfeld({
+      keyword: 'ich zeige dir',
+      result: schlagerSerp,
+      seitenText: 'Ich zeige dir mein Angebot',
+    }).passt,
+    'sonst waere jede Suchergebnisseite trivialerweise verwandt',
+  )
+
+  const themenfremdUrteile = beurteile(['ich zeige dir'], new Map([['ich zeige dir', 880]]))
+  themenfremdUrteile[0].urteil = 'themenfremd'
+  const serpThemenfremd = analyzeSerp({
+    domain: 'kirstenbiema.com',
+    serps: [],
+    begriffsUrteile: themenfremdUrteile,
+    begriffsAlternativen: [],
+  })
+  const platzierungenThemenfremd = serpThemenfremd.criteria.find((c) => c.key === 'positions')
+  check(
+    'Ein themenfremder Begriff erzeugt keine Platzierungsnote',
+    platzierungenThemenfremd?.status === 'unknown',
+    'die Gesamtnote darf kein fremdes Thema messen',
+  )
+  check(
+    'Der Bericht weist themenfremde Begriffe aus',
+    serpThemenfremd.findings.some((f) => f.id === 'keyword-ohne-nachfrage'),
+  )
+  check(
+    'Fuerwoerter werden nicht mehr zum Keyword',
+    tragenderBegriff('Ich zeige dir, wie du mit KI arbeitest') !== 'ich zeige dir',
+    `abgeleitet wuerde: ${tragenderBegriff('Ich zeige dir, wie du mit KI arbeitest') ?? 'nichts'}`,
+  )
+
+  section('Eingebettete Frames sind nicht der Inhalt der Seite')
+
+  const htmlMitFrame = `<html><body>
+    <h1>KI-Beratung</h1>
+    <p>Kurzer eigener Inhalt der Seite. ${'Eigener Absatz über KI-Beratung und Begleitung im Business. '.repeat(10)}</p>
+    <iframe src="https://newsletter-anbieter.example"><html><body>
+      <h1>Trag dich in meinen Newsletter ein</h1>
+      <p>${'Langer Formulartext eines fremden Anbieters. '.repeat(60)}</p>
+    </body></html></iframe>
+  </body></html>`
+  const gerendert = gerenderterText(htmlMitFrame)
+  check(
+    'Frame-Inhalt taucht im gerenderten Text nicht auf',
+    !gerendert.includes('Newsletter') && gerendert.includes('Kurzer eigener Inhalt'),
+    'was in einem eingebetteten Dokument steht, gehoert dem fremden Anbieter',
+  )
+  check(
+    'Ohne Frame-Text keine kuenstliche JavaScript-Abhaengigkeit',
+    extractSignals({ url: 'https://beispiel.de', html: htmlMitFrame, renderedText: gerendert }).jsDependency !== 'hoch',
+    'der Fehlalarm hatte Prioritaet 1',
   )
 
   section('Markenzusatz im Title zählt nicht gegen die Aussage')
@@ -1647,6 +1741,29 @@ function main() {
     'dort steht kein Inhalt, ueber den eine Website gefunden wird',
   )
   check('Schlagwort-Archive zaehlen nicht als Inhalt', !auswahl.some((u) => u.includes('/tag/')))
+
+  // Ordner-Adressen behalten ihren Schraegstrich. Wer ihn abschneidet,
+  // erzeugt Phantom-404er auf jeder Website, deren Server die Fassung ohne
+  // Schraegstrich umleitet oder ablehnt.
+  const ordnerAuswahl = waehleSeiten({
+    startUrl: 'https://ordner.de/',
+    gefunden: [
+      { url: 'https://ordner.de/angebot/' },
+      { url: 'https://ordner.de/blog/erster-artikel/' },
+    ],
+  })
+  check(
+    'Ordner-Adressen behalten den Schraegstrich am Ende',
+    ordnerAuswahl.includes('https://ordner.de/angebot/') && ordnerAuswahl.includes('https://ordner.de/blog/erster-artikel/'),
+    'abgerufen wird die Adresse, wie die Website sie ausgibt',
+  )
+  check(
+    'Mit und ohne Schraegstrich bleibt trotzdem eine Seite',
+    waehleSeiten({
+      startUrl: 'https://ordner.de/',
+      gefunden: [{ url: 'https://ordner.de/angebot/' }, { url: 'https://ordner.de/angebot' }],
+    }).length === 1,
+  )
   check(
     'Die Grenze haelt',
     waehleSeiten({
@@ -1751,6 +1868,25 @@ function main() {
     belastbareWettbewerber([{ domain: 'x.de', intersections: 4 }], 5000).belastbar.length === 0 &&
       belastbareWettbewerber([{ domain: 'x.de', intersections: 5 }], 5000).belastbar.length === 1,
   )
+  // Der biema.de-Fall: Bei einer sehr kleinen Domain fiel die Schwelle auf 1,
+  // und eine Domain mit einem einzigen gemeinsamen Keyword – dem eigenen
+  // Namen – stand als "staerkste Wettbewerberin" im Bericht.
+  check(
+    'Eine einzige Ueberschneidung reicht auch bei winzigen Domains nie',
+    belastbareWettbewerber([{ domain: 'biema.de', intersections: 1 }], 4).belastbar.length === 0,
+    'Namensaehnlichkeit ist kein Wettbewerb',
+  )
+
+  // Die Profile duerfen den Filter nicht wieder aushebeln: Sie werden in der
+  // Auswertung bevorzugt und muessen deshalb aus der gefilterten Liste kommen.
+  {
+    const runQuelleWettbewerb = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'run.ts'), 'utf8')
+    check(
+      'Wettbewerber-Profile entstehen aus der gefilterten Liste',
+      /belastbar\s*\.slice\(0,\s*6\)/.test(runQuelleWettbewerb),
+      'sonst steht eine aussortierte Domain doch wieder im Bericht',
+    )
+  }
 
   // Wer bereits rankt, hat keine Luecke, sondern Nacharbeit.
   const wettbewerb = analyzeCompetitors({

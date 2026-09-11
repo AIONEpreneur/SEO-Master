@@ -41,6 +41,11 @@ export type CompetitorProfile = {
  *
  * Wettbewerberin ist, wer entweder mindestens fünf Keywords teilt oder ein
  * Zehntel des eigenen Bestands – was zuerst erreicht ist.
+ *
+ * Die Untergrenze liegt bei zwei: Eine einzige Überschneidung ist nie ein
+ * Beleg, auch nicht bei einer sehr kleinen Domain. Genau so wurde biema.de
+ * zur "stärksten Wettbewerberin" von kirstenbiema.com – das eine gemeinsame
+ * Keyword war der Name. Namensähnlichkeit ist kein Wettbewerb.
  */
 export const MINDEST_GEMEINSAME = 5
 
@@ -49,7 +54,7 @@ export function belastbareWettbewerber<T extends { intersections?: number }>(
   eigeneKeywords: number,
 ): { belastbar: T[]; aussortiert: T[] } {
   const schwelle = Math.max(
-    1,
+    2,
     Math.min(MINDEST_GEMEINSAME, Math.ceil(eigeneKeywords * 0.1)),
   )
   const belastbar = items.filter((c) => (c.intersections ?? 0) >= schwelle)

@@ -84,6 +84,27 @@ const AUTHORITY_DOMAINS = [
   'ec.europa.eu', 'who.int', 'nature.com', 'harvard.edu', 'oecd.org',
 ]
 
+/**
+ * Sichtbaren Text aus gerendertem HTML gewinnen – ohne eingebettete Frames.
+ *
+ * Der Anlass: Als "gerenderter Text" diente bisher Firecrawls Markdown, und
+ * das liest eingebettete Frames mit – Newsletter-Formulare, Buchungs-Widgets,
+ * Video-Einbettungen. Deren Text ist aber nicht der Inhalt der Seite: Er
+ * steht in einem eigenen Dokument eines fremden Anbieters. Die Folge waren
+ * Fehlalarme mit höchster Priorität ("Inhalt entsteht erst durch JavaScript"),
+ * weil das rohe HTML gegen einen Text verglichen wurde, der zu grossen Teilen
+ * aus dem Frame stammte.
+ *
+ * Hier wird der gerenderte Text deshalb genauso gewonnen wie der rohe:
+ * gleiche Bereinigung, Frames ausgeschlossen. Nur so misst der Vergleich
+ * die JavaScript-Abhängigkeit der Seite selbst.
+ */
+export function gerenderterText(html: string): string {
+  const $ = cheerio.load(html)
+  $('script, style, noscript, svg, iframe').remove()
+  return $('body').text().replace(/\s+/g, ' ').trim()
+}
+
 export function extractSignals(input: {
   url: string
   html: string

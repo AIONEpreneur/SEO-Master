@@ -13,13 +13,14 @@
  * Deshalb wird vor jeder Platzierungsprüfung sortiert: Was wird gesucht, was
  * ist zu allgemein, und was existiert schlicht nicht als Suchanfrage.
  */
-import { wortfolge } from './begriffe'
+import { wortfolge, deckungsgrad, istFuellwort } from './begriffe'
+import type { SerpResult } from '@/lib/connectors/dataforseo'
 
 export type BegriffsUrteil = {
   begriff: string
   /** Suchen im Monat, sofern erhoben. */
   volumen: number | null
-  urteil: 'messbar' | 'zu-allgemein' | 'ohne-volumen' | 'ungeprueft'
+  urteil: 'messbar' | 'zu-allgemein' | 'ohne-volumen' | 'themenfremd' | 'ungeprueft'
   grund?: string
 }
 
@@ -92,6 +93,59 @@ export function messbare(urteile: BegriffsUrteil[]): string[] {
 }
 
 /**
+ * Passt das Suchergebnis eines abgeleiteten Begriffs zum Thema der Seite?
+ *
+ * Der Anlass: Aus einer Überschrift wurde "ich zeige dir" abgeleitet – ein
+ * Begriff mit messbarem Suchvolumen, dessen erste Ergebnisseite aber ein
+ * Schlagertitel dominiert. Die Volumenprüfung liess ihn deshalb durch, die
+ * Platzierungsnote konnte nur schlecht ausfallen, und dieser Wert drückte
+ * die Gesamtnote. Gemessen wurde ein Lied, nicht die Website.
+ *
+ * Die Prüfung: Wie viele der vorderen organischen Treffer teilen wenigstens
+ * ein Inhaltswort mit der Seite? Die Wörter des Suchbegriffs selbst zählen
+ * dabei nicht – sie stehen naturgemäss in jedem Treffer und würden jede
+ * Suchergebnisseite als verwandt erscheinen lassen. Handeln praktisch alle
+ * Treffer von etwas anderem, ist der Begriff als Suchanfrage etwas anderes
+ * als auf der Seite – und taugt nicht als Messgrösse.
+ */
+export function beurteileSerpUmfeld(params: {
+  keyword: string
+  result: SerpResult | null
+  /** Inhaltsworte der Seite: Title und Überschriften, als ein Text. */
+  seitenText: string
+}): { passt: boolean; verwandte: number; geprueft: number } {
+  const treffer = (params.result?.items ?? [])
+    .filter((i) => i.type === 'organic')
+    .slice(0, 10)
+    .map((i) => `${i.title ?? ''} ${i.description ?? ''}`.trim())
+    .filter(Boolean)
+
+  // Ohne Treffer lässt sich nichts über das Umfeld sagen – dann gilt der
+  // Begriff als passend, denn Aussortieren braucht einen Beleg.
+  if (treffer.length === 0) return { passt: true, verwandte: 0, geprueft: 0 }
+
+  const keywordWorte = new Set(wortfolge(params.keyword).split(' '))
+  const kernWorte = [
+    ...new Set(
+      wortfolge(params.seitenText)
+        .split(' ')
+        .filter((w) => w.length >= 3 && !istFuellwort(w) && !keywordWorte.has(w)),
+    ),
+  ]
+  // Ohne eigene Inhaltsworte jenseits des Begriffs ist kein Vergleich möglich.
+  if (kernWorte.length === 0) return { passt: true, verwandte: 0, geprueft: treffer.length }
+
+  const kern = kernWorte.join(' ')
+  const verwandte = treffer.filter((text) => deckungsgrad(text, kern) > 0).length
+
+  return {
+    passt: verwandte >= Math.min(2, treffer.length),
+    verwandte,
+    geprueft: treffer.length,
+  }
+}
+
+/**
  * Ein Befund über die Eingabe, nicht über die Website.
  *
  * Er ist als „schneller Hebel" eingestuft, nicht als Mangel: Es ist nichts
@@ -102,7 +156,9 @@ export function begriffsBefund(
   urteile: BegriffsUrteil[],
   alternativen: Array<{ begriff: string; volumen: number }>,
 ) {
-  const untauglich = urteile.filter((u) => u.urteil === 'ohne-volumen' || u.urteil === 'zu-allgemein')
+  const untauglich = urteile.filter(
+    (u) => u.urteil === 'ohne-volumen' || u.urteil === 'zu-allgemein' || u.urteil === 'themenfremd',
+  )
   if (untauglich.length === 0) return null
 
   const messbarAnzahl = urteile.length - untauglich.length
@@ -120,8 +176,8 @@ export function begriffsBefund(
     severity: 'quickwin' as const,
     title:
       messbarAnzahl === 0
-        ? 'Keiner der geprüften Begriffe wird nennenswert gesucht'
-        : `${untauglich.length} von ${urteile.length} geprüften Begriffen werden nicht gesucht`,
+        ? 'Keiner der geprüften Begriffe taugt als Messgrösse'
+        : `${untauglich.length} von ${urteile.length} geprüften Begriffen taugen nicht als Messgrösse`,
     why: `Eine Platzierungsbewertung für solche Begriffe misst die Eingabe, nicht die Website: ${liste}${vorschlag}`,
     action:
       'Beim nächsten Lauf die tatsächlich gesuchten Begriffe eintragen. Positionierungswörter — wie sich die Zielgruppe selbst nennt — gehören auf die Seite, taugen aber nicht als Messgrösse: Sie werden verwendet, wenn man schon da ist, nicht bei der Suche.',

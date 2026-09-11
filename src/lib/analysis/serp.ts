@@ -18,7 +18,9 @@ export function analyzeSerp(input: {
 }): ModuleResult {
   const { domain, serps, rankedKeywords, domainRank } = input
   const begriffsUrteile = input.begriffsUrteile ?? []
-  const untauglich = begriffsUrteile.filter((u) => u.urteil === 'ohne-volumen' || u.urteil === 'zu-allgemein')
+  const untauglich = begriffsUrteile.filter(
+    (u) => u.urteil === 'ohne-volumen' || u.urteil === 'zu-allgemein' || u.urteil === 'themenfremd',
+  )
   const findings: Finding[] = []
   const criteria: Criterion[] = []
 
@@ -64,7 +66,7 @@ export function analyzeSerp(input: {
         label: 'Platzierungen',
         score: 0,
         weight: 40,
-        detail: `Nicht bewertbar: Für keinen der ${begriffsUrteile.length} geprüften Begriffe liegt ein nennenswertes Suchvolumen vor. Eine Platzierung dafür wäre ohne Aussage.`,
+        detail: `Nicht bewertbar: Keiner der ${begriffsUrteile.length} geprüften Begriffe taugt als Messgrösse – ohne nennenswertes Suchvolumen oder mit Suchergebnissen zu einem anderen Thema. Eine Platzierung dafür wäre ohne Aussage.`,
         status: 'unknown',
       })
     } else {

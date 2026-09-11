@@ -19,17 +19,36 @@ export const WEBSITE_UMFANG = 25
 const AUSGESCHLOSSEN =
   /\/(wp-admin|wp-login|wp-json|feed|cart|checkout|warenkorb|kasse|login|logout|register|impressum|datenschutz|agb|cookie|tag|category\/page|page\/\d+|search|suche)(\/|$)|\.(pdf|jpg|jpeg|png|gif|webp|svg|zip|mp4|mp3|xml|css|js|ico|woff2?)($|\?)/i
 
-function normalisiere(url: URL, host?: string): string {
-  // Fragmente und Nachverfolgungs-Parameter unterscheiden keine Inhalte –
-  // und www gegen ohne-www ist dieselbe Seite, sonst wird sie doppelt
-  // gelesen und doppelt bezahlt. Alle Adressen laufen auf den Host der
-  // eingegebenen Adresse zusammen.
+/**
+ * Adresse zum Abrufen aufbereiten – so wenig wie möglich verändern.
+ *
+ * Entfernt werden nur Fragmente und Nachverfolgungs-Parameter; beides
+ * unterscheidet keine Inhalte. Alles andere bleibt, wie die Website es
+ * ausgibt – vor allem der Schrägstrich am Ende: Bei Ordner-Adressen
+ * antwortet der Server auf die Fassung ohne Schrägstrich oft mit einer
+ * Weiterleitung oder einem 404. Wer hier "aufräumt", erzeugt Phantom-Fehler
+ * für Seiten, die es gibt.
+ */
+function abrufAdresse(url: URL): string {
   url.hash = ''
-  if (host) url.hostname = host
   for (const schluessel of [...url.searchParams.keys()]) {
     if (/^(utm_|fbclid|gclid|ref$)/i.test(schluessel)) url.searchParams.delete(schluessel)
   }
-  let s = url.toString()
+  return url.toString()
+}
+
+/**
+ * Vergleichsform für die Dublettenerkennung – NICHT zum Abrufen.
+ *
+ * www gegen ohne-www und mit gegen ohne Schrägstrich sind dieselbe Seite;
+ * ohne diese Zusammenführung würde sie doppelt gelesen und doppelt bezahlt.
+ * Der Schlüssel dient nur dem Vergleich, abgerufen wird immer die Adresse,
+ * wie sie gefunden wurde.
+ */
+function vergleichsSchluessel(url: URL): string {
+  const kopie = new URL(abrufAdresse(new URL(url)))
+  kopie.hostname = kopie.hostname.replace(/^www\./, '').toLowerCase()
+  let s = kopie.toString()
   if (s.endsWith('/')) s = s.slice(0, -1)
   return s
 }
@@ -50,7 +69,7 @@ export function waehleSeiten(input: {
   } catch {
     return []
   }
-  const startNormal = normalisiere(new URL(input.startUrl), start.hostname)
+  const startSchluessel = vergleichsSchluessel(start)
 
   const kandidaten = new Map<string, { url: string; tiefe: number; istInhalt: boolean }>()
   for (const eintrag of input.gefunden) {
@@ -63,14 +82,14 @@ export function waehleSeiten(input: {
     if (url.protocol !== 'https:' && url.protocol !== 'http:') continue
     if (!gleicherHost(url.hostname, start.hostname)) continue
 
-    const normal = normalisiere(url, start.hostname)
-    if (normal === startNormal) continue
+    const schluessel = vergleichsSchluessel(url)
+    if (schluessel === startSchluessel) continue
     if (AUSGESCHLOSSEN.test(url.pathname + url.search)) continue
-    if (kandidaten.has(normal)) continue
+    if (kandidaten.has(schluessel)) continue
 
     const pfadTeile = url.pathname.split('/').filter(Boolean)
-    kandidaten.set(normal, {
-      url: normal,
+    kandidaten.set(schluessel, {
+      url: abrufAdresse(url),
       tiefe: pfadTeile.length,
       // Blog-, Ratgeber- und Vergleichsseiten zuerst: Darüber wird eine
       // Website gefunden, und genau dort liegen die Inhaltsbefunde.

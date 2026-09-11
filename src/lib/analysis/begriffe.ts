@@ -69,6 +69,11 @@ export function enthaeltEinzelwort(text: string | null | undefined, begriff: str
 const FUELLWOERTER = new Set([
   'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
   'dein', 'deine', 'deinen', 'deiner', 'mein', 'meine', 'meinen', 'meiner', 'ihr', 'ihre', 'ihren',
+  // Persönliche Fürwörter. Aus einer Überschrift wie "Ich zeige dir, wie …"
+  // wurde sonst das "Keyword" "ich zeige dir" abgeleitet – eine Wortfolge,
+  // deren Suchergebnisse ein Schlagertitel dominiert. Die Note mass dann
+  // ein Lied, nicht die Website.
+  'ich', 'wir', 'mir', 'mich', 'dir', 'dich', 'uns', 'euch', 'sich', 'man', 'sie', 'ihm', 'ihn', 'ihnen',
   'und', 'oder', 'aber', 'denn', 'sondern', 'doch',
   'für', 'mit', 'ohne', 'von', 'vom', 'zum', 'zur', 'bei', 'aus', 'nach', 'über', 'unter', 'auf',
   'ist', 'sind', 'war', 'wird', 'werden', 'kann', 'können', 'soll', 'sollen', 'hat', 'haben',
