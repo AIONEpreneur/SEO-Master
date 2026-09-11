@@ -101,6 +101,7 @@ model Organization {
   invitations       Invitation[]
   erledigteBefunde  ErledigterBefund[]
   apiTokens         ApiToken[]
+  rankingLookups    RankingLookup[]
 
   @@map("organizations")
 }
@@ -484,6 +485,36 @@ model KeywordResearch {
 
   @@index([organizationId, createdAt])
   @@map("keyword_researches")
+}
+
+/**
+ * Ranking-Abfrage aus der Browser-Extension (SEO4U).
+ *
+ * Jede Abfrage im Popup – Rankings einer Domain oder einer exakten
+ * Unterseite – wird hier abgelegt, damit sie im eigenen Arbeitsbereich
+ * wiederauffindbar ist und die Arbeit in der App weitergehen kann.
+ */
+model RankingLookup {
+  id             String   @id @default(cuid())
+  organizationId String
+  createdById    String?
+  /** Domain oder vollständige Adresse der Unterseite. */
+  target         String
+  /** 'domain' oder 'seite' – was abgefragt wurde. */
+  scope          String   @default("domain")
+  locationCode   Int      @default(2276)
+  languageCode   String   @default("de")
+  /** Rankende Keywords insgesamt (Top 100), auch über die Liste hinaus. */
+  totalCount     Int      @default(0)
+  /** Die abgerufenen Platzierungen ({rank, keyword, sv, path}[]). */
+  items          Json
+  creditsUsed    Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("ranking_lookups")
 }
 
 model UsageRecord {

@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { env } from '@/lib/env'
 import { resolveApiToken, tokenFehler } from '@/lib/auth/api-token'
 import { resolveSecret, type DataForSeoSecret } from '@/lib/connectors/credentials'
 import { DataForSeoClient } from '@/lib/connectors/dataforseo'
@@ -73,13 +74,31 @@ export async function POST(request: Request) {
     })
 
     const verbraucht = await verbucheAbfrage(kontext.organization, 'extension-rankings', client.totalCost)
+
+    // Die Abfrage bleibt im Arbeitsbereich auffindbar: Unter Ranking-Abfragen
+    // in der App lässt sich damit weiterarbeiten, statt dass das Ergebnis mit
+    // dem Schliessen des Popups verloren geht.
+    const lookup = await db.rankingLookup.create({
+      data: {
+        organizationId: kontext.organization.id,
+        createdById: kontext.userId,
+        target,
+        scope: /^https?:\/\//i.test(target) ? 'seite' : 'domain',
+        locationCode: 2276,
+        languageCode: 'de',
+        totalCount: result?.total_count ?? items.length,
+        items,
+        creditsUsed: verbraucht,
+      },
+    })
+
     await db.auditLog.create({
       data: {
         organizationId: kontext.organization.id,
         userId: kontext.userId,
         action: 'extension.rankings',
         target,
-        metadata: { treffer: items.length, gesamt: result?.total_count ?? items.length },
+        metadata: { lookupId: lookup.id, treffer: items.length, gesamt: result?.total_count ?? items.length },
       },
     })
 
@@ -88,6 +107,7 @@ export async function POST(request: Request) {
       domain: target.replace(/^https?:\/\//, ''),
       total: result?.total_count ?? items.length,
       items,
+      appUrl: `${env().APP_URL}/rankings/${lookup.id}`,
       remaining: verbleibendeAbfragen(kontext.organization, verbraucht),
     })
   } catch (error) {
