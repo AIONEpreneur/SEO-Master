@@ -10,7 +10,7 @@
  * Aufruf:  npm run smoke
  *          npm run smoke -- https://eigene-seite.de   (gegen eine Live-Seite)
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { seal, open, hintOf } from '../src/lib/crypto/vault'
 import { extractSignals, gerenderterText } from '../src/lib/analysis/extract'
@@ -511,6 +511,41 @@ async function main() {
       )
     }
   }
+
+  // --- Das Zeichen im Tab ---------------------------------------------------
+  //
+  // Die Anwendung lief monatelang ohne jedes Symbol: Im Tab stand das leere
+  // Standardblatt, in der Trefferliste von Google ebenso. Gemeldet hat das
+  // niemand – ein fehlendes Favicon ist kein Fehler, es ist einfach nichts.
+  // Deshalb die Prüfung: Next findet die drei Dateien allein an ihrem Namen,
+  // und genau darum fällt es auch niemandem auf, wenn eine davon verschwindet.
+  section('Das Zeichen im Browser-Tab')
+
+  const appOrdner = join(dir, '..', '..', 'src', 'app')
+  for (const [datei, zweck] of [
+    ['favicon.ico', 'der Tab und die Trefferliste'],
+    ['icon.svg', 'neuere Browser, beliebig scharf'],
+    ['apple-icon.png', 'der Startbildschirm auf iOS'],
+  ] as const) {
+    check(`${datei} liegt in src/app`, existsSync(join(appOrdner, datei)), zweck)
+  }
+
+  // Ein ICO ist ein Behälter. Steht darin nichts, lädt der Browser es
+  // klaglos und zeigt trotzdem nichts an.
+  const ico = readFileSync(join(appOrdner, 'favicon.ico'))
+  const istIco = ico.readUInt16LE(0) === 0 && ico.readUInt16LE(2) === 1
+  const anzahl = istIco ? ico.readUInt16LE(4) : 0
+  check('favicon.ico enthält mehrere Grössen', istIco && anzahl >= 3, `${anzahl} Bilder`)
+
+  // Bei 16 Pixeln verschwindet jede Linie unter einem Pixel. Das Zeichen im
+  // Tab muss deshalb die gedrungene Fassung sein – ohne Schatten, ohne
+  // zweiten Funken, ohne Kontur um den Funken.
+  const tabZeichen = readFileSync(join(appOrdner, 'icon.svg'), 'utf8')
+  check(
+    'icon.svg trägt die Fassung für kleine Grössen',
+    (tabZeichen.match(/<path/g) ?? []).length === 1 && !tabZeichen.includes('stroke-linejoin'),
+    'ein Funke, keine Kontur darum',
+  )
 
   // --- Wortformen -----------------------------------------------------------
   //

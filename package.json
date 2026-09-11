@@ -17,7 +17,8 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "tsx --env-file-if-exists=.env prisma/seed.ts",
-    "smoke": "tsx --env-file-if-exists=.env scripts/smoke-test.ts"
+    "smoke": "tsx --env-file-if-exists=.env scripts/smoke-test.ts",
+    "icons": "node scripts/app-icons.mjs"
   },
   "prisma": {
     "seed": "tsx --env-file-if-exists=.env prisma/seed.ts"
