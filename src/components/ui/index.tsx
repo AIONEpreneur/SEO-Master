@@ -1,9 +1,9 @@
 import { cn } from '@/lib/utils/cn'
 
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
-  // Die Linie und der harte Schatten kommen aus .flaeche – die Karte der
-  // Webinar-Vorlage: Tintenrand, versetzter Schatten, keine Rundung.
-  return <div className={cn('flaeche', className)}>{children}</div>
+  return (
+    <div className={cn('flaeche rounded-xl border border-border', className)}>{children}</div>
+  )
 }
 
 export function CardHeader({
@@ -30,19 +30,15 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md'
 
 function buttonClasses(variant: ButtonVariant, size: ButtonSize, className?: string) {
-  // Knöpfe wie in der Vorlage: Tinte auf Creme, harte Kante, beim Zeigen
-  // ein kurzer Satz nach oben und der Wechsel ins tiefe Pink.
   return cn(
-    'inline-flex items-center justify-center gap-2 font-display font-bold transition-all',
+    'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors',
     'disabled:pointer-events-none disabled:opacity-50',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
     size === 'sm' ? 'h-8 px-3 text-[13px]' : 'h-10 px-4 text-sm',
-    variant === 'primary' &&
-      'border-[1.5px] border-ink bg-ink text-canvas hover:border-brand hover:bg-brand hover:text-white hover:-translate-y-px',
-    variant === 'secondary' &&
-      'border-[1.5px] border-ink bg-surface hover:bg-surface-muted hover:-translate-y-px',
-    variant === 'ghost' && 'font-medium hover:bg-surface-muted',
-    variant === 'danger' && 'border-[1.5px] border-bad bg-bad text-white hover:opacity-90',
+    variant === 'primary' && 'bg-brand text-white hover:bg-brand-hover',
+    variant === 'secondary' && 'border border-border-strong bg-surface hover:bg-surface-muted',
+    variant === 'ghost' && 'hover:bg-surface-muted',
+    variant === 'danger' && 'bg-bad text-white hover:opacity-90',
     className,
   )
 }
@@ -82,7 +78,7 @@ export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInp
   return (
     <input
       className={cn(
-        'h-10 w-full border-[1.5px] border-ink bg-surface px-3 text-sm',
+        'h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm',
         'placeholder:text-ink-subtle focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20',
         className,
       )}
@@ -95,7 +91,7 @@ export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLS
   return (
     <select
       className={cn(
-        'h-10 w-full border-[1.5px] border-ink bg-surface px-3 text-sm',
+        'h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm',
         'focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20',
         className,
       )}

@@ -1,120 +1,78 @@
 @import "tailwindcss";
 
-/* ---------------------------------------------------------------------------
- * Schriften – selbst ausgeliefert, keine fremden Server.
+/*
+ * Farbsystem der Anwendung. Ein Satz Token, in beiden Erscheinungsbildern
+ * definiert – die Oberfläche greift ausschliesslich auf die Token zu.
  *
- * DM Sans liegt als variable Schrift vor: dieselbe Datei trägt alle
- * Schnitte, deshalb drei @font-face-Einträge mit derselben Quelle.
- * Space Mono ist die Display-Schrift für Überschriften und Akzente.
- * ------------------------------------------------------------------------ */
-@font-face {
-  font-family: 'DM Sans'; font-style: normal; font-weight: 400 700; font-display: swap;
-  src: url(/fonts/dm-sans-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: 'DM Sans'; font-style: normal; font-weight: 400 700; font-display: swap;
-  src: url(/fonts/dm-sans-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+1E00-1E9F, U+2020, U+20A0-20C0;
-}
-@font-face {
-  font-family: 'Space Mono'; font-style: normal; font-weight: 400; font-display: swap;
-  src: url(/fonts/space-mono-400-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: 'Space Mono'; font-style: normal; font-weight: 400; font-display: swap;
-  src: url(/fonts/space-mono-400-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+1E00-1E9F, U+2020, U+20A0-20C0;
-}
-@font-face {
-  font-family: 'Space Mono'; font-style: normal; font-weight: 700; font-display: swap;
-  src: url(/fonts/space-mono-700-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: 'Space Mono'; font-style: normal; font-weight: 700; font-display: swap;
-  src: url(/fonts/space-mono-700-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+1E00-1E9F, U+2020, U+20A0-20C0;
-}
-
-/* ---------------------------------------------------------------------------
- * Farbsystem der Anwendung — der Look aus der Webinar-Vorlage.
+ * Markenton: #853FEF (Velvet Dots), in OKLCH oklch(56% 0.244 295). Weiss
+ * darauf erreicht 5,31:1 und ist damit auch in kleinen Schriftgraden lesbar.
  *
- * Warmes Creme statt Klinikweiss, Tinte statt Grau, Koralle und Pink als
- * Akzente. Kanten sind Kanten: Die Radius-Token stehen auf null, Karten
- * tragen eine kräftige Tintenlinie und einen harten, versetzten Schatten.
- * Die Oberfläche greift ausschliesslich auf die Token zu; wer den Look
- * ändern will, ändert ihn hier.
- * ------------------------------------------------------------------------ */
+ * Die Neutraltöne tragen einen leichten Stich in denselben Farbwinkel (295).
+ * Ein reines Grau neben einem gesättigten Violett wirkt schmutzig; mit dem
+ * gemeinsamen Winkel gehören beide sichtbar zusammen.
+ */
 @theme {
-  --color-canvas: #E8E0D8;
-  --color-surface: #F0EBE4;
-  --color-surface-muted: #E2D9CD;
-  --color-border: #D2C7B8;
-  --color-border-strong: #A79A87;
+  --color-canvas: oklch(99% 0.004 295);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-muted: oklch(97% 0.006 295);
+  --color-border: oklch(91% 0.009 295);
+  --color-border-strong: oklch(84% 0.014 295);
 
-  --color-ink: #1A1612;
-  --color-ink-muted: #4F463D;
-  --color-ink-subtle: #83786A;
+  --color-ink: oklch(21% 0.022 295);
+  --color-ink-muted: oklch(48% 0.017 295);
+  --color-ink-subtle: oklch(62% 0.014 295);
 
-  /* Markenton: das tiefe Pink der Vorlage. Weiss darauf bleibt lesbar. */
-  --color-brand: #AB3A50;
-  --color-brand-hover: #8D2E42;
-  --color-brand-subtle: #F0DBD6;
+  --color-brand: oklch(56% 0.244 295);
+  --color-brand-hover: oklch(50% 0.244 295);
+  --color-brand-subtle: oklch(95% 0.035 295);
 
-  /* Die beiden Spielfarben der Vorlage – für Marker, Verläufe, Akzente. */
-  --color-coral: #F4A07A;
-  --color-pink: #E8607A;
-  --color-pink-deep: #AB3A50;
+  --color-good: oklch(58% 0.14 152);
+  --color-good-subtle: oklch(95% 0.04 152);
+  --color-warn: oklch(70% 0.15 75);
+  --color-warn-subtle: oklch(96% 0.05 85);
+  --color-bad: oklch(56% 0.19 25);
+  --color-bad-subtle: oklch(95% 0.03 25);
 
-  --color-good: #3E7C52;
-  --color-good-subtle: #DCE6D4;
-  --color-warn: #9A6A1B;
-  --color-warn-subtle: #EFE2C4;
-  --color-bad: #A93B2E;
-  --color-bad-subtle: #EFD7CE;
-
-  --font-sans: 'DM Sans', -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: 'Space Mono', ui-monospace, monospace;
-  --font-mono: 'Space Mono', ui-monospace, "SF Mono", Menlo, monospace;
-
-  /* Kanten sind Kanten. rounded-full bleibt rund – für Pillen und Punkte. */
-  --radius-xs: 0px;
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --radius-2xl: 0px;
-  --radius-3xl: 0px;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
 }
 
 /*
- * Dunkles Erscheinungsbild: dieselbe Welt bei Nacht. Tinte wird zum Grund,
- * Creme zur Schrift, die Koralle übernimmt den Akzent – wie die dunklen
- * Kästen der Vorlage.
+ * Dunkles Erscheinungsbild.
+ *
+ * Drei Zustände sind zu bedienen:
+ *   1. keine ausdrückliche Wahl  → der Systemeinstellung folgen
+ *   2. ausdrücklich dunkel        → data-theme="dark" am <html>
+ *   3. ausdrücklich hell          → data-theme="light" am <html>
+ *
+ * Die Farbwerte stehen deshalb einmal als --dunkel-* fest und werden an zwei
+ * Stellen zugewiesen. Die Systemregel schliesst eine ausdrückliche Wahl von
+ * "hell" aus, damit die Wahl der Person das dunkle Betriebssystem schlägt.
+ *
+ * Die Token selbst werden über :root gesetzt, nicht über einen zweiten
+ * @theme-Block: @theme erzeugt die Utility-Klassen und gilt immer global.
  */
 :root {
-  --dunkel-canvas: #16120E;
-  --dunkel-surface: #211B15;
-  --dunkel-surface-muted: #2B241C;
-  --dunkel-border: #3B3229;
-  --dunkel-border-strong: #55483B;
+  --dunkel-canvas: oklch(17% 0.014 295);
+  --dunkel-surface: oklch(21% 0.016 295);
+  --dunkel-surface-muted: oklch(25% 0.017 295);
+  --dunkel-border: oklch(30% 0.019 295);
+  --dunkel-border-strong: oklch(38% 0.022 295);
 
-  --dunkel-ink: #E8E0D8;
-  --dunkel-ink-muted: #BFB3A3;
-  --dunkel-ink-subtle: #8D8172;
+  --dunkel-ink: oklch(96% 0.006 295);
+  --dunkel-ink-muted: oklch(72% 0.014 295);
+  --dunkel-ink-subtle: oklch(58% 0.014 295);
 
-  --dunkel-brand: #F4A07A;
-  --dunkel-brand-hover: #F7B593;
-  --dunkel-brand-subtle: #45291D;
+  --dunkel-brand: oklch(72% 0.155 295);
+  --dunkel-brand-hover: oklch(78% 0.145 295);
+  --dunkel-brand-subtle: oklch(30% 0.065 295);
 
-  --dunkel-good: #86B893;
-  --dunkel-good-subtle: #24331F;
-  --dunkel-warn: #D9A85B;
-  --dunkel-warn-subtle: #392C15;
-  --dunkel-bad: #E08573;
-  --dunkel-bad-subtle: #3E211A;
+  --dunkel-good: oklch(72% 0.15 152);
+  --dunkel-good-subtle: oklch(27% 0.05 152);
+  --dunkel-warn: oklch(78% 0.14 80);
+  --dunkel-warn-subtle: oklch(29% 0.05 80);
+  --dunkel-bad: oklch(68% 0.17 25);
+  --dunkel-bad-subtle: oklch(28% 0.06 25);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -170,135 +128,129 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Überschriften sprechen Space Mono – das Erkennungszeichen des Looks. */
-h1, h2, h3 {
-  font-family: var(--font-display);
-}
-
 /* ---------------------------------------------------------------------------
- * Flächen im Arbeitsbereich: die Karte der Vorlage.
+ * Aussenauftritt
  *
- * Kräftige Tintenlinie, harter versetzter Schatten, keine Rundung. Der
- * Schatten ist bewusst eine Fläche und kein Weichzeichner – das ist der
- * halbe Look. Im Dunkeln fällt er auf Schwarz.
- * ------------------------------------------------------------------------ */
-.flaeche {
-  position: relative;
-  background: var(--color-surface);
-  border: 1.5px solid var(--color-ink);
-  box-shadow: 5px 5px 0 color-mix(in srgb, var(--color-ink) 13%, transparent);
-}
-
-:root[data-theme="dark"] .flaeche {
-  box-shadow: 5px 5px 0 rgb(0 0 0 / 0.5);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .flaeche {
-    box-shadow: 5px 5px 0 rgb(0 0 0 / 0.5);
-  }
-}
-
-/* Harter Schatten als eigene Klasse – für Kästen ausserhalb von .flaeche. */
-.schatten-hart {
-  box-shadow: 5px 5px 0 color-mix(in srgb, var(--color-ink) 13%, transparent);
-}
-.schatten-pink {
-  box-shadow: 8px 8px 0 var(--color-pink-deep);
-}
-
-/* ---------------------------------------------------------------------------
- * Aussenauftritt: die Landingpage im Look der Webinar-Vorlage.
- *
- * Bewusst festgelegt auf das helle Creme, unabhängig vom Erscheinungsbild
- * des Arbeitsbereichs – die Seite ist eine Visitenkarte und sieht bei allen
- * gleich aus. Die --schrift-Variablen bleiben erhalten, weil die
- * Rechtstexte darauf aufbauen.
+ * Die öffentliche Seite legt sich bewusst auf ein dunkles Erscheinungsbild
+ * fest, unabhängig von der Einstellung im Arbeitsbereich: Sie ist eine
+ * Visitenkarte, kein Werkzeug, und soll bei allen Besuchern gleich aussehen.
+ * Deshalb eigene Token statt der umschaltbaren – sonst würde die Seite bei
+ * hellem Systemthema in einem Zustand erscheinen, für den sie nicht
+ * gestaltet ist.
  * ------------------------------------------------------------------------ */
 .aussenauftritt {
-  --grund: #E8E0D8;
-  --flaeche: #F0EBE4;
-  --linie: #1A1612;
-  --schrift: #1A1612;
-  --schrift-matt: #4F463D;
-  --schrift-leise: #83786A;
-  --ton: #AB3A50;
-  --mark: #F4A07A;
+  --grund: oklch(14% 0.016 295);
+  --grund-tief: oklch(11% 0.014 295);
+  --flaeche: oklch(18% 0.019 295);
+  --linie: oklch(27% 0.024 295);
+  --linie-hell: oklch(36% 0.032 295);
+  --schrift: oklch(97% 0.006 295);
+  --schrift-matt: oklch(74% 0.017 295);
+  --schrift-leise: oklch(58% 0.018 295);
+  --ton: oklch(62% 0.235 295);
+  --ton-hell: oklch(74% 0.17 295);
 
   background: var(--grund);
   color: var(--schrift);
-  color-scheme: light;
+  color-scheme: dark;
 }
 
-/* Marker-Unterstreichung: der Textmarker quer durch die Überschrift. */
-.mark {
-  background: linear-gradient(transparent 55%, var(--mark, #F4A07A) 55%, var(--mark, #F4A07A) 82%, transparent 82%);
-}
-.mark-pink { --mark: #E8607A; }
-
-/* Vorspann-Zeile über Überschriften. */
-.kicker {
-  font-family: var(--font-display);
-  font-size: 0.72rem;
-  letter-spacing: 0.03em;
-  color: var(--color-pink-deep);
-  display: block;
-}
-.kicker::before { content: "» "; color: var(--color-pink); }
-/* Auf dunklem Grund übernimmt die Koralle – das tiefe Pink säuft dort ab. */
-.kicker-hell { color: var(--color-coral); }
-
-/* Kleine eckige Plakette. */
-.chip {
-  font-family: var(--font-display);
-  font-size: 0.66rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  border: 1.5px solid var(--color-ink);
-  padding: 0.35rem 0.7rem;
-  background: var(--color-canvas);
-}
-.chip.hot {
-  background: var(--color-coral);
-  border-color: var(--color-coral);
-  color: #1A1612;
-}
-
-/* Laufband: dunkles Band mit wanderndem Text. */
-.ticker {
-  background: #1A1612;
-  color: #E8E0D8;
-  overflow: hidden;
-  white-space: nowrap;
-  padding: 0.65rem 0;
-  border-top: 1.5px solid #1A1612;
-  border-bottom: 1.5px solid #1A1612;
-}
-.ticker-track {
-  display: inline-block;
-  animation: ticker-scroll 30s linear infinite;
-  font-family: var(--font-display);
-  font-size: 0.82rem;
-  letter-spacing: 0.06em;
-}
-.ticker-track span { margin: 0 1.2rem; }
-.ticker-track .dot { color: var(--color-coral); }
-@keyframes ticker-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
-/* Weiche Farbtupfer hinter dem Aufmacher. */
-.blob {
+/*
+ * Der Lichtschein hinter dem Aufmacher.
+ *
+ * Zwei weiche Farbkreise statt eines Bildes: Sie kosten keine Ladezeit,
+ * bleiben in jeder Bildschirmgrösse scharf und lassen sich am Markenton
+ * ausrichten. `pointer-events: none`, damit sie keine Klicks abfangen.
+ */
+.lichtschein {
   position: absolute;
-  border-radius: 9999px;
-  filter: blur(60px);
+  inset: 0;
+  overflow: hidden;
   pointer-events: none;
 }
-.blob.koralle { background: radial-gradient(circle, rgb(255 122 89 / 0.5), transparent 65%); }
-.blob.rosa { background: radial-gradient(circle, rgb(240 80 140 / 0.38), transparent 65%); }
+.lichtschein::before,
+.lichtschein::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+}
+.lichtschein::before {
+  top: -22rem;
+  left: 50%;
+  width: 52rem;
+  height: 42rem;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, oklch(56% 0.244 295 / 0.42), transparent 68%);
+}
+.lichtschein::after {
+  top: -12rem;
+  right: -14rem;
+  width: 34rem;
+  height: 30rem;
+  background: radial-gradient(circle, oklch(62% 0.2 320 / 0.26), transparent 70%);
+}
 
-@media (prefers-reduced-motion: reduce) {
-  .blob, .ticker-track { animation: none !important; }
+/* Feiner heller Rand oben auf Karten – lässt Flächen erhaben wirken. */
+.kante {
+  position: relative;
+  border: 1px solid var(--linie);
+  background:
+    linear-gradient(to bottom, oklch(100% 0 0 / 0.05), transparent 40%),
+    var(--flaeche);
+}
+.kante::before {
+  content: '';
+  position: absolute;
+  inset-inline: 15%;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(to right, transparent, oklch(70% 0.2 295 / 0.55), transparent);
+}
+
+/* Überschriftenakzent im Markenverlauf. */
+.tonverlauf {
+  background: linear-gradient(100deg, oklch(72% 0.19 295), oklch(66% 0.24 315));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/*
+ * Raster im Hintergrund. Sehr schwach gehalten – es soll Tiefe andeuten,
+ * nicht gelesen werden. Die Maske blendet es zu den Rändern hin aus, damit
+ * es nirgends hart abbricht.
+ */
+.raster {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, oklch(100% 0 0 / 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(100% 0 0 / 0.028) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black, transparent 75%);
+}
+
+/*
+ * Schwacher Lichtschein für die Abschnitte unterhalb des Aufmachers.
+ *
+ * Ohne ihn wirken die unteren Bereiche wie schwarze Kästen untereinander.
+ * Deutlich zurückhaltender als im Aufmacher: Er soll die Abschnitte
+ * voneinander abheben, nicht mit den Karten um Aufmerksamkeit ringen.
+ */
+.schimmer::before {
+  content: '';
+  position: absolute;
+  top: -6rem;
+  left: 50%;
+  width: 46rem;
+  height: 26rem;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background: radial-gradient(ellipse, oklch(56% 0.244 295 / 0.13), transparent 70%);
+  filter: blur(70px);
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -311,9 +263,66 @@ h1, h2, h3 {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Flächen im Arbeitsbereich
+ *
+ * Eine Karte, die sich nur durch eine Linie vom Hintergrund abhebt, wirkt im
+ * dunklen Erscheinungsbild flach – alles liegt auf derselben Ebene. Der feine
+ * Lichtsaum an der Oberkante und der leichte Verlauf geben Tiefe, ohne mit
+ * Schatten zu arbeiten, die auf dunklem Grund ohnehin nicht sichtbar wären.
+ *
+ * Im hellen Erscheinungsbild kehrt sich das um: Dort trägt ein weicher
+ * Schatten, und der Lichtsaum entfällt.
+ * ------------------------------------------------------------------------ */
+.flaeche {
+  position: relative;
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px oklch(20% 0.02 295 / 0.05), 0 4px 12px -4px oklch(20% 0.02 295 / 0.06);
+}
+
+:root[data-theme="dark"] .flaeche,
+.flaeche:where(:root:not([data-theme="light"]) *) {
+  background: linear-gradient(to bottom, oklch(100% 0 0 / 0.028), transparent 45%), var(--color-surface);
+  box-shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .flaeche {
+    background: linear-gradient(to bottom, oklch(100% 0 0 / 0.028), transparent 45%), var(--color-surface);
+    box-shadow: none;
+  }
+}
+
+/* Der Lichtsaum nur im dunklen Erscheinungsbild – auf Weiss wäre er unsichtbar. */
+:root[data-theme="dark"] .flaeche::after {
+  content: '';
+  position: absolute;
+  inset-inline: 12%;
+  top: -1px;
+  height: 1px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, transparent, oklch(70% 0.2 295 / 0.4), transparent);
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .flaeche::after {
+    content: '';
+    position: absolute;
+    inset-inline: 12%;
+    top: -1px;
+    height: 1px;
+    border-radius: 9999px;
+    background: linear-gradient(to right, transparent, oklch(70% 0.2 295 / 0.4), transparent);
+    pointer-events: none;
+  }
+}
+
 /*
- * Rechtstexte: gelesen, nicht überflogen. Grosszügige Zeilenhöhe, ruhige
- * Farbe, bewusst schmal gesetzt.
+ * Rechtstexte.
+ *
+ * Sie werden gelesen, nicht überflogen: grosszügige Zeilenhöhe, klare
+ * Abstände zwischen den Abschnitten, ruhige Farbe. Bewusst schmal gesetzt –
+ * über etwa 70 Zeichen je Zeile findet das Auge den Zeilenanfang schlechter.
  */
 .rechtstext {
   color: var(--schrift-matt);
@@ -323,7 +332,7 @@ h1, h2, h3 {
 .rechtstext h2 {
   margin: 2.75rem 0 0.9rem;
   color: var(--schrift);
-  font-family: var(--font-display);
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
   font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -335,8 +344,9 @@ h1, h2, h3 {
 .rechtstext strong { color: var(--schrift); font-weight: 600; }
 .rechtstext code {
   padding: 0.1em 0.4em;
-  background: rgb(26 22 18 / 0.07);
-  font-family: var(--font-mono);
+  border-radius: 5px;
+  background: oklch(100% 0 0 / 0.06);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.86em;
   word-break: break-all;
 }
@@ -353,7 +363,7 @@ h1, h2, h3 {
 }
 .prose-report h2 {
   font-size: 1.3rem;
-  font-weight: 700;
+  font-weight: 650;
   margin: 2.25rem 0 0.75rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--color-border);
@@ -361,7 +371,7 @@ h1, h2, h3 {
 }
 .prose-report h3 {
   font-size: 1.05rem;
-  font-weight: 700;
+  font-weight: 600;
   margin: 1.5rem 0 0.5rem;
 }
 .prose-report p {
@@ -384,6 +394,7 @@ h1, h2, h3 {
   font-size: 0.85em;
   background: var(--color-surface-muted);
   padding: 0.15em 0.4em;
+  border-radius: 4px;
 }
 .prose-report table {
   width: 100%;

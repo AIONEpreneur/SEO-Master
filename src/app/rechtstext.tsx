@@ -19,7 +19,9 @@ export function Rechtstext({ titel, stand, children }: { titel: string; stand: s
           Zur Startseite
         </Link>
 
-        <h1 className="font-display text-4xl font-bold tracking-tight">{titel}</h1>
+        <h1 className="kopf text-4xl font-bold tracking-tight" style={{ fontFamily: '"Space Grotesk", "IBM Plex Sans", sans-serif' }}>
+          {titel}
+        </h1>
         <p className="mono mt-3 text-[11px] uppercase tracking-[0.15em] text-[var(--schrift-leise)]">
           Stand: {stand}
         </p>
