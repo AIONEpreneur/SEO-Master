@@ -107,16 +107,29 @@ async function main() {
 
   const serpFile = process.env.SERP_FILE
 
+  /*
+    Eine Adresse mehrfach über Monate, nicht drei Adressen je einmal.
+
+    Die Übersicht zeigt Verlauf und Vorher-Nachher — und das setzt wiederholte
+    Messungen derselben Seite voraus. Drei Momentaufnahmen verschiedener
+    Seiten ergeben keine Entwicklung, und die Kurve bliebe in den
+    Beispieldaten leer, obwohl sie funktioniert.
+
+    Die Reihe erzählt den Normalfall: eine schwache Seite, die überarbeitet
+    wird und dabei einen Rückschlag hat.
+  */
+  const reihe = 'https://beispiel.de/ki-beratung'
   const runs = [
-    {
-      url: 'https://beispiel.de/ki-beratung',
-      fixture: 'gut.html',
-      keyword: 'ki-beratung',
-      daysAgo: 0,
-      serpFile,
-    },
-    { url: 'https://beispiel.de/', fixture: 'schwach.html', keyword: 'beratung', daysAgo: 3 },
-    { url: 'https://beispiel.de/leistungen', fixture: 'gut.html', keyword: 'automatisierung', daysAgo: 9 },
+    { url: reihe, fixture: 'schwach.html', keyword: 'ki-beratung', daysAgo: 132, tempo: 41 },
+    { url: reihe, fixture: 'schwach.html', keyword: 'ki-beratung', daysAgo: 104, tempo: 48 },
+    { url: reihe, fixture: 'gut.html', keyword: 'ki-beratung', daysAgo: 71, tempo: 67 },
+    { url: reihe, fixture: 'schwach.html', keyword: 'ki-beratung', daysAgo: 45, tempo: 59 },
+    { url: reihe, fixture: 'gut.html', keyword: 'ki-beratung', daysAgo: 21, tempo: 81 },
+    { url: reihe, fixture: 'gut.html', keyword: 'ki-beratung', daysAgo: 0, tempo: 93, serpFile },
+    // Daneben zwei andere Seiten, damit die Übersicht nicht so aussieht, als
+    // könne sie nur eine Adresse.
+    { url: 'https://beispiel.de/', fixture: 'schwach.html', keyword: 'beratung', daysAgo: 3, tempo: 52 },
+    { url: 'https://beispiel.de/leistungen', fixture: 'gut.html', keyword: 'automatisierung', daysAgo: 9, tempo: 74 },
   ]
 
   for (const run of runs) {
@@ -143,6 +156,22 @@ async function main() {
         scoreSerp: result.scores.serp,
         scoreOverall: result.scores.overall,
         result: result as never,
+        // Dieselbe Form, die der echte Lauf ablegt (`raw.pagespeed`) — die
+        // Übersicht liest die Tempo-Werte von dort.
+        rawData: {
+          pagespeed: {
+            scores: {
+              performance: run.tempo,
+              accessibility: Math.min(100, run.tempo + 6),
+              bestPractices: Math.min(100, run.tempo + 12),
+              seo: Math.min(100, run.tempo + 4),
+            },
+            metrics: {
+              lcp: Math.round(6200 - run.tempo * 40),
+              cls: Math.round((0.24 - run.tempo * 0.002) * 100) / 100,
+            },
+          },
+        } as never,
         createdAt: when,
         startedAt: when,
         finishedAt: new Date(when.getTime() + 92_000),

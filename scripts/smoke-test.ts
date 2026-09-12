@@ -20,6 +20,7 @@ import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
 import { keywordKandidaten } from '../src/lib/analysis/run'
 import { begruessung, vorname } from '../src/lib/begruessung'
+import { laengsteReihe, tempowerte, stufeVonHundert } from '../src/lib/analysis/uebersicht'
 import { aussenzugang, zugangsHinweis } from '../src/lib/billing/zugang'
 import {
   MARKTGRUPPEN,
@@ -2214,6 +2215,120 @@ async function main() {
     'Der Datentresor steht nicht in der festen Navigation',
     !/NAVIGATION[\s\S]*?settings\/vault[\s\S]*?^\]/m.test(seitenleiste),
     'er wird nur eingeblendet, wo eigene Zugaenge verwaltet werden',
+  )
+
+  section('Die Übersicht zeigt Entwicklung, wo es eine gibt')
+
+  const tag = (n: number) => new Date(2026, 0, n)
+  const messlauf = (id: string, url: string, n: number, gesamt: number | null) => ({
+    id,
+    targetUrl: url,
+    createdAt: tag(n),
+    scoreOverall: gesamt,
+    scoreSeo: gesamt,
+    scoreAeo: gesamt,
+    scoreGeo: gesamt,
+    scoreSerp: null,
+  })
+
+  // Eine Momentaufnahme ist kein Verlauf. Aus einem Punkt eine Linie zu
+  // zeichnen hiesse, eine Entwicklung zu behaupten, die niemand gemessen hat.
+  check(
+    'Eine einzelne Messung ergibt keine Kurve',
+    laengsteReihe([messlauf('a', 'https://a.de/', 1, 5)]) === null,
+  )
+  check(
+    'Fünf verschiedene Seiten je einmal ergeben auch keine',
+    laengsteReihe([
+      messlauf('a', 'https://a.de/1', 1, 5),
+      messlauf('b', 'https://a.de/2', 2, 6),
+      messlauf('c', 'https://a.de/3', 3, 7),
+    ]) === null,
+    'das wären fünf Momentaufnahmen, keine Entwicklung',
+  )
+
+  const gemischt = laengsteReihe([
+    messlauf('x3', 'https://a.de/oft', 20, 7.4),
+    messlauf('y1', 'https://a.de/selten', 25, 9),
+    messlauf('x1', 'https://a.de/oft', 2, 3.1),
+    messlauf('y2', 'https://a.de/selten', 26, 9),
+    messlauf('x2', 'https://a.de/oft', 11, 5),
+  ])
+  check('Die Adresse mit den meisten Läufen gewinnt', gemischt?.adresse === 'https://a.de/oft')
+  check(
+    'Die Punkte stehen chronologisch',
+    gemischt?.punkte.map((p) => p.id).join(',') === 'x1,x2,x3',
+    gemischt?.punkte.map((p) => p.id).join(','),
+  )
+  check(
+    'Vorher und Nachher sind die Enden der Reihe',
+    gemischt?.erste.gesamt === 3.1 && gemischt?.letzte.gesamt === 7.4,
+  )
+  check('Die Veränderung wird gerundet ausgewiesen', gemischt?.delta === 4.3, String(gemischt?.delta))
+  check('Die Spanne zählt Tage, nicht Läufe', gemischt?.spanne === 18, String(gemischt?.spanne))
+
+  // Ein Lauf ohne Gesamtnote darf die Reihe nicht kippen: Er ist eine Lücke,
+  // kein Nullwert. Eine Null würde als Absturz gezeichnet.
+  const mitLuecke = laengsteReihe([
+    messlauf('l1', 'https://a.de/l', 1, 4),
+    messlauf('l2', 'https://a.de/l', 5, null),
+    messlauf('l3', 'https://a.de/l', 9, 6),
+  ])
+  check(
+    'Eine fehlende Note bleibt eine Lücke',
+    mitLuecke?.punkte[1].gesamt === null && mitLuecke?.delta === 2,
+    'sonst zeichnet die Kurve einen Absturz auf null, den es nie gab',
+  )
+
+  // Tempo-Werte kommen aus den Rohdaten des Laufs — nicht aus einer zweiten
+  // Messung. Eine Anzeige, die selbst Kosten verursacht, gehört nicht auf
+  // eine Seite, die bei jedem Anmelden aufgeht.
+  const rohTempo = {
+    pagespeed: {
+      scores: { performance: 62, accessibility: 91, bestPractices: 100, seo: 88 },
+      metrics: { lcp: 2412, cls: 0.07 },
+    },
+  }
+  const tempo = tempowerte(rohTempo)
+  check('Die Tempo-Werte stammen aus dem Lauf selbst', tempo?.tempo === 62 && tempo?.seo === 88)
+  check(
+    'Millisekunden werden in Sekunden übersetzt',
+    tempo?.lcpSekunden === 2.4,
+    `${tempo?.lcpSekunden}`,
+  )
+  check('Ohne Rohdaten keine Kachel', tempowerte(null) === null && tempowerte({}) === null)
+  check(
+    'Rohdaten ohne eine einzige Note zählen nicht',
+    tempowerte({ pagespeed: { scores: {}, metrics: { lcp: 900 } } }) === null,
+    'eine Kachel mit vier Strichen ist keine Information',
+  )
+
+  // Dieselben Grenzen wie bei Google: Wer den Wert aus PageSpeed Insights
+  // kennt, soll hier nicht plötzlich eine andere Farbe sehen.
+  check('Ab 90 gilt gut', stufeVonHundert(90) === 'gut' && stufeVonHundert(89) === 'mittel')
+  check('Ab 50 gilt mittel', stufeVonHundert(50) === 'mittel' && stufeVonHundert(49) === 'schwach')
+  check('Ohne Wert keine Einstufung', stufeVonHundert(null) === null)
+
+  const diagramme = readFileSync(join(dir, '..', '..', 'src', 'components', 'diagramme.tsx'), 'utf8')
+  // Der Tacho ist ein Halbkreis: Von links bis irgendwohin sind es nie mehr
+  // als 180°. Stand das Kennzeichen auf 1, nahm der Zeiger den langen Weg
+  // aussen herum — im Bild sah es aus, als seien es zwei Bögen.
+  check(
+    'Der Zeiger nimmt den kurzen Weg',
+    /A \$\{radius\} \$\{radius\} 0 0 1/.test(diagramme),
+    'das grosse-Bogen-Kennzeichen gehört bei einem Halbkreis immer auf 0',
+  )
+
+  const kurve = readFileSync(join(dir, '..', '..', 'src', 'components', 'verlaufskurve.tsx'), 'utf8')
+  check(
+    'Die Achse steht fest bei 0 bis 10',
+    /Math\.min\(10, Math\.max\(0, wert\)\) \/ 10/.test(kurve) && !/Math\.max\(\.\.\.werte/.test(kurve),
+    'eine Achse, die sich an die Daten schmiegt, macht aus 0,3 einen Gipfel',
+  )
+  check(
+    'Auch ohne Maus kommt man an jede Zahl',
+    /Zahlen anzeigen/.test(kurve) && /<table/.test(kurve),
+    'ein Wert, den nur ein Tooltip zeigt, ist für die Hälfte der Leute nicht da',
   )
 
   section('Der Vorschau-Bereich borgt sich den Tresor, statt ihn zu kopieren')

@@ -13,6 +13,9 @@ import { verwaltetEigeneZugaenge, siehtAbrechnung, verbleibendeAnalysen } from '
 import { KOSTEN_ANALYSE } from '@/lib/billing/guthaben'
 import { wiederkehrendeBefunde } from '@/lib/analysis/wiederkehrend'
 import { Begruessung } from '@/components/begruessung'
+import { laengsteReihe, tempowerte } from '@/lib/analysis/uebersicht'
+import { Tacho, TempoBalken, BereichsLinien } from '@/components/diagramme'
+import { Verlaufskurve } from '@/components/verlaufskurve'
 import { NeuigkeitenAufsteller } from '@/components/neuigkeiten-aufsteller'
 import { ungeleseneNeuigkeiten } from '@/lib/neuigkeiten'
 import { Lightbulb } from 'lucide-react'
@@ -53,7 +56,16 @@ export default async function DashboardPage() {
       })
     : []
 
-  const [analyses, projectCount, completedCount, providers, geprueft, letzteErgebnisse] = await Promise.all([
+  const [
+    analyses,
+    projectCount,
+    completedCount,
+    providers,
+    geprueft,
+    letzteErgebnisse,
+    messreihe,
+    neuester,
+  ] = await Promise.all([
     db.analysis.findMany({
       where: { organizationId: session.organizationId },
       orderBy: { createdAt: 'desc' },
@@ -76,7 +88,39 @@ export default async function DashboardPage() {
       take: 15,
       select: { result: true },
     }),
+    /*
+      Die Messreihe für den Verlauf: nur Noten und Datum, keine Ergebnisse.
+      Sechzig Läufe reichen für jede sinnvolle Kurve und halten die Abfrage
+      klein — die vollständigen Ergebnisse hängen als grosses JSON an jeder
+      Analyse und haben auf einer Seite, die bei jedem Anmelden aufgeht,
+      nichts verloren.
+    */
+    db.analysis.findMany({
+      where: { organizationId: session.organizationId, status: 'COMPLETED' },
+      orderBy: { createdAt: 'desc' },
+      take: 60,
+      select: {
+        id: true,
+        targetUrl: true,
+        createdAt: true,
+        scoreOverall: true,
+        scoreSeo: true,
+        scoreAeo: true,
+        scoreGeo: true,
+        scoreSerp: true,
+      },
+    }),
+    // Die Tempo-Werte stehen in den Rohdaten des jeweiligen Laufs. Nur der
+    // neueste wird dafür geholt.
+    db.analysis.findFirst({
+      where: { organizationId: session.organizationId, status: 'COMPLETED' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, targetUrl: true, createdAt: true, scoreOverall: true, rawData: true },
+    }),
   ])
+
+  const reihe = laengsteReihe(messreihe)
+  const tempo = tempowerte(neuester?.rawData)
 
   const muster = wiederkehrendeBefunde(letzteErgebnisse.map((a) => a.result))
 
@@ -153,6 +197,86 @@ export default async function DashboardPage() {
             <KeyRound size={14} />
             Datentresor
           </Link>
+        </Card>
+      )}
+
+      {/*
+        Wo stehe ich, und geht es aufwärts?
+
+        Das ist die Frage beim Anmelden — nicht "welche Analysen gibt es".
+        Deshalb steht sie vor allem anderen. Sie kostet keine einzige neue
+        Abfrage: Die Noten stehen an jedem Lauf, die Tempo-Werte in seinen
+        Rohdaten. Wer noch nichts gemessen hat, sieht hier nichts; dafür
+        steht die Einstiegshilfe darüber.
+      */}
+      {neuester && (
+        <Card className="p-5">
+          <div className="grid gap-6 lg:grid-cols-[240px_1fr] lg:items-center">
+            <Tacho
+              wert={neuester.scoreOverall}
+              titel="Deine Gesamtnote"
+              hinweis={`${kurzeAdresse(neuester.targetUrl)} · ${neuester.createdAt.toLocaleDateString('de-DE')}`}
+            />
+            {tempo ? (
+              <div>
+                <p className="mb-3 font-display text-[13px] uppercase text-ink">
+                  Wie schnell und sauber die Seite lädt
+                </p>
+                <TempoBalken werte={tempo} />
+              </div>
+            ) : (
+              <div className="rounded-2xl border-2 border-dashed border-border/40 p-5">
+                <p className="text-[13px] font-medium text-ink-muted">
+                  Für diesen Lauf liegen keine Tempo-Werte vor. Sie entstehen mit dem Baustein
+                  „SEO“, sobald ein PageSpeed-Zugang hinterlegt ist.
+                </p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/*
+        Vorher–Nachher. Erst ab der zweiten Messung derselben Adresse: Aus
+        einem Punkt eine Linie zu zeichnen wäre eine erfundene Entwicklung.
+      */}
+      {reihe && (
+        <Card className="p-5">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <div>
+              <p className="font-display text-[13px] uppercase text-ink">
+                Deine Entwicklung
+              </p>
+              <p className="mt-0.5 text-[12px] font-medium text-ink-subtle">
+                {kurzeAdresse(reihe.adresse)} · {reihe.punkte.length} Messungen
+                {reihe.spanne > 0 && ` über ${reihe.spanne} Tage`}
+              </p>
+            </div>
+            {reihe.delta !== null && (
+              <p className="text-[13px] font-bold text-ink">
+                {reihe.delta === 0
+                  ? 'Unverändert seit der ersten Messung'
+                  : `${reihe.delta > 0 ? 'Aufwärts' : 'Abwärts'}: ${reihe.delta > 0 ? '+' : '−'}${Math.abs(reihe.delta).toLocaleString('de-DE', { maximumFractionDigits: 1 })} Punkte`}
+                <span className="ml-1 font-medium text-ink-subtle">
+                  (von {reihe.erste.gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 1 })} auf{' '}
+                  {reihe.letzte.gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 1 })})
+                </span>
+              </p>
+            )}
+          </div>
+
+          <Verlaufskurve
+            adresse={reihe.adresse}
+            punkte={reihe.punkte.map((p) => ({
+              datum: p.datum.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' }),
+              wert: p.gesamt,
+            }))}
+          />
+
+          <p className="mb-3 mt-6 font-display text-[13px] uppercase text-ink">
+            Die vier Bereiche einzeln
+          </p>
+          <BereichsLinien punkte={reihe.punkte} />
         </Card>
       )}
 
@@ -288,4 +412,22 @@ function Metric({
       </p>
     </Card>
   )
+}
+
+/**
+ * Die Adresse in lesbarer Länge.
+ *
+ * Auf der Übersicht steht sie als Beschriftung neben einer Zahl. Eine
+ * vollständige URL mit Parametern würde die Zeile sprengen und sagt an
+ * dieser Stelle nichts, was der Host und der Pfad nicht auch sagen.
+ */
+function kurzeAdresse(url: string): string {
+  try {
+    const u = new URL(url)
+    const pfad = u.pathname === '/' ? '' : u.pathname
+    const ganz = u.host.replace(/^www\./, '') + pfad
+    return ganz.length > 42 ? `${ganz.slice(0, 41)}…` : ganz
+  } catch {
+    return url
+  }
 }
