@@ -4,6 +4,13 @@ import { DataForSeoClient } from '@/lib/connectors/dataforseo'
 import { FirecrawlClient } from '@/lib/connectors/firecrawl'
 import { ApifyClient, detectPlatform, DEFAULT_ACTORS, actorInput, normalizeProfile } from '@/lib/connectors/apify'
 import { PageSpeedClient } from '@/lib/connectors/pagespeed'
+import {
+  andereSchreibweise,
+  artDerWeiterleitung,
+  beschreibeWeiterleitung,
+  lohntZweiterVersuch,
+  type Weiterleitung,
+} from './abruf'
 import { extractSignals, gerenderterText, type PageSignals } from './extract'
 import { analyzeSeo } from './seo'
 import { analyzeAeo } from './aeo'
@@ -15,6 +22,7 @@ import { waehleSeiten, seitenErgebnis, type SeitenErgebnis } from './seiten'
 import { wiederkehrendeBefunde } from './wiederkehrend'
 import { tragenderBegriff, wortfolge } from './begriffe'
 import { marktName } from './maerkte'
+import { rahmenBefund, entschaerfeUnmoegliche } from './machbar'
 import { beurteile, messbare, begriffsBefund, beurteileSerpUmfeld, VOLUMEN_SCHWELLE, type BegriffsUrteil } from './keyword-pruefung'
 import { generateReport, sortFindings } from './report'
 import type { AnalysisResult, ModuleResult } from './types'
@@ -29,6 +37,36 @@ export type ModuleKey = 'SEO' | 'AEO' | 'GEO' | 'SERP' | 'COMPETITORS'
  * Seitenabruf über Firecrawl läuft im Monatstarif, die Berichtserstellung
  * kostet je nach Umfang wenige Cent.
  */
+/**
+ * Zwei Adressen vergleichbar machen.
+ *
+ * Der Schrägstrich am Ende ist für Google bedeutungslos — hier auch, sonst
+ * meldete jede Seite, die von `/seite` auf `/seite/` leitet, eine
+ * Weiterleitung, die niemanden interessiert. Gemeldet wird trotzdem, dass
+ * die ausgelieferte Adresse eine andere ist; nur gilt sie nicht als
+ * Weiterleitung im Sinne eines Befundes.
+ */
+function normalisiere(url: string): string {
+  try {
+    const u = new URL(url)
+    u.hash = ''
+    u.pathname = u.pathname.replace(/\/+$/, '') || '/'
+    return u.href
+  } catch {
+    return url
+  }
+}
+
+/** Welche Adresse hat Firecrawl am Ende wirklich geladen? */
+function leseEndAdresse(meta: Record<string, unknown> | null | undefined): string | null {
+  if (!meta) return null
+  for (const schluessel of ['sourceURL', 'url', 'finalUrl']) {
+    const wert = meta[schluessel]
+    if (typeof wert === 'string' && /^https?:\/\//i.test(wert)) return wert
+  }
+  return null
+}
+
 const GRUNDGEBUEHR = 3
 const GRUNDGEBUEHR_MIT_BERICHT = 8
 
@@ -143,6 +181,9 @@ export async function runAnalysis(params: {
     let renderedText: string | null = null
     let statusCode: number | null = null
     let firecrawlMeta: Record<string, unknown> | null = null
+    // Die ausgelieferte Adresse. Solange nichts anderes gemessen wurde, ist
+    // sie die angefragte — sobald ein Abruf etwas anderes meldet, gilt das.
+    let endAdresse: string | null = null
 
     if (firecrawl) {
       try {
@@ -162,6 +203,9 @@ export async function runAnalysis(params: {
         // JavaScript-Abhängigkeit der Seite selbst.
         renderedText = scraped?.html ? gerenderterText(scraped.html) : scraped?.markdown ?? null
         statusCode = scraped?.metadata?.statusCode ?? null
+        // Firecrawl meldet unter sourceURL die Adresse, die es am Ende
+        // wirklich geladen hat — nach allen Weiterleitungen.
+        endAdresse = leseEndAdresse(scraped?.metadata) ?? endAdresse
         firecrawlMeta = scraped?.metadata ?? null
         raw.firecrawl = { metadata: scraped?.metadata, markdownLength: scraped?.markdown?.length }
       } catch (error) {
@@ -178,6 +222,10 @@ export async function runAnalysis(params: {
         signal: AbortSignal.timeout(45_000),
       })
       statusCode = response.status
+      // response.url ist nach 'follow' die Adresse am Ende der Kette. Sie
+      // wurde bisher weggeworfen — genau daher kam das Canonical-Urteil
+      // gegen eine Adresse, die es gar nicht mehr gab.
+      endAdresse = response.url || endAdresse
       html = await response.text()
       if (!firecrawl) {
         skipped.push({
@@ -187,13 +235,56 @@ export async function runAnalysis(params: {
       }
     }
 
+    /*
+      Vor dem Aufgeben die andere Schreibweise probieren.
+
+      Viele Server antworten nur auf eine der beiden Fassungen — mit oder
+      ohne Schrägstrich am Ende — und schicken die andere ins Leere. Beim
+      ersten Fehlschlag "nicht ladbar" zu melden, ist deshalb voreilig: Die
+      Seite gibt es, sie wurde nur unter dem falschen Namen gerufen.
+
+      Ein 403 rechtfertigt keinen zweiten Versuch. Das ist eine Bot-Sperre,
+      und die trifft beide Schreibweisen gleich — ein zweiter Anlauf wäre
+      nur eine zweite Abfuhr.
+    */
+    if (statusCode !== null && statusCode >= 400 && lohntZweiterVersuch(statusCode)) {
+      const zweiteForm = andereSchreibweise(endAdresse ?? targetUrl)
+      if (zweiteForm) {
+        try {
+          const response = await fetch(zweiteForm, {
+            headers: { 'user-agent': 'Mozilla/5.0 (compatible; SEO-Master/1.0; +Sichtbarkeitsanalyse)' },
+            redirect: 'follow',
+            signal: AbortSignal.timeout(45_000),
+          })
+          if (response.status < 400) {
+            const zweiterVersuch = await response.text()
+            if (/<head[\s>]/i.test(zweiterVersuch)) {
+              html = zweiterVersuch
+              statusCode = response.status
+              endAdresse = response.url || zweiteForm
+              skipped.push({
+                module: 'Seitenabruf',
+                reason:
+                  `Unter ${targetUrl} antwortete der Server nicht; unter ${endAdresse} schon. ` +
+                  'Bewertet wurde die Fassung, die antwortet.',
+              })
+            }
+          }
+        } catch {
+          // Bleibt es beim Fehlschlag, greift die Meldung unten.
+        }
+      }
+    }
+
     // Ein Fehlerstatus oder eine praktisch leere Antwort darf nicht als
     // Analyseergebnis durchgehen: eine 403-Seite bekäme sonst eine schlechte
     // Bewertung, obwohl über die eigentliche Seite nichts ausgesagt wurde.
     if (statusCode !== null && statusCode >= 400) {
+      const zweiteForm = andereSchreibweise(targetUrl)
       throw new Error(
         `Die Seite antwortete mit HTTP ${statusCode}. Analysiert werden kann nur, was auch erreichbar ist – ` +
-          'URL prüfen, und ob der Zugriff durch Zugangsschutz, Geoblocking oder eine Firewall unterbunden wird.',
+          'URL prüfen, und ob der Zugriff durch Zugangsschutz, Geoblocking oder eine Firewall unterbunden wird.' +
+          (zweiteForm ? ` Auch ${zweiteForm} wurde probiert und antwortete nicht.` : ''),
       )
     }
 
@@ -222,7 +313,28 @@ export async function runAnalysis(params: {
       }
     }
 
-    signals = extractSignals({ url: targetUrl, html, renderedText, statusCode })
+    /*
+      Eine Wahrheit über die Weiterleitung, aus der jede spätere Aussage
+      stammt. Wer sie an zwei Stellen unabhängig ermittelt, bekommt genau
+      den Widerspruch, den die Rückmeldung gemeldet hat: oben ein Redirect,
+      zehn Zeilen später "beide Varianten antworten".
+    */
+    const ausgeliefert = endAdresse ?? targetUrl
+    const weiterleitung: Weiterleitung = {
+      angefragt: targetUrl,
+      ausgeliefert,
+      gefolgt: normalisiere(ausgeliefert) !== normalisiere(targetUrl),
+      art: artDerWeiterleitung(targetUrl, ausgeliefert),
+    }
+
+    signals = extractSignals({
+      url: targetUrl,
+      html,
+      renderedText,
+      statusCode,
+      finalUrl: ausgeliefert,
+      weiterleitung,
+    })
 
     // Letzte Rückfallebene: Firecrawl liefert Title und Description getrennt
     // mit. Sie zu verwenden ist allemal besser, als sie als fehlend zu melden.
@@ -700,6 +812,21 @@ export async function runAnalysis(params: {
   // --- Phase 4: Bericht -----------------------------------------------------
   await step('Bericht wird erstellt', 88)
 
+  /*
+    Bevor die Prioritätenliste entsteht: Was nicht ausführbar ist, darf nicht
+    oben stehen. Und wenn ein Teil des Inhalts aus einem fremden Rahmen kommt,
+    gehört das als eigener Punkt gesagt — sonst liest sich "keine Gliederung
+    gefunden" wie ein Messfehler.
+  */
+  const rahmen = rahmenBefund(signals)
+  if (rahmen) {
+    const seoModul = moduleResults.find((m) => m.module === 'SEO')
+    if (seoModul) seoModul.findings = [...seoModul.findings, rahmen]
+  }
+  for (const modul of moduleResults) {
+    modul.findings = entschaerfeUnmoegliche(modul.findings, signals)
+  }
+
   const result = assemble({
     targetUrl,
     targetKind,
@@ -713,6 +840,9 @@ export async function runAnalysis(params: {
     pageType: guessPageType(signals),
     pageLanguage: signals.lang,
     keyword: { value: primaryKeyword, source: keywordQuelle, kandidaten },
+    weiterleitung: signals.weiterleitung,
+    fremdeHosts: signals.fremdeHosts,
+    ueberschriftenAusRahmen: signals.ueberschriftenAusRahmen,
   })
 
   if (seiten.length > 0) {
@@ -835,6 +965,10 @@ function assemble(input: {
   pageType?: string | null
   pageLanguage?: string | null
   keyword?: AnalysisResult['meta']['keyword']
+  /** Die gemessene Wahrheit über den Abruf — nicht hier noch einmal hergeleitet. */
+  weiterleitung?: Weiterleitung | null
+  fremdeHosts?: string[]
+  ueberschriftenAusRahmen?: number
 }): AnalysisResult {
   const find = (m: string) => input.moduleResults.find((r) => r.module === m)?.score ?? null
 
@@ -856,6 +990,16 @@ function assemble(input: {
       modules: input.modules,
       providersUsed: [...input.providersUsed],
       skipped: input.skipped,
+      abruf: {
+        angefragt: input.weiterleitung?.angefragt ?? input.targetUrl,
+        ausgeliefert: input.weiterleitung?.ausgeliefert ?? input.targetUrl,
+        weitergeleitet: input.weiterleitung?.gefolgt ?? false,
+        hinweis: input.weiterleitung ? beschreibeWeiterleitung(input.weiterleitung) : null,
+      },
+      fremdinhalt: {
+        hosts: input.fremdeHosts ?? [],
+        ueberschriften: input.ueberschriftenAusRahmen ?? 0,
+      },
       // Der Lauf liest genau die angegebene Adresse. Das gehört in den Kopf
       // des Ergebnisses, damit ein Befund über eine Verkaufsseite nicht als
       // Urteil über die ganze Website gelesen wird.

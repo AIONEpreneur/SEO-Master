@@ -59,6 +59,34 @@ export type AnalysisResult = {
      */
     scope: { pages: number; note: string }
     /**
+     * Was beim Abruf wirklich passiert ist.
+     *
+     * Steht im Ergebnis, weil es sonst an zwei Stellen unabhängig hergeleitet
+     * wird — und dann im selben Bericht oben eine Weiterleitung gemeldet
+     * wird und zehn Zeilen weiter, beide Varianten würden antworten. Es gibt
+     * genau diese eine Quelle.
+     */
+    abruf: {
+      angefragt: string
+      ausgeliefert: string
+      weitergeleitet: boolean
+      /** In Worten, für den Bericht. Null, wenn nichts weiterzuleiten war. */
+      hinweis: string | null
+    }
+    /**
+     * Inhalt von fremden Adressen, den die Seite einbettet.
+     *
+     * Wichtig für die Frage, ob eine Empfehlung überhaupt ausführbar ist:
+     * Was in einem Rahmen von fremder Adresse steht, lässt sich über die
+     * eigene Seite nicht ändern und nicht "direkt einbinden".
+     */
+    fremdinhalt: {
+      /** Die fremden Hosts, aus denen eingebettet wird. */
+      hosts: string[]
+      /** Überschriften, die dort standen und deshalb nicht gezählt wurden. */
+      ueberschriften: number
+    }
+    /**
      * Das geprüfte Hauptkeyword und woher es stammt.
      *
      * `kandidaten` steht nur, wenn der Begriff abgeleitet wurde: Dann ist er

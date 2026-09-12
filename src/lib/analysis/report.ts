@@ -27,7 +27,11 @@ Fachliche Festlegungen, die du nicht überschreiben darfst:
 - AEO und GEO setzen KEINE Top-10-Platzierung voraus. KI-Übersichten und Sprachmodelle zitieren regelmässig Quellen, die organisch nicht auf Seite eins stehen. Für eine junge oder schwach verlinkte Domain sind AEO und GEO deshalb der schnellere Weg als klassisches Ranking — schreibe nie, das eine lohne sich erst nach dem anderen.
 - Der Lauf hat genau die Seiten gelesen, die unter meta.scope stehen. Formuliere Befunde entsprechend: "auf dieser Seite", nicht "auf der Website". Was auf anderen Seiten der Domain steht, ist unbekannt und darf weder gelobt noch bemängelt werden.
 - Steht unter meta.keyword die Quelle "abgeleitet", war kein Keyword vorgegeben und die Analyse hat es aus der Seite geraten. Weise im Bericht einmal darauf hin, dass Platzierungswerte zu diesem Begriff entsprechend zu lesen sind.
-- Ein Spam-Score im Verweisprofil ist ein Mittelwert. Bei wenigen verweisenden Domains ist er nicht belastbar. Empfiehl in diesem Fall ausdrücklich, nichts zu tun — kein Disavow.`
+- Ein Spam-Score im Verweisprofil ist ein Mittelwert. Bei wenigen verweisenden Domains ist er nicht belastbar. Empfiehl in diesem Fall ausdrücklich, nichts zu tun — kein Disavow.
+- Unter meta.abruf steht, welche Adresse angefragt und welche tatsächlich ausgeliefert wurde. Das ist die einzige Quelle dazu. Steht dort weitergeleitet: true, dann gibt es diese Weiterleitung — schreibe an keiner Stelle des Berichts, beide Varianten seien erreichbar oder es gebe keine Weiterleitung. Beurteilt wurde die ausgelieferte Adresse, nicht die angefragte.
+- Unter meta.fremdinhalt stehen fremde Adressen, aus denen die Seite Inhalt einbettet. Dieser Inhalt gehört nicht zur Seite: Google wertet ihn nicht als ihren Inhalt, und die Betreiberin kann ihn über ihre Seite weder ändern noch "direkt einbinden". Empfiehl niemals, den Inhalt eines fremden Rahmens zu übernehmen, umzuschreiben oder auszuzeichnen.
+- Jede Massnahme muss ausführbar sein von jemandem, der ausschliesslich Zugriff auf diese Website hat. Was fremde Server, fremde Inhalte oder das Verhalten von Google selbst betrifft, ist keine Massnahme, sondern eine Beobachtung — und darf nicht als Priorität erscheinen.
+- Datumsangaben: Als Datum der Seite gelten ausschliesslich die Werte unter dates. Ein Datum, das irgendwo im Fliesstext vorkommt, ist Inhalt und kein Seitendatum — leite daraus nichts ab.`
 
 /**
  * Wie das Hauptkeyword im Berichtskopf erscheint.
@@ -208,6 +212,19 @@ export function buildDeterministicReport(result: AnalysisResult): string {
   lines.push(
     `**Analyse-Umfang:** ${result.meta.scope.pages === 1 ? '1 Seite' : `${result.meta.scope.pages} Seiten`} — ${result.meta.scope.note}`,
   )
+  // Die Weiterleitung steht im Kopf, nicht in einer Fussnote weiter unten:
+  // Wer die Befunde liest, muss wissen, welche Adresse überhaupt bewertet
+  // wurde. Und weil dieser Satz aus meta.abruf stammt und nirgends sonst
+  // hergeleitet wird, kann ihm zehn Zeilen später nichts widersprechen.
+  if (result.meta.abruf.weitergeleitet && result.meta.abruf.hinweis) {
+    lines.push(`**Geprüfte Adresse:** ${result.meta.abruf.ausgeliefert} — ${result.meta.abruf.hinweis}`)
+  }
+  if (result.meta.fremdinhalt.hosts.length > 0) {
+    lines.push(
+      `**Eingebetteter Fremdinhalt:** ${result.meta.fremdinhalt.hosts.join(', ')} — dieser Inhalt zählt ` +
+        'nicht zum Inhalt der Seite und lässt sich über sie nicht ändern.',
+    )
+  }
   lines.push(`**Geprüftes Hauptkeyword:** ${keywordZeile(result)}`)
   lines.push(
     `**Datenquellen:** ${

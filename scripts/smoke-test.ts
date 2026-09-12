@@ -21,6 +21,13 @@ import { analyzeSerp, extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
 import { keywordKandidaten } from '../src/lib/analysis/run'
 import { begruessung, vorname } from '../src/lib/begruessung'
 import { laengsteReihe, tempowerte, stufeVonHundert } from '../src/lib/analysis/uebersicht'
+import {
+  andereSchreibweise,
+  artDerWeiterleitung,
+  lohntZweiterVersuch,
+  beschreibeWeiterleitung,
+} from '../src/lib/analysis/abruf'
+import { rahmenBefund, entschaerfeUnmoegliche, widersprueche } from '../src/lib/analysis/machbar'
 import { aussenzugang, zugangsHinweis } from '../src/lib/billing/zugang'
 import {
   MARKTGRUPPEN,
@@ -544,11 +551,19 @@ async function main() {
     !analyzeAeo({ signals: imKasten }).findings.some((f) => f.id === 'aeo-no-paragraph-snippet'),
   )
 
-  // --- Datum: Schema gegen sichtbaren Text ----------------------------------
-  //
-  // Der echte Fund, den das Werkzeug bisher verpasst hat: Im Schema stand der
-  // 1. September, sichtbar auf der Seite der 24. August. Beide Angaben sehen
-  // für sich plausibel aus — nur der Vergleich zeigt den Widerspruch.
+  /*
+    Datum: Schema gegen sichtbares Datum.
+
+    Der echte Fund, den das Werkzeug zuerst verpasst hat: Im Schema stand der
+    1. September, sichtbar auf der Seite der 24. August. Beide Angaben sehen
+    für sich plausibel aus — nur der Vergleich zeigt den Widerspruch.
+
+    Die Rückmeldung aus der Praxis hat den Vergleich danach eingeschränkt:
+    Nur ausgezeichnete Angaben zählen als sichtbares Datum. Ein Datum im
+    Fliesstext ist Inhalt. Deshalb steht die Angabe hier jetzt in einem
+    <time>-Element statt in einem Absatz — der Vergleich selbst ist
+    unverändert, nur seine Grundlage ist verlässlich geworden.
+  */
   section('Sichtbares Datum und Schema-Datum werden verglichen')
 
   const datumsStreit = extractSignals({
@@ -558,7 +573,7 @@ async function main() {
         {"@context":"https://schema.org","@type":"Article","dateModified":"2026-09-01T10:00:00+02:00"}
       </script></head>
       <body><h1>Artikel</h1>
-      <p>Zuletzt aktualisiert am 24. August 2026</p>
+      <p>Zuletzt aktualisiert am <time datetime="2026-08-24">24. August 2026</time></p>
       <p>Inhalt des Artikels.</p></body></html>`,
   })
 
@@ -2217,6 +2232,324 @@ async function main() {
     'er wird nur eingeblendet, wo eigene Zugaenge verwaltet werden',
   )
 
+  section('Der Seite folgen, dann urteilen')
+
+  /*
+    Sechs Regeln aus der Praxis-Rückmeldung, alle mit derselben Wurzel: Das
+    Werkzeug bewertete, was es beim ersten Anfassen sah, statt der Seite zu
+    folgen. Jede Regel bekommt hier ihre Prüfung — sonst kommt der Fehler
+    beim nächsten Umbau zurück.
+  */
+
+  // Regel 1: Canonical immer gegen die ausgelieferte Adresse.
+  check(
+    'Das Canonical wird gegen die ausgelieferte Adresse geprüft, nicht gegen die angefragte',
+    beurteileKanonisch({
+      canonical: 'https://beispiel.de/seite/',
+      url: 'https://beispiel.de/seite',
+      finalUrl: 'https://beispiel.de/seite/',
+    }).art === 'stimmig',
+    'angefragt ohne Schrägstrich, ausgeliefert mit — das Canonical passt zur ausgelieferten',
+  )
+  check(
+    'Ohne Endadresse bleibt die angefragte die Grundlage',
+    beurteileKanonisch({ canonical: 'https://fremd.de/', url: 'https://beispiel.de/' }).art ===
+      'anderer-host',
+  )
+  check(
+    'Eine Weiterleitung auf eine andere Seite wird als solche erkannt',
+    artDerWeiterleitung('https://beispiel.de/alt', 'https://beispiel.de/neu') === 'andere-seite',
+  )
+  check(
+    'Schrägstrich, www und Protokoll werden auseinandergehalten',
+    artDerWeiterleitung('https://beispiel.de/a', 'https://beispiel.de/a/') === 'schraegstrich' &&
+      artDerWeiterleitung('https://beispiel.de/', 'https://www.beispiel.de/') === 'www' &&
+      artDerWeiterleitung('http://beispiel.de/', 'https://beispiel.de/') === 'protokoll',
+  )
+  check(
+    'Dieselbe Adresse ist keine Weiterleitung',
+    artDerWeiterleitung('https://beispiel.de/a', 'https://beispiel.de/a') === null,
+  )
+  check(
+    'Der Hinweis nennt die Adresse, die bewertet wurde',
+    (beschreibeWeiterleitung({
+      angefragt: 'https://beispiel.de/a',
+      ausgeliefert: 'https://www.beispiel.de/a',
+      gefolgt: true,
+      art: 'www',
+    }) ?? '').includes('Bewertet wurde die ausgelieferte Adresse'),
+  )
+
+  check(
+    'Ohne erkennbare Art wird keine Weiterleitung behauptet',
+    beschreibeWeiterleitung({
+      angefragt: 'https://beispiel.de',
+      ausgeliefert: 'https://beispiel.de/',
+      gefolgt: true,
+      art: null,
+    }) === null,
+    'sonst steht im Bericht eine Weiterleitung, die niemand nachvollziehen kann',
+  )
+
+  // Regel 2: Vor "nicht ladbar" die andere Schreibweise probieren.
+  check(
+    'Zur Adresse ohne Schrägstrich gibt es die mit',
+    andereSchreibweise('https://beispiel.de/seite') === 'https://beispiel.de/seite/',
+  )
+  check(
+    'Und umgekehrt',
+    andereSchreibweise('https://beispiel.de/seite/') === 'https://beispiel.de/seite',
+  )
+  check(
+    'Die Wurzel hat keine zweite Schreibweise',
+    andereSchreibweise('https://beispiel.de/') === null,
+    'aus "/" lässt sich nichts drehen',
+  )
+  check(
+    'An eine Datei wird kein Schrägstrich gehängt',
+    andereSchreibweise('https://beispiel.de/bericht.pdf') === null,
+  )
+  check(
+    'Ein 404 rechtfertigt den zweiten Versuch, ein 403 nicht',
+    lohntZweiterVersuch(404) && lohntZweiterVersuch(500) && !lohntZweiterVersuch(403),
+    'eine Bot-Sperre trifft beide Schreibweisen gleich — ein zweiter Anlauf wäre nur eine zweite Abfuhr',
+  )
+
+  // Regel 3: Überschriften nie aus einem Rahmen.
+  /*
+    Zur Wahl der Elemente: Der Inhalt eines <iframe> wird vom HTML-Parser
+    nicht als Elemente gelesen — dort kann nichts durchsickern. Bei <object>,
+    <embed> und <template> schon, und genau die waren bisher nicht
+    ausgeschlossen. Der Rahmen selbst bleibt im Test, weil seine Adresse
+    zählt.
+  */
+  const mitRahmen = extractSignals({
+    url: 'https://beispiel.de/kurs',
+    html: `<html><head><title>Kurs</title></head><body>
+      <h1>Mein Kurs</h1>
+      <p>${'Wort '.repeat(120)}</p>
+      <iframe src="https://buchung.fremd.de/widget"></iframe>
+      <object data="https://karten.fremd.de/map">
+        <h2>Termin wählen</h2><h2>Anfahrt</h2><h3>Bestätigen</h3>
+      </object>
+      <template><h2>Noch nicht sichtbar</h2></template>
+    </body></html>`,
+  })
+  check(
+    'Überschriften aus einem Rahmen zählen nicht mit',
+    mitRahmen.h2.length === 0 && mitRahmen.h3.length === 0,
+    `gezählt: ${mitRahmen.h2.length} h2, ${mitRahmen.h3.length} h3`,
+  )
+  check(
+    'Die eigene Überschrift bleibt',
+    mitRahmen.h1.length === 1 && mitRahmen.h1[0] === 'Mein Kurs',
+  )
+  check(
+    'Wie viele es waren, wird festgehalten',
+    // Drei aus dem <object>. Der Inhalt eines <template> liegt beim Parser in
+    // einem eigenen Fragment und taucht im Dokument gar nicht erst auf — er
+    // wird deshalb weder gezählt noch gebraucht.
+    mitRahmen.ueberschriftenAusRahmen === 3,
+    `${mitRahmen.ueberschriftenAusRahmen} — sonst liest sich "keine Gliederung" wie ein Messfehler`,
+  )
+  check(
+    'Die fremden Adressen werden benannt',
+    mitRahmen.fremdeHosts.includes('buchung.fremd.de') &&
+      mitRahmen.fremdeHosts.includes('karten.fremd.de'),
+    mitRahmen.fremdeHosts.join(', '),
+  )
+  check(
+    'Ein Rahmen von der eigenen Domain ist kein Fremdinhalt',
+    extractSignals({
+      url: 'https://beispiel.de/a',
+      finalUrl: 'https://beispiel.de/a',
+      html: '<html><body><iframe src="https://www.beispiel.de/teil"></iframe></body></html>',
+    }).fremdeHosts.length === 0,
+  )
+
+  // Regel 4: Keine Priorität für Unausführbares.
+  const rahmenHinweis = rahmenBefund(mitRahmen)
+  check('Der Fremdinhalt bekommt einen eigenen Befund', rahmenHinweis !== null)
+  check(
+    'Er verspricht nicht, den fremden Inhalt zu ändern',
+    !!rahmenHinweis && /nicht ändern/.test(rahmenHinweis.action),
+    rahmenHinweis?.action.slice(-60),
+  )
+  check(
+    'Ohne Überschriften im Rahmen gibt es keinen Befund',
+    rahmenBefund({ ...mitRahmen, ueberschriftenAusRahmen: 0 }) === null,
+    'ein Newsletter-Feld unten auf der Seite ist kein Befund',
+  )
+
+  const unmoeglich = entschaerfeUnmoegliche(
+    [
+      {
+        id: 'gliederung',
+        severity: 'critical',
+        title: 'Keine Überschriftenstruktur',
+        why: 'Die Seite hat keine Gliederung.',
+        action: 'Überschriften ergänzen.',
+        effort: 'gering',
+        impact: 'hoch',
+      },
+      {
+        id: 'title',
+        severity: 'critical',
+        title: 'Title zu lang',
+        why: 'Der Title wird abgeschnitten.',
+        action: 'Title kürzen.',
+        effort: 'gering',
+        impact: 'mittel',
+      },
+    ],
+    mitRahmen,
+  )
+  check(
+    'Ein Befund über Inhalt im fremden Rahmen ist nicht mehr kritisch',
+    unmoeglich[0].severity === 'longterm',
+    'eine Massnahme, die niemand ausführen kann, darf nicht oben stehen',
+  )
+  check(
+    'Er wird nicht gelöscht, sondern erklärt',
+    unmoeglich[0].action.includes('umsetzbar ist das hier nur für den eigenen Inhalt'),
+  )
+  check(
+    'Ein Befund über die eigene Seite bleibt kritisch',
+    unmoeglich[1].severity === 'critical' && unmoeglich[1].action === 'Title kürzen.',
+    'ein zu weiter Filter machte den Bericht zahnlos',
+  )
+
+  // Regel 5: Datumsangaben nur aus ausgezeichneten Stellen.
+  const datumImText = extractSignals({
+    url: 'https://beispiel.de/steuern',
+    html: `<html><head><title>Steuern</title></head><body><h1>Neue Regeln</h1>
+      <p>Zuletzt aktualisiert habe ich meine Preise im Mai 2024, seit dem 1. Januar 2025 gilt ausserdem
+      ${'Wort '.repeat(80)}</p></body></html>`,
+  })
+  check(
+    'Ein Datum im Fliesstext ist kein Seitendatum',
+    datumImText.sichtbaresDatum === null,
+    `gelesen: ${datumImText.sichtbaresDatum ?? 'nichts'} — ein Satz ist keine Auszeichnung`,
+  )
+  const datumAusgezeichnet = extractSignals({
+    url: 'https://beispiel.de/beitrag',
+    html: `<html><head><title>Beitrag</title></head><body><h1>Beitrag</h1>
+      <time datetime="2026-08-24">vor drei Wochen</time>
+      <p>${'Wort '.repeat(80)}</p></body></html>`,
+  })
+  check(
+    'Ein ausgezeichnetes Datum wird gelesen',
+    datumAusgezeichnet.sichtbaresDatum === '2026-08-24',
+    `gelesen: ${datumAusgezeichnet.sichtbaresDatum}`,
+  )
+  check(
+    'Auch wenn sichtbar etwas anderes steht',
+    datumAusgezeichnet.sichtbaresDatumFundstelle === 'vor drei Wochen',
+    'das Attribut ist verlässlicher als der Text',
+  )
+
+  // Regel 6: Kein Widerspruch im selben Bericht.
+  // Ein eigenes, kleines Ergebnis: Das grosse Beispiel unten entsteht erst
+  // später im Durchlauf, und ein Test, der auf die Reihenfolge anderer Tests
+  // baut, bricht beim ersten Umsortieren.
+  const schlicht = (
+    abruf: AnalysisResult['meta']['abruf'],
+    fremdinhalt: AnalysisResult['meta']['fremdinhalt'],
+  ): AnalysisResult => ({
+    target: { url: abruf.angefragt, kind: 'WEBSITE', domain: 'beispiel.de' },
+    meta: {
+      analyzedAt: new Date().toISOString(),
+      pageType: 'Landing Page',
+      language: 'de',
+      market: 'Deutschland',
+      modules: ['SEO'],
+      providersUsed: [],
+      skipped: [],
+      abruf,
+      fremdinhalt,
+      scope: { pages: 1, note: 'Eine Seite.' },
+      keyword: { value: 'test', source: 'vorgegeben' as const },
+    },
+    scores: { seo: 6, aeo: null, geo: null, serp: null, overall: 6 },
+    modules: [],
+    priorities: [],
+    executiveSummary: null,
+  })
+
+  const mitRedirect = schlicht(
+    {
+      angefragt: 'https://beispiel.de/a',
+      ausgeliefert: 'https://www.beispiel.de/a',
+      weitergeleitet: true,
+      hinweis: 'Die Adresse leitet auf www.beispiel.de weiter. Bewertet wurde die ausgelieferte Adresse.',
+    },
+    { hosts: ['buchung.fremd.de'], ueberschriften: 2 },
+  )
+  const ohneRedirect = schlicht(
+    {
+      angefragt: 'https://beispiel.de/a',
+      ausgeliefert: 'https://beispiel.de/a',
+      weitergeleitet: false,
+      hinweis: null,
+    },
+    { hosts: [], ueberschriften: 0 },
+  )
+  check(
+    'Ein Text, der die gemessene Weiterleitung leugnet, fällt auf',
+    widersprueche('Beide Varianten antworten mit 200.', mitRedirect).length === 1,
+  )
+  check(
+    'Auch die Formulierung "keine Weiterleitung"',
+    widersprueche('Es gibt keine Weiterleitung auf dieser Domain.', mitRedirect).length === 1,
+  )
+  check(
+    'Eine Empfehlung, den fremden Rahmen direkt einzubinden, fällt auf',
+    widersprueche('Den Rahmen besser direkt einbinden.', mitRedirect).length === 1,
+  )
+  check(
+    'Ein sauberer Text meldet nichts',
+    widersprueche(
+      'Die Adresse leitet auf www.beispiel.de weiter. Bewertet wurde die ausgelieferte Adresse.',
+      mitRedirect,
+    ).length === 0,
+  )
+  check(
+    'Ohne gemessene Weiterleitung wird nichts gemeldet',
+    widersprueche('Beide Varianten antworten mit 200.', ohneRedirect).length === 0,
+    'dann ist der Satz ja richtig',
+  )
+
+  const berichtMitRedirect = buildDeterministicReport(mitRedirect)
+  check(
+    'Der Bericht nennt die geprüfte Adresse im Kopf',
+    berichtMitRedirect.includes('Geprüfte Adresse:') &&
+      berichtMitRedirect.includes('www.beispiel.de/a'),
+    'wer die Befunde liest, muss wissen, worüber sie sprechen',
+  )
+  check(
+    'Der Bericht widerspricht sich nicht selbst',
+    widersprueche(berichtMitRedirect, mitRedirect).length === 0,
+  )
+  check(
+    'Der Fremdinhalt steht ebenfalls im Kopf',
+    berichtMitRedirect.includes('Eingebetteter Fremdinhalt'),
+  )
+
+  const prompt = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'report.ts'), 'utf8')
+  check(
+    'Das Sprachmodell bekommt die Regeln als Vorgabe',
+    /meta\.abruf/.test(prompt) && /meta\.fremdinhalt/.test(prompt),
+    'sonst erfindet der Berichtstext den Widerspruch neu',
+  )
+  check(
+    'Ihm wird verboten, Unausführbares zu empfehlen',
+    /muss ausführbar sein/.test(prompt),
+  )
+  check(
+    'Und aus dem Fliesstext ein Datum zu lesen',
+    /kein Seitendatum/.test(prompt),
+  )
+
   section('Die Übersicht zeigt Entwicklung, wo es eine gibt')
 
   const tag = (n: number) => new Date(2026, 0, n)
@@ -3104,6 +3437,13 @@ async function main() {
       modules: ['SEO', 'AEO', 'GEO'],
       providersUsed: [],
       skipped: [{ module: 'DataForSEO-Daten', reason: 'Im Test keine Zugangsdaten hinterlegt' }],
+      abruf: {
+        angefragt: 'https://beispiel.de/ki-beratung',
+        ausgeliefert: 'https://beispiel.de/ki-beratung',
+        weitergeleitet: false,
+        hinweis: null,
+      },
+      fremdinhalt: { hosts: [], ueberschriften: 0 },
       scope: { pages: 1, note: 'Eine Seite. Andere Seiten der Domain wurden nicht gelesen.' },
       keyword: { value: 'ki beratung solopreneure', source: 'vorgegeben' as const },
     },

@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio'
+import type { Weiterleitung } from './abruf'
 
 /**
  * Aus dem HTML einer Seite die Signale ziehen, die alle drei Frameworks
@@ -7,7 +8,24 @@ import * as cheerio from 'cheerio'
 
 export type PageSignals = {
   url: string
+  /**
+   * Die Adresse, die am Ende wirklich ausgeliefert wurde.
+   *
+   * Alles, was über "diese Seite" geurteilt wird — allen voran das
+   * Canonical —, muss sich hierauf beziehen, nie auf `url`. Wer
+   * `beispiel.de/seite` anfragt und auf `beispiel.de/seite/` landet, bekäme
+   * sonst ein Urteil über eine Adresse, die es so nicht mehr gibt.
+   */
   finalUrl: string | null
+  /** Angefragt, ausgeliefert, und was dazwischen lag. Die einzige Quelle dafür. */
+  weiterleitung: Weiterleitung | null
+  /**
+   * Wie viele Überschriften in eingebetteten Inhalten standen und deshalb
+   * nicht gezählt wurden. Null ist der Normalfall.
+   */
+  ueberschriftenAusRahmen: number
+  /** Fremde Adressen, aus denen die Seite Inhalt einbettet. */
+  fremdeHosts: string[]
   statusCode: number | null
   isHttps: boolean
   urlSlug: string
@@ -130,9 +148,22 @@ const AUTHORITY_DOMAINS = [
  * gleiche Bereinigung, Frames ausgeschlossen. Nur so misst der Vergleich
  * die JavaScript-Abhängigkeit der Seite selbst.
  */
+/**
+ * Was nicht zum Dokument gehört.
+ *
+ * `iframe` allein reichte nicht. Eingebettet wird auch über `object`,
+ * `embed` und `frame`, und `template` trägt Inhalt, den der Browser gar
+ * nicht anzeigt. Alles davon ist fremder oder nicht sichtbarer Inhalt und
+ * darf weder in den Textumfang noch — vor allem — in die Überschriften
+ * eingehen: Ein Buchungs-Widget bringt eigene h2 mit, und die Seite bekam
+ * dafür bisher gute Noten für eine Gliederung, die ihr nicht gehört.
+ */
+const EINGEBETTET = 'iframe, frame, frameset, object, embed, template, portal'
+const TECHNISCH = 'script, style, noscript, svg'
+
 export function gerenderterText(html: string): string {
   const $ = cheerio.load(html)
-  $('script, style, noscript, svg, iframe').remove()
+  $(`${TECHNISCH}, ${EINGEBETTET}`).remove()
   return $('body').text().replace(/\s+/g, ' ').trim()
 }
 
@@ -143,6 +174,7 @@ export function extractSignals(input: {
   renderedText?: string | null
   statusCode?: number | null
   finalUrl?: string | null
+  weiterleitung?: Weiterleitung | null
 }): PageSignals {
   const $ = cheerio.load(input.html)
   const url = input.url
@@ -151,8 +183,39 @@ export function extractSignals(input: {
   // gleich darauf entfernt werden.
   const { schemaTypes, schemaRaw } = extractSchema($)
 
-  // Rein technische Knoten entfernen, damit sie den Textumfang nicht verfälschen.
-  $('script, style, noscript, svg, iframe').remove()
+  /*
+    Erst zählen, was in eingebetteten Inhalten steckt — dann entfernen.
+
+    Die Zahl wird gebraucht: Eine Seite, deren einzige h1 aus einem
+    fremden Rahmen kam, hat keine h1. Das gehört im Bericht gesagt, sonst
+    liest sich der Befund "keine h1 gefunden" wie ein Messfehler, und die
+    Betreiberin sucht auf ihrer Seite nach etwas, das dort nie stand.
+  */
+  const ueberschriftenAusRahmen = $(EINGEBETTET).find('h1, h2, h3').length
+
+  /*
+    Aus welchen fremden Adressen bettet die Seite ein?
+
+    Das entscheidet später, ob eine Empfehlung überhaupt ausführbar ist. Wer
+    ein Buchungssystem von einem fremden Host einbindet, kann dessen Inhalt
+    nicht umschreiben und ihn schon gar nicht "direkt in die Seite
+    übernehmen" — eine Massnahme, die niemand ausführen kann, gehört nicht
+    in eine Prioritätenliste.
+  */
+  const eigenerHost = safeUrl(input.finalUrl ?? url)?.hostname.replace(/^www\./, '').toLowerCase()
+  const fremdeHosts = [
+    ...new Set(
+      $('iframe[src], frame[src], object[data], embed[src]')
+        .map((_, el) => $(el).attr('src') ?? $(el).attr('data') ?? '')
+        .get()
+        .map((quelle) => safeUrl(quelle.startsWith('//') ? `https:${quelle}` : quelle)?.hostname)
+        .filter((host): host is string => Boolean(host))
+        .map((host) => host.replace(/^www\./, '').toLowerCase())
+        .filter((host) => host !== eigenerHost),
+    ),
+  ]
+
+  $(`${TECHNISCH}, ${EINGEBETTET}`).remove()
 
   const title = text($('head title').first()) ?? null
   const metaDescription = attr($, 'meta[name="description"]', 'content')
@@ -207,7 +270,7 @@ export function extractSignals(input: {
     ]),
   ].slice(0, 5)
 
-  const sichtbar = extractSichtbaresDatum($, workingText)
+  const sichtbar = extractSichtbaresDatum($)
 
   const footerHtml = ($('footer').html() ?? '') + ($('body').html()?.slice(-6000) ?? '')
   const lowerAll = (bodyText + ' ' + footerHtml).toLowerCase()
@@ -215,6 +278,9 @@ export function extractSignals(input: {
   return {
     url,
     finalUrl: input.finalUrl ?? null,
+    weiterleitung: input.weiterleitung ?? null,
+    ueberschriftenAusRahmen,
+    fremdeHosts,
     statusCode: input.statusCode ?? null,
     isHttps: parsedUrl?.protocol === 'https:',
     urlSlug: pathSegments[pathSegments.length - 1] ?? '',
@@ -649,42 +715,59 @@ const MONATE: Record<string, number> = {
   juli: 7, august: 8, september: 9, oktober: 10, november: 11, dezember: 12,
 }
 
-/** Wörter, die ein Datum als Aktualisierungsdatum ausweisen. */
-const AKTUALISIERT =
-  /(zuletzt\s+(aktualisiert|ge(ä|ae)ndert|bearbeitet)|aktualisiert\s+am|stand[:\s]|letzte\s+(aktualisierung|(ä|ae)nderung)|ver(ö|oe)ffentlicht\s+am|last\s+updated)/i
+/**
+ * Stellen, an denen ein Datum als Datum ausgezeichnet ist.
+ *
+ * Alles andere ist Fliesstext. In einem Beitrag über die Steuerreform steht
+ * "seit dem 1. Januar 2025" — das ist kein Seitendatum, sondern ein Satz.
+ * Es als Aktualisierungsdatum zu lesen und gegen das Schema zu stellen,
+ * erzeugt einen Widerspruch, den es nicht gibt.
+ */
+const DATUMS_STELLEN = [
+  'time[datetime]',
+  'time',
+  '[itemprop="dateModified"]',
+  '[itemprop="datePublished"]',
+  '[class*="datum" i]',
+  '[class*="date" i]',
+  '[class*="updated" i]',
+  '[class*="modified" i]',
+  '[class*="published" i]',
+].join(', ')
 
 /**
- * Ein sichtbar auf der Seite stehendes Datum finden.
+ * Das sichtbare Datum der Seite — nur aus ausgezeichneten Stellen.
  *
- * Gesucht wird zuerst dort, wo ein Aktualisierungshinweis steht — ein
- * beliebiges Datum im Text wäre wertlos, davon stehen auf einer Seite viele.
- * Findet sich keiner, gilt der Text eines `<time>`-Elements, denn der ist
- * ausdrücklich als Datumsangabe ausgezeichnet.
+ * Früher wurde um jeden Treffer von "aktualisiert" ein Fenster von 80
+ * Zeichen aus dem Fliesstext geschnitten und darin nach einem Datum
+ * gesucht. Das war der Fehler: Ein Satz wie "zuletzt aktualisiert habe ich
+ * meine Preise im Mai 2024" ist Inhalt, keine Auszeichnung. Wer daraus ein
+ * Seitendatum macht, meldet anschliessend einen Widerspruch zum Schema,
+ * den die Betreiberin auf ihrer Seite vergeblich sucht.
+ *
+ * Gelesen wird deshalb nur, was der Seitenbau als Datum gekennzeichnet hat:
+ * ein <time>-Element, ein itemprop, oder ein Element, dessen Klasse es als
+ * Datumsangabe benennt. Findet sich dort nichts, gibt es kein sichtbares
+ * Datum — und dann wird auch nichts verglichen.
  */
-function extractSichtbaresDatum(
-  $: cheerio.CheerioAPI,
-  text: string,
-): { datum: string | null; fundstelle: string | null } {
-  const kandidaten: string[] = []
+function extractSichtbaresDatum($: cheerio.CheerioAPI): {
+  datum: string | null
+  fundstelle: string | null
+} {
+  let gefunden: { datum: string; fundstelle: string } | null = null
 
-  // Um jeden Aktualisierungshinweis ein Fenster von 80 Zeichen: Das Datum
-  // steht mal davor ("Stand: 24. August"), mal dahinter.
-  const hinweis = new RegExp(AKTUALISIERT.source, 'gi')
-  let treffer: RegExpExecArray | null
-  while ((treffer = hinweis.exec(text)) !== null) {
-    kandidaten.push(text.slice(treffer.index, treffer.index + 80))
-  }
-
-  $('time').each((_, el) => {
-    const roh = $(el).text().replace(/\s+/g, ' ').trim()
-    if (roh) kandidaten.push(roh)
+  $(DATUMS_STELLEN).each((_, el) => {
+    if (gefunden) return
+    const knoten = $(el)
+    // Das Attribut ist verlässlicher als der Text: <time datetime="2026-08-24">
+    // trägt oft nur "vor drei Wochen" als sichtbaren Inhalt.
+    const attribut = knoten.attr('datetime') ?? knoten.attr('content')
+    const roh = knoten.text().replace(/\s+/g, ' ').trim().slice(0, 70)
+    const datum = (attribut ? leseDatum(attribut) : null) ?? leseDatum(roh)
+    if (datum) gefunden = { datum, fundstelle: roh || (attribut ?? '') }
   })
 
-  for (const stelle of kandidaten) {
-    const datum = leseDatum(stelle)
-    if (datum) return { datum, fundstelle: stelle.trim().slice(0, 70) }
-  }
-  return { datum: null, fundstelle: null }
+  return gefunden ?? { datum: null, fundstelle: null }
 }
 
 /** Ein deutsches Datum aus einem kurzen Textstück lesen. */
