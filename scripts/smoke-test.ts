@@ -28,6 +28,13 @@ import {
   beschreibeWeiterleitung,
 } from '../src/lib/analysis/abruf'
 import { rahmenBefund, entschaerfeUnmoegliche, widersprueche } from '../src/lib/analysis/machbar'
+import {
+  PLAETZE,
+  plaetzeGrenze,
+  passtNochJemand,
+  platzVollHinweis,
+  plaetzeLeistung,
+} from '../src/lib/billing/plaetze'
 import { aussenzugang, zugangsHinweis } from '../src/lib/billing/zugang'
 import {
   MARKTGRUPPEN,
@@ -2847,6 +2854,118 @@ async function main() {
     'Das Formular erinnert beim Schreiben daran',
     /Für Kundinnen schreiben/.test(eintragsFormular),
     'ein Leitfaden, den man aufschlagen muesste, wird nicht aufgeschlagen',
+  )
+
+  section('Ein Arbeitsbereich traegt so viele Personen wie der Tarif')
+
+  /*
+    Warum ueberhaupt eine Grenze, wo das Guthaben doch schon deckelt: Credits
+    haengen am Arbeitsbereich, zehn Mitglieder teilen sich dieselben. Was
+    sich nicht teilt, ist alles andere — jede Person bekommt einen eigenen
+    Login, eigene Extension-Schluessel und eine eigene KI-Anbindung. Genau
+    die drei stehen in der Preisliste beim Abo.
+  */
+  check('Der kostenlose Tarif traegt eine Person', plaetzeGrenze('FREE') === 1)
+  check('Der kleine Tarif zwei', plaetzeGrenze('STARTER') === 2)
+  check('Der grosse zehn', plaetzeGrenze('PRO') === 10)
+  check(
+    'Interne Bereiche sind unbegrenzt',
+    !Number.isFinite(plaetzeGrenze('INTERNAL')),
+    'der Betrieb rechnet nicht ab',
+  )
+  check(
+    'Jeder Tarif im Datenmodell hat eine Zahl',
+    Object.values(PLAETZE).every((n) => n >= 1),
+    'ein fehlender Eintrag liesse einen Bereich stillschweigend bei einem Platz landen',
+  )
+
+  check('Bei einem von zwei passt noch jemand', passtNochJemand({ plan: 'STARTER', belegt: 1 }))
+  check('Bei zwei von zwei nicht mehr', !passtNochJemand({ plan: 'STARTER', belegt: 2 }))
+  check(
+    'Der kostenlose Tarif ist mit der Inhaberin voll',
+    !passtNochJemand({ plan: 'FREE', belegt: 1 }),
+  )
+  check('Intern passt immer jemand', passtNochJemand({ plan: 'INTERNAL', belegt: 500 }))
+
+  // Die Absage ist der Moment, in dem jemand tatsaechlich mehr will. Eine
+  // blosse Fehlermeldung verschenkt ihn.
+  const absage = platzVollHinweis('STARTER')
+  check(
+    'Die Absage nennt die Zahl und den Weg nach oben',
+    absage.includes('2 Personen') && absage.includes('10'),
+    absage,
+  )
+  check(
+    'Sie nennt auch den Weg ohne Geld',
+    absage.includes('Mitglied entfernt'),
+    'wer nicht wechseln will, soll wissen, dass es auch anders geht',
+  )
+  check(
+    'Im groessten Tarif wird nicht weiterverkauft',
+    !platzVollHinweis('PRO').includes('grossen Tarif'),
+    'dort gibt es nichts mehr zu verkaufen — dann lieber ein Gespraech anbieten',
+  )
+
+  const einladung = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'settings', 'team', 'actions.ts'),
+    'utf8',
+  )
+  check(
+    'Die Grenze wird beim Einladen geprueft',
+    /passtNochJemand\(/.test(einladung),
+  )
+  check(
+    'Offene Einladungen zaehlen mit',
+    /db\.invitation\.count/.test(einladung) && /mitglieder \+ offene/.test(einladung),
+    'wer drei Links verschickt und wartet, haette die Grenze sonst umgangen',
+  )
+
+  /*
+    Das eigentliche Loch: "Als Kundin" legt einen ganz neuen Arbeitsbereich
+    mit eigenem Startguthaben an. Das stand jeder Person mit Verwaltungsrecht
+    offen — und Inhaberin ihres Bereichs ist jede Kundin. Sie haette sich
+    ueber Wegwerf-Adressen beliebig viele Bereiche mit Gratis-Guthaben
+    erzeugen koennen: Das vervielfacht Guthaben, statt es zu teilen.
+  */
+  check(
+    'Neue Arbeitsbereiche legt nur der Betrieb an',
+    /art === 'kundin' && !session\.isSuperAdmin/.test(einladung),
+    'die Rolle allein genuegt nicht — eine Kundin ist Inhaberin ihres Bereichs',
+  )
+  check(
+    'Die Vorbelegung des Formulars ist nicht mehr "kundin"',
+    /formData\.get\('art'\) \?\? 'team'/.test(einladung),
+    'sonst legt ein Formular ohne Auswahl weiter einen Bereich an',
+  )
+
+  const einladenUi = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'settings', 'team', 'einladen.tsx'),
+    'utf8',
+  )
+  check(
+    'Die Auswahl wird Kundinnen gar nicht erst gezeigt',
+    /\{darfBereicheAnlegen && \(/.test(einladenUi),
+    'niemand soll vor einer Absage stehen, die vermeidbar war',
+  )
+  check(
+    'Bei vollen Plaetzen erscheint kein Formular, das nur absagt',
+    /plaetzeFrei === 0/.test(einladenUi),
+  )
+
+  // Preisliste und Code muessen dasselbe sagen. Vorher versprach die Liste
+  // Team-Zugaenge im grossen Tarif, und der Code gab sie in jedem her.
+  check(
+    'Die Preisliste nennt die Plaetze aus derselben Quelle',
+    readFileSync(join(dir, '..', '..', 'src', 'lib', 'billing', 'tarife.ts'), 'utf8').includes(
+      'plaetzeLeistung(',
+    ),
+    'sonst laufen Versprechen und Umsetzung wieder auseinander',
+  )
+  check(
+    'Und sie liest sich fuer Menschen',
+    plaetzeLeistung('STARTER') === 'Für bis zu 2 Personen im Arbeitsbereich' &&
+      plaetzeLeistung('FREE') === 'Für eine Person',
+    plaetzeLeistung('STARTER'),
   )
 
   section('Die Kundin sieht keine Abrechnung')

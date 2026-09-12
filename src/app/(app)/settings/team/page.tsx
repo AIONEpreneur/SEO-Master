@@ -1,4 +1,5 @@
 import { requireSession, hasRole } from '@/lib/auth/session'
+import { plaetzeGrenze } from '@/lib/billing/plaetze'
 import { db } from '@/lib/db'
 import { Card, CardHeader, Button } from '@/components/ui'
 import { Einladen } from './einladen'
@@ -33,17 +34,36 @@ export default async function TeamPage() {
     }),
   ])
 
+  /*
+    Belegt sind Mitglieder und offene Einladungen zusammen — sonst zeigt die
+    Seite zwei freie Plätze an, während zwei Links längst unterwegs sind.
+  */
+  const grenze = plaetzeGrenze(organization.plan)
+  const belegt = memberships.length + offeneEinladungen.filter((e) => e.organizationId === organization.id).length
+  const frei = Number.isFinite(grenze) ? Math.max(0, grenze - belegt) : undefined
+
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-xl font-semibold tracking-tight">Team</h1>
         <p className="mt-0.5 text-[13px] text-ink-muted">
-          {organization.name} · Tarif {organization.plan}
+          {organization.name}
+          {Number.isFinite(grenze) && ` · ${belegt} von ${grenze} Plätzen belegt`}
         </p>
       </header>
 
       <Card>
-        <CardHeader title="Mitglieder" description={`${memberships.length} Personen in diesem Arbeitsbereich`} />
+        <CardHeader
+          title="Mitglieder"
+          // Bewusst ohne "von X": Die Platzrechnung steht im Kopf und zählt
+          // offene Einladungen mit. Beides nebeneinander mit verschiedenen
+          // Zahlen ("1 von 2" hier, "2 von 2" oben) liest sich wie ein Fehler.
+          description={
+            Number.isFinite(grenze)
+              ? `${memberships.length === 1 ? 'Eine Person' : `${memberships.length} Personen`} — jede bekommt einen eigenen Login, eigene Extension-Schlüssel und eine eigene KI-Anbindung.`
+              : `${memberships.length} Personen in diesem Arbeitsbereich`
+          }
+        />
         <ul className="divide-y divide-border">
           {memberships.map((membership) => (
             <li key={membership.id} className="flex items-center justify-between gap-3 px-5 py-3">
@@ -98,7 +118,7 @@ export default async function TeamPage() {
       )}
 
       {hasRole(session, 'ADMIN') ? (
-        <Einladen />
+        <Einladen darfBereicheAnlegen={session.isSuperAdmin} plaetzeFrei={frei} />
       ) : (
         <Card className="p-5">
           <p className="text-[13px] text-ink-muted">

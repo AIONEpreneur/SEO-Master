@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth/session'
+import { passtNochJemand, platzVollHinweis } from '@/lib/billing/plaetze'
 import { erstelleEinladung, einladungsLink } from '@/lib/auth/einladungen'
 import { env } from '@/lib/env'
 
@@ -40,15 +41,62 @@ export async function ladeEinAction(_prev: EinladungsState, formData: FormData):
 
   const parsed = entwurf.safeParse({
     email: String(formData.get('email') ?? '').toLowerCase().trim(),
-    art: String(formData.get('art') ?? 'kundin'),
+    art: String(formData.get('art') ?? 'team'),
     arbeitsbereich: String(formData.get('arbeitsbereich') ?? ''),
   })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   const { email, art, arbeitsbereich } = parsed.data
 
+  /*
+    Einen ganz neuen Arbeitsbereich anlegen darf nur der Betrieb.
+
+    Bis hierher stand diese Möglichkeit jeder Person mit Verwaltungsrecht
+    offen — und Inhaberin ihres eigenen Bereichs ist jede Kundin. Sie hätte
+    sich damit über ein paar Wegwerf-Adressen beliebig viele frische
+    Arbeitsbereiche mit je einem Startguthaben erzeugen können. Das ist das
+    Gegenteil einer Deckelung: Es vervielfältigt Guthaben, statt es zu
+    teilen. Die Prüfung auf die Rolle reichte dafür nicht, es braucht die
+    Betriebsverwaltung.
+  */
+  if (art === 'kundin' && !session.isSuperAdmin) {
+    return { error: 'Neue Arbeitsbereiche legt nur der Betrieb an.' }
+  }
+
   if (await db.user.findUnique({ where: { email } })) {
     return { error: 'Für diese Adresse besteht bereits ein Konto.' }
+  }
+
+  /*
+    Passt noch jemand in diesen Arbeitsbereich?
+
+    Gezählt werden Mitglieder und offene Einladungen zusammen. Wer drei
+    Links verschickt und wartet, hätte die Grenze sonst umgangen — und die
+    dritte Person stünde nach dem Klick vor einer Absage, für die sie
+    nichts kann.
+
+    Nur beim Einladen ins eigene Team: Eine Kundin bekommt einen eigenen
+    Bereich, sie belegt hier keinen Platz.
+  */
+  if (art === 'team') {
+    const organisation = await db.organization.findUniqueOrThrow({
+      where: { id: session.organizationId },
+      select: { plan: true },
+    })
+    const [mitglieder, offene] = await Promise.all([
+      db.membership.count({ where: { organizationId: session.organizationId } }),
+      db.invitation.count({
+        where: {
+          organizationId: session.organizationId,
+          acceptedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+      }),
+    ])
+    if (!passtNochJemand({ plan: organisation.plan, belegt: mitglieder + offene })) {
+      return { error: platzVollHinweis(organisation.plan) }
+    }
   }
 
   // Offene Einladungen an dieselbe Adresse zurückziehen, damit immer nur ein

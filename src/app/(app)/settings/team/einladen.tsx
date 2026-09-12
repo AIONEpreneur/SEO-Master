@@ -1,15 +1,54 @@
 'use client'
 
 import { useActionState, useState } from 'react'
-import { Copy, Check, UserPlus } from 'lucide-react'
+import Link from 'next/link'
+import { Copy, Check, UserPlus, ArrowRight } from 'lucide-react'
 import { ladeEinAction, type EinladungsState } from './actions'
 import { Button, Card, Input, Label } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
 
-export function Einladen() {
+/**
+ * @param darfBereicheAnlegen Nur der Betrieb. Ein neuer Arbeitsbereich bringt
+ *   ein eigenes Startguthaben mit — wer das anlegen darf, vervielfältigt
+ *   Guthaben, statt es zu teilen. Der Server prüft es noch einmal; hier wird
+ *   die Auswahl gar nicht erst gezeigt, damit niemand vor einer Absage steht.
+ */
+export function Einladen({
+  darfBereicheAnlegen = false,
+  plaetzeFrei,
+}: {
+  darfBereicheAnlegen?: boolean
+  /** Wie viele Plätze im Arbeitsbereich noch frei sind. Null heisst: voll. */
+  plaetzeFrei?: number
+}) {
   const [state, formAction, pending] = useActionState<EinladungsState, FormData>(ladeEinAction, {})
-  const [art, setArt] = useState<'kundin' | 'team'>('kundin')
+  const [art, setArt] = useState<'kundin' | 'team'>(darfBereicheAnlegen ? 'kundin' : 'team')
   const [kopiert, setKopiert] = useState(false)
+
+  // Ist kein Platz mehr frei, wird das Formular gar nicht erst angeboten. Ein
+  // Einladungsfeld, das bei jedem Absenden dieselbe Absage bringt, ist
+  // ärgerlicher als ein klarer Hinweis vorher.
+  if (!darfBereicheAnlegen && plaetzeFrei === 0) {
+    return (
+      <Card className="p-5">
+        <div className="flex items-center gap-2">
+          <UserPlus size={15} className="text-ink-subtle" />
+          <p className="text-[13px] font-medium">Alle Plätze belegt</p>
+        </div>
+        <p className="mt-2 max-w-prose text-[13px] text-ink-muted">
+          In diesem Arbeitsbereich ist gerade kein Platz frei. Einen Platz gibt frei, wer ein
+          Mitglied entfernt — oder du wechselst in einen Tarif mit mehr Plätzen.
+        </p>
+        <Link
+          href="/settings/profil"
+          className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-bold text-brand hover:underline"
+        >
+          Tarife ansehen
+          <ArrowRight size={14} />
+        </Link>
+      </Card>
+    )
+  }
 
   return (
     <Card className="p-5">
@@ -17,10 +56,16 @@ export function Einladen() {
         <UserPlus size={15} className="text-ink-subtle" />
         <p className="text-[13px] font-medium">Person einladen</p>
       </div>
+      {!darfBereicheAnlegen && typeof plaetzeFrei === 'number' && (
+        <p className="mt-1 text-[12px] text-ink-subtle">
+          {plaetzeFrei === 1 ? 'Noch ein Platz frei' : `Noch ${plaetzeFrei} Plätze frei`}
+        </p>
+      )}
 
       <form action={formAction} className="mt-4 space-y-4">
         <input type="hidden" name="art" value={art} />
 
+        {darfBereicheAnlegen && (
         <div className="grid gap-2 sm:grid-cols-2">
           {(
             [
@@ -52,6 +97,7 @@ export function Einladen() {
             </button>
           ))}
         </div>
+        )}
 
         <div>
           <Label htmlFor="email">E-Mail-Adresse</Label>

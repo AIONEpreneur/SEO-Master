@@ -7,6 +7,8 @@
  * fehlen, führen die Abo-Knöpfe offen beschriftet zur Registrierung.
  */
 
+import { plaetzeLeistung } from './plaetze'
+
 export type Tarif = {
   kennung: 'FREE' | 'STARTER' | 'PRO'
   name: string
@@ -34,6 +36,7 @@ export const TARIFE: Tarif[] = [
     preisHinweis: 'für immer',
     beschreibung: 'In Ruhe ansehen, wie ehrliche Sichtbarkeitsmessung aussieht.',
     leistungen: [
+      plaetzeLeistung('FREE'),
       'Eigener Arbeitsbereich mit Login',
       'Schnell-Check ohne Grenzen',
       'Startguthaben für echte Recherchen und Analysen',
@@ -50,6 +53,7 @@ export const TARIFE: Tarif[] = [
     preisHinweis: 'im Monat, jederzeit kündbar',
     beschreibung: 'Für die eigene Website: messen, nacharbeiten, mitnehmen.',
     leistungen: [
+      plaetzeLeistung('STARTER'),
       'Monatliches Kontingent an Recherchen und Analysen',
       'Alle Exporte: CSV, „Für KI kopieren“, Berichte',
       'SEO4U-Browser-Extension',
@@ -69,7 +73,7 @@ export const TARIFE: Tarif[] = [
       'Grosses Monatskontingent',
       'Alles aus Starter',
       'Wettbewerbs-Vergleiche und Verlauf',
-      'Team-Zugänge für den Arbeitsbereich',
+      plaetzeLeistung('PRO'),
     ],
     monatsguthaben: 4000,
     farbe: 'limette',
