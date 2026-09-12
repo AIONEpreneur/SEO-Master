@@ -252,7 +252,7 @@ export function Sidebar({
             <form action={vorschauBereichAction} className="mb-3">
               <button
                 type="submit"
-                title="Wechselt in einen eigenen Arbeitsbereich mit Kundentarif — ohne Datentresor, ohne Verbrauch, mit Kontingent statt Guthaben."
+                title="Wechselt in einen eigenen Arbeitsbereich mit Kundentarif — ohne Datentresor, ohne Verbrauch, mit Kontingent statt Guthaben. Analysen laufen dort über deine Anbieter-Zugänge und verbrauchen echtes Guthaben."
                 className="lift flex w-full items-center gap-2 rounded-xl border-2 border-border bg-rosa px-3 py-2.5 text-[12px] font-bold text-tinte"
               >
                 <Eye size={14} />

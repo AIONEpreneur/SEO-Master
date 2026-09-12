@@ -32,10 +32,20 @@ export function NeuigkeitAnlegen() {
         }
       />
       <form action={action} className="space-y-4 p-5">
+        {/*
+          Die Leserin ist Unternehmerin, keine Technikerin. Sie will nicht
+          wissen, was umgebaut wurde, sondern was das für ihre Website
+          bedeutet — deshalb steht die Erinnerung daran im Formular und
+          nicht nur in einem Leitfaden, den beim Schreiben niemand aufschlägt.
+        */}
+        <p className="rounded-xl border-2 border-border bg-sand px-3 py-2 text-[12px] font-medium leading-relaxed text-tinte">
+          Für Kundinnen schreiben: Was ändert sich für <em>ihre</em> Website? Keine Fachbegriffe aus
+          der Werkstatt, keine Dateinamen, keine Technik — ein Satz zur Lage, ein Satz zum Nutzen.
+        </p>
         <div className="grid gap-4 sm:grid-cols-[1fr_200px]">
           <div>
             <Label htmlFor="n-titel">Titel</Label>
-            <Input id="n-titel" name="titel" required placeholder="z. B. Projekte können mehrere Märkte tragen" />
+            <Input id="n-titel" name="titel" required placeholder="z. B. Ein Projekt für mehrere Länder" />
           </div>
           <div>
             <Label htmlFor="n-art">Art</Label>
@@ -55,7 +65,7 @@ export function NeuigkeitAnlegen() {
             name="text"
             rows={3}
             required
-            placeholder="Zwei, drei Sätze. Was ist anders — und was hat die Leserin davon?"
+            placeholder="Zwei, drei Sätze in Kundensprache. Was ist anders — und was hat sie konkret davon?"
             className="w-full rounded-xl border-2 border-border bg-surface px-3 py-2 text-[13px] font-medium text-ink outline-none focus:outline-2 focus:outline-brand"
           />
         </div>

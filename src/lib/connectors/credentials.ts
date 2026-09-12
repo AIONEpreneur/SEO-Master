@@ -10,12 +10,44 @@ type SecretShape = DataForSeoSecret | ApiKeySecret
 /**
  * Zugangsdaten für einen Anbieter auflösen.
  *
- * Vorrang hat der Tresor der Organisation. Erst wenn dort nichts hinterlegt
- * ist, greifen die Server-Umgebungsvariablen. Damit funktioniert der interne
- * Einzelbetrieb ohne Einrichtung, während zahlende Kundinnen später ihre
- * eigenen Schlüssel mitbringen und getrennt abgerechnet werden können.
+ * Drei Stufen, in dieser Reihenfolge:
+ *
+ *  1. Der eigene Tresor der Organisation.
+ *  2. Der geliehene Tresor (`tresorVon`) — genau ein Schritt, nie eine Kette.
+ *     Das ist der Vorschau-Bereich: Er soll sich wie ein Kundenkonto anfühlen,
+ *     aber echte Daten liefern, damit eine Probe-Analyse aus Kundensicht
+ *     tatsächlich durchläuft. Gesetzt wird das Feld nur beim eigenen
+ *     Vorschau-Bereich, nie bei einer Kundin.
+ *  3. Die Server-Umgebungsvariablen.
+ *
+ * Damit funktioniert der interne Einzelbetrieb ohne Einrichtung, während
+ * zahlende Kundinnen später ihre eigenen Schlüssel mitbringen und getrennt
+ * abgerechnet werden können.
  */
 export async function resolveSecret<T extends SecretShape>(
+  organizationId: string,
+  provider: Provider,
+): Promise<T | null> {
+  const eigen = await tresorSecret<T>(organizationId, provider)
+  if (eigen) return eigen
+
+  const organisation = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: { tresorVon: true },
+  })
+
+  // Bewusst ohne Rekursion: Der geliehene Tresor leiht nicht weiter. Eine
+  // Kette wäre nicht mehr nachvollziehbar — und ein Kreis würde hängen.
+  if (organisation?.tresorVon) {
+    const geliehen = await tresorSecret<T>(organisation.tresorVon, provider)
+    if (geliehen) return geliehen
+  }
+
+  return fallbackFromEnv<T>(provider)
+}
+
+/** Nur der Tresor einer bestimmten Organisation – ohne jeden Rückfallweg. */
+async function tresorSecret<T extends SecretShape>(
   organizationId: string,
   provider: Provider,
 ): Promise<T | null> {
@@ -23,16 +55,13 @@ export async function resolveSecret<T extends SecretShape>(
     where: { organizationId, provider, isActive: true },
     orderBy: { updatedAt: 'desc' },
   })
+  if (!credential) return null
 
-  if (credential) {
-    return open<T>({
-      ciphertext: credential.ciphertext,
-      iv: credential.iv,
-      authTag: credential.authTag,
-    })
-  }
-
-  return fallbackFromEnv<T>(provider)
+  return open<T>({
+    ciphertext: credential.ciphertext,
+    iv: credential.iv,
+    authTag: credential.authTag,
+  })
 }
 
 function fallbackFromEnv<T extends SecretShape>(provider: Provider): T | null {

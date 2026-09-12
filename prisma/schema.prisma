@@ -223,6 +223,21 @@ model Organization {
    */
   aboEndetMitPeriode Boolean   @default(false)
 
+  // --- Geliehener Datentresor ----------------------------------------------
+  /**
+   * Dieser Arbeitsbereich benutzt die Anbieter-Zugaenge eines anderen.
+   *
+   * Gesetzt wird das ausschliesslich beim eigenen Vorschau-Bereich
+   * (Kundensicht) und ausschliesslich auf einen Arbeitsbereich, in dem die
+   * Betreiberin selbst Mitglied ist. Damit laeuft eine Probe-Analyse aus
+   * Kundensicht ueber die eigenen Schluessel, ohne sie zu kopieren — der
+   * Klartext bleibt an genau einer Stelle liegen.
+   *
+   * Bei einer echten Kundin bleibt das Feld leer. Es zu setzen hiesse, ihre
+   * Analysen ueber fremde Konten laufen zu lassen.
+   */
+  tresorVon          String?
+
   memberships       Membership[]
   projects          Project[]
   credentials       Credential[]

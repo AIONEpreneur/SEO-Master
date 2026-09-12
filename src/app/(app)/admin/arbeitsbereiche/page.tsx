@@ -55,9 +55,10 @@ export default async function ArbeitsbereicheSeite() {
           </p>
           <p className="mt-1 text-[13px] text-ink-muted">
             Ein eigener Arbeitsbereich mit Kundentarif. Dort erlebst du die App genau so wie eine Kundin —
-            ohne Datentresor, ohne Verbrauch, mit Kontingent statt Guthaben. Analysen darin verbrauchen
-            echtes Guthaben, deshalb ein knapper Startbetrag. Derselbe Schalter sitzt unten in der
-            Seitenleiste.
+            ohne Datentresor, ohne Verbrauch, mit Kontingent statt Guthaben. Analysen und Recherchen laufen
+            darin über deine eigenen Anbieter-Zugänge, damit eine Probe wirklich durchläuft; sie verbrauchen
+            deshalb echtes Guthaben. Auch Extension und KI-Anbindung sind dort freigeschaltet. Derselbe
+            Schalter sitzt unten in der Seitenleiste.
           </p>
         </div>
         <form action={vorschauBereichAction} className="shrink-0">

@@ -2216,6 +2216,125 @@ async function main() {
     'er wird nur eingeblendet, wo eigene Zugaenge verwaltet werden',
   )
 
+  section('Der Vorschau-Bereich borgt sich den Tresor, statt ihn zu kopieren')
+
+  /*
+    Die Kundensicht soll sich anfuehlen wie ein Kundenkonto – aber eine Probe
+    darin muss durchlaufen, sonst ist nur eine Fehlermeldung zu sehen. Also
+    borgt der Vorschau-Bereich die Anbieter-Zugaenge des eigenen Bereichs.
+    Drei Dinge muessen dabei stimmen, sonst wird aus der Bequemlichkeit ein
+    Datenleck: Der eigene Tresor hat Vorrang, geliehen wird genau einen
+    Schritt weit, und geliehen wird nur, wo es jemand ausdruecklich
+    eingetragen hat.
+  */
+  const tresorAufloesung = readFileSync(
+    join(dir, '..', '..', 'src', 'lib', 'connectors', 'credentials.ts'),
+    'utf8',
+  )
+  check(
+    'Der eigene Tresor hat Vorrang vor dem geliehenen',
+    tresorAufloesung.indexOf('const eigen = await tresorSecret') <
+      tresorAufloesung.indexOf('organisation?.tresorVon'),
+  )
+  check(
+    'Der geliehene Tresor kommt vor den Umgebungsvariablen',
+    tresorAufloesung.indexOf('organisation?.tresorVon') <
+      tresorAufloesung.lastIndexOf('return fallbackFromEnv'),
+    'sonst laeuft die Probe ueber einen anderen Zugang als der Betrieb',
+  )
+  // Der Rumpf der geliehenen Aufloesung, bis zur schliessenden Klammer am
+  // Zeilenanfang. Er darf sich nicht selbst wieder aufrufen.
+  const geliehenerRumpf = tresorAufloesung
+    .slice(tresorAufloesung.indexOf('async function tresorSecret'))
+    .split(/^}/m)[0]
+  check(
+    'Geliehen wird genau einen Schritt weit',
+    !/resolveSecret\(/.test(geliehenerRumpf) &&
+      /await tresorSecret<T>\(organisation\.tresorVon/.test(tresorAufloesung),
+    'eine Kette waere nicht nachvollziehbar, ein Kreis wuerde haengen',
+  )
+
+  const ansicht = readFileSync(join(dir, '..', '..', 'src', 'lib', 'auth', 'ansicht.ts'), 'utf8')
+  check(
+    'Nur der Vorschau-Bereich bekommt einen geliehenen Tresor',
+    /tresorVon: quelle\?\.organizationId \?\? null/.test(ansicht),
+    'bei einer Kundin liefen die Analysen sonst ueber fremde Konten',
+  )
+  check(
+    'Geborgt wird aus einem eigenen Bereich, nicht aus sich selbst',
+    /m\.organizationId !== vorhanden\?\.id/.test(ansicht),
+  )
+  check(
+    'Der Vorschau-Bereich wird bei jedem Wechsel nachgezogen',
+    ansicht.indexOf('db.organization.update') > ansicht.indexOf('vorschauBereichAction'),
+    'ein vor dieser Regel angelegter Bereich haette sonst nie einen Tresor',
+  )
+  check(
+    'In der Kundensicht sind Extension und KI-Anbindung freigeschaltet',
+    /aboStatus: 'trialing'/.test(ansicht) &&
+      aussenzugang({ plan: 'STARTER', aboStatus: 'trialing', aboLaeuftBis: jetztPlus(30) }).erlaubt,
+    'sonst zeigt die Probe genau die Sperre, die eine zahlende Kundin nie sieht',
+  )
+
+  section('Neuigkeiten stehen in der Sprache der Kundin')
+
+  /*
+    Wer die App benutzt, fuehrt ein Unternehmen und baut keine Software. Ein
+    Eintrag, der von Schema, Alt-Texten oder Canonicals erzaehlt, beantwortet
+    nicht die einzige Frage, die sie hat: Was aendert sich fuer meine Website?
+  */
+  const migrationen = join(dir, '..', '..', 'prisma', 'migrations')
+  const eingesaet = readFileSync(
+    join(migrationen, '20260911210000_neuigkeiten_wuensche', 'migration.sql'),
+    'utf8',
+  )
+  const klartext = readFileSync(
+    join(migrationen, '20260912110000_neuigkeiten_klartext', 'migration.sql'),
+    'utf8',
+  )
+  const eintragsIds = [...eingesaet.matchAll(/\('(seed_neuigkeit_\w+)'/g)].map((m) => m[1])
+  check(
+    'Jeder erste Eintrag wurde in Kundensprache uebersetzt',
+    eintragsIds.length > 0 && eintragsIds.every((id) => klartext.includes(`'${id}'`)),
+    `${eintragsIds.length} Eintraege eingesaet`,
+  )
+  check(
+    'Uebersetzt statt verdoppelt',
+    !/INSERT INTO "neuigkeiten"/.test(klartext),
+    'sonst staende dieselbe Aenderung zweimal in der Historie, einmal unverstaendlich',
+  )
+
+  // Begriffe aus der Werkstatt. Sie sind nicht falsch – sie gehoeren nur
+  // nicht in einen Text, den eine Kundin lesen soll.
+  const werkstattWorte = [
+    'Schema', 'Canonical', 'Alt-Text', 'Quelltext', 'Endpunkt', 'API', 'Repository',
+    'Commit', 'Backend', 'Datenbank', 'Token', 'JSON', 'Migration', 'Deployment',
+    'Datenanbieter', 'Parameter', 'Feld',
+  ]
+  // Nur die Texte selbst, nicht die Kommentare und nicht die Zeilennamen:
+  // Der Eintrag zur Canonical-Regel heisst intern weiterhin so – lesen wird
+  // ihn niemand.
+  const kundentexte = [...klartext.matchAll(/"(?:titel|text)" = '((?:[^']|'')*)'/g)]
+    .map((m) => m[1])
+    .join('\n')
+  check('Die Texte wurden gefunden', kundentexte.length > 400, `${kundentexte.length} Zeichen`)
+  const gefunden = werkstattWorte.filter((w) => new RegExp(w, 'i').test(kundentexte))
+  check(
+    'Kein Werkstattbegriff in den Eintraegen',
+    gefunden.length === 0,
+    gefunden.join(', '),
+  )
+
+  const eintragsFormular = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'neuigkeiten', 'anlegen.tsx'),
+    'utf8',
+  )
+  check(
+    'Das Formular erinnert beim Schreiben daran',
+    /Für Kundinnen schreiben/.test(eintragsFormular),
+    'ein Leitfaden, den man aufschlagen muesste, wird nicht aufgeschlagen',
+  )
+
   section('Die Kundin sieht keine Abrechnung')
 
   // Ein Credit ist ein US-Cent an Anbieterkosten. Wer einen Monatspreis

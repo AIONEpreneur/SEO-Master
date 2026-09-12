@@ -83,6 +83,16 @@ export async function beendeAnsichtAction(): Promise<void> {
  * Mitglied ist. Damit erlebt sie die App genau so wie eine Kundin – nur ohne
  * in fremden Daten zu stehen. Analysen dort kosten echtes Guthaben, deshalb
  * ein knapper Startbetrag statt eines unbegrenzten Tarifs.
+ *
+ * Zwei Dinge macht dieser Bereich bewusst nicht nach, weil er sonst nichts
+ * zeigen würde:
+ *
+ *  - Er borgt sich den Datentresor des eigenen Arbeitsbereichs (`tresorVon`).
+ *    Ohne Anbieter-Zugänge bricht jede Probe-Analyse schon im Formular ab,
+ *    und zu sehen wäre nur eine Fehlermeldung. Die Schlüssel werden nicht
+ *    kopiert – sie werden zur Laufzeit von dort gelesen.
+ *  - Er gilt als Bereich mit laufendem Abo, damit Extension und KI-Anbindung
+ *    dort funktionieren. Das ist genau der Zustand einer zahlenden Kundin.
  */
 export async function vorschauBereichAction(): Promise<void> {
   const benutzer = await echteSitzung()
@@ -92,6 +102,12 @@ export async function vorschauBereichAction(): Promise<void> {
     where: { name: VORSCHAU_NAME, memberships: { some: { userId: benutzer.id } } },
     select: { id: true },
   })
+
+  // Aus welchem Tresor wird geborgt? Aus dem ersten eigenen Arbeitsbereich –
+  // die Mitgliedschaften stehen nach Alter sortiert, der erste ist der
+  // Betrieb. Der Vorschau-Bereich selbst scheidet aus, sonst zeigte das Feld
+  // auf sich.
+  const quelle = benutzer.memberships.find((m) => m.organizationId !== vorhanden?.id)
 
   const bereich =
     vorhanden ??
@@ -105,6 +121,22 @@ export async function vorschauBereichAction(): Promise<void> {
       },
       select: { id: true },
     }))
+
+  /*
+    Bei jedem Wechsel nachziehen, nicht nur beim Anlegen: Ein Bereich, der
+    vor dieser Regel entstanden ist, hätte sonst dauerhaft keinen Tresor —
+    und der Probezeitraum liefe irgendwann ab, ohne dass erkennbar wäre,
+    warum die Extension plötzlich schweigt.
+  */
+  await db.organization.update({
+    where: { id: bereich.id },
+    data: {
+      tresorVon: quelle?.organizationId ?? null,
+      aboStatus: 'trialing',
+      aboLaeuftBis: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      aboEndetMitPeriode: false,
+    },
+  })
 
   await setzeBereich(bereich.id)
   revalidatePath('/admin/arbeitsbereiche')
