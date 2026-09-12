@@ -1,5 +1,6 @@
 import type { Messpunkt, Stufe, Tempowerte } from '@/lib/analysis/uebersicht'
 import { stufeVonHundert } from '@/lib/analysis/uebersicht'
+import { HelpCircle } from 'lucide-react'
 
 /*
   Diagramme im Stil des Hauses.
@@ -18,6 +19,29 @@ import { stufeVonHundert } from '@/lib/analysis/uebersicht'
   daneben. Damit bleibt jedes Bild auch in Graustufen und für farbenblinde
   Augen lesbar.
 */
+
+/**
+ * „Was bedeutet das?" — aufklappbar, nicht aufgedrängt.
+ *
+ * Eine Zahl ohne Einheit ist keine Auskunft. Aber ein Absatz Erklärung unter
+ * jeder Zahl macht aus der Übersicht eine Textseite, die niemand liest.
+ * Deshalb steht das Nötigste immer da (Skala, ein Satz), und der Rest sitzt
+ * hinter einem Klick — als natives <details>, damit es ohne Javascript
+ * funktioniert und die Suche im Browser den Text trotzdem findet.
+ */
+function Erklaerung({ children }: { children: React.ReactNode }) {
+  return (
+    <details className="group mt-2">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border-2 border-border px-2.5 py-0.5 text-[12px] font-bold text-ink">
+        <HelpCircle size={12} />
+        Was bedeutet das?
+      </summary>
+      <p className="mt-2 max-w-prose text-[13px] font-medium leading-relaxed text-ink-muted">
+        {children}
+      </p>
+    </details>
+  )
+}
 
 /** Flächenfarbe je Stufe. Die Kontur ist immer Tinte, die Schrift ebenso. */
 const STUFEN_FLAECHE: Record<Stufe, string> = {
@@ -89,7 +113,11 @@ export function Tacho({
         <p className="font-display text-[13px] uppercase leading-tight text-ink">{titel}</p>
         {stufe && (
           <p className="mt-1 text-[13px] font-bold text-ink">
-            {stufe === 'gut' ? 'Gut aufgestellt' : stufe === 'mittel' ? 'Ausbaufähig' : 'Hier liegt Arbeit'}
+            {stufe === 'gut'
+              ? 'Gut aufgestellt'
+              : stufe === 'mittel'
+                ? 'Ausbaufähig — da geht noch was'
+                : 'Hier liegt Arbeit vor dir'}
           </p>
         )}
         {hinweis && <p className="mt-1 text-[12px] font-medium text-ink-subtle">{hinweis}</p>}
@@ -102,11 +130,23 @@ export function Tacho({
 // Tempo (Lighthouse)
 // ---------------------------------------------------------------------------
 
-const TEMPO_ZEILEN: Array<{ schluessel: keyof Tempowerte; label: string }> = [
-  { schluessel: 'tempo', label: 'Ladegeschwindigkeit' },
-  { schluessel: 'bedienbarkeit', label: 'Bedienbarkeit' },
-  { schluessel: 'standards', label: 'Technische Standards' },
-  { schluessel: 'seo', label: 'Auffindbarkeit' },
+const TEMPO_ZEILEN: Array<{ schluessel: keyof Tempowerte; label: string; was: string }> = [
+  { schluessel: 'tempo', label: 'Wie schnell die Seite lädt', was: 'Wie lange jemand wartet, bis er etwas sieht.' },
+  {
+    schluessel: 'bedienbarkeit',
+    label: 'Barrierefreiheit',
+    was: 'Ob auch Menschen mit Seh- oder Bedienhilfen zurechtkommen.',
+  },
+  {
+    schluessel: 'standards',
+    label: 'Technische Sauberkeit',
+    was: 'Ob die Seite handwerklich ordentlich gebaut ist — sichere Verbindung, keine veralteten Bausteine.',
+  },
+  {
+    schluessel: 'seo',
+    label: 'Technische Grundlagen',
+    was: 'Ob die Grundausstattung stimmt, die Google erwartet: Titel, Beschreibung, lesbare Adressen.',
+  },
 ]
 
 /**
@@ -120,15 +160,22 @@ const TEMPO_ZEILEN: Array<{ schluessel: keyof Tempowerte; label: string }> = [
 export function TempoBalken({ werte }: { werte: Tempowerte }) {
   return (
     <div className="space-y-3">
-      {TEMPO_ZEILEN.map(({ schluessel, label }) => {
+      {TEMPO_ZEILEN.map(({ schluessel, label, was }) => {
         const wert = werte[schluessel] as number | null
         const stufe = stufeVonHundert(wert)
         return (
           <div key={schluessel}>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[13px] font-medium text-ink">{label}</span>
-              <span className="text-[13px] font-bold tabular-nums text-ink">
-                {wert === null ? 'nicht gemessen' : wert}
+              <span className="shrink-0 text-[13px] font-bold tabular-nums text-ink">
+                {wert === null ? (
+                  'nicht gemessen'
+                ) : (
+                  <>
+                    {wert}
+                    <span className="font-medium text-ink-subtle"> von 100</span>
+                  </>
+                )}
                 {stufe && (
                   <span className="ml-1.5 font-medium text-ink-subtle">
                     · {stufe === 'gut' ? 'gut' : stufe === 'mittel' ? 'mittel' : 'schwach'}
@@ -136,6 +183,7 @@ export function TempoBalken({ werte }: { werte: Tempowerte }) {
                 )}
               </span>
             </div>
+            <p className="text-[12px] font-medium leading-snug text-ink-subtle">{was}</p>
             <div className="mt-1 h-4 w-full overflow-hidden rounded-full border-2 border-border bg-surface-muted">
               {wert !== null && stufe && (
                 <div
@@ -152,24 +200,30 @@ export function TempoBalken({ werte }: { werte: Tempowerte }) {
         <p className="pt-1 text-[12px] font-medium leading-relaxed text-ink-subtle">
           {werte.lcpSekunden !== null && (
             <>
-              Der grösste Inhalt steht nach{' '}
+              Bis das Wichtigste auf dem Bildschirm steht, dauert es{' '}
               <strong className="text-ink">
-                {werte.lcpSekunden.toLocaleString('de-DE', { minimumFractionDigits: 1 })} s
+                {werte.lcpSekunden.toLocaleString('de-DE', { minimumFractionDigits: 1 })} Sekunden
               </strong>
               .{' '}
             </>
           )}
           {werte.cls !== null && (
             <>
-              Das Layout springt beim Laden um{' '}
-              <strong className="text-ink">
-                {werte.cls.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
-              </strong>
-              {werte.cls <= 0.1 ? ' — unauffällig.' : ' — spürbar.'}
+              {werte.cls <= 0.1
+                ? 'Beim Laden verrutscht nichts Störendes.'
+                : 'Beim Laden verrutscht die Seite spürbar — wer schon klicken will, trifft daneben.'}
             </>
           )}
         </p>
       )}
+
+      <Erklaerung>
+        Diese vier Werte misst Google selbst, mit seinem Werkzeug „Lighthouse". Sie laufen von 0 bis
+        100 — <strong className="text-ink">das ist Googles Skala, nicht unsere Note von 10</strong>.
+        Ab 90 gilt ein Wert als gut, ab 50 als mittel, darunter als schwach. Genau dieselben Zahlen
+        siehst du, wenn du deine Adresse bei „PageSpeed Insights" eingibst. Sie sagen etwas über die
+        Technik deiner Seite — nicht darüber, ob sie bei Google weit oben steht.
+      </Erklaerung>
     </div>
   )
 }
@@ -178,11 +232,48 @@ export function TempoBalken({ werte }: { werte: Tempowerte }) {
 // Kleine Verlaufslinien je Bereich
 // ---------------------------------------------------------------------------
 
-const BEREICHE: Array<{ schluessel: 'seo' | 'aeo' | 'geo' | 'serp'; label: string }> = [
-  { schluessel: 'seo', label: 'SEO' },
-  { schluessel: 'aeo', label: 'AEO' },
-  { schluessel: 'geo', label: 'GEO' },
-  { schluessel: 'serp', label: 'SERP' },
+/*
+  Die vier Bereiche in Worten.
+
+  „SEO, AEO, GEO, SERP" sind vier Kürzel, von denen eine Selbstständige mit
+  eigener Website höchstens das erste kennt. Vier Kacheln mit vier Kürzeln
+  und je einer Kommazahl sind keine Auskunft, sondern ein Rätsel.
+
+  Also steht die Frage vorn, die der Bereich beantwortet, und das Kürzel
+  klein darunter — nicht weggelassen, denn im Bericht und in der Hilfe steht
+  es weiter so, und wer die beiden nebeneinanderlegt, muss sie zuordnen
+  können. Die Formulierungen sind wörtlich die der Hilfe-Seite.
+*/
+const BEREICHE: Array<{
+  schluessel: 'seo' | 'aeo' | 'geo' | 'serp'
+  label: string
+  kuerzel: string
+  was: string
+}> = [
+  {
+    schluessel: 'seo',
+    label: 'Bei Google gefunden werden',
+    kuerzel: 'SEO',
+    was: 'Findet Google deine Seite, und versteht Google, worum es darin geht?',
+  },
+  {
+    schluessel: 'aeo',
+    label: 'In der Antwortbox landen',
+    kuerzel: 'AEO',
+    was: 'Kommt deine Seite in den Kasten mit der direkten Antwort ganz oben?',
+  },
+  {
+    schluessel: 'geo',
+    label: 'Von KI zitiert werden',
+    kuerzel: 'GEO',
+    was: 'Können ChatGPT und Perplexity deine Seite lesen und dich als Quelle nennen?',
+  },
+  {
+    schluessel: 'serp',
+    label: 'Deine echten Plätze',
+    kuerzel: 'SERP',
+    was: 'Auf welchen Plätzen steht deine Seite gerade wirklich bei Google?',
+  },
 ]
 
 /**
@@ -196,7 +287,7 @@ const BEREICHE: Array<{ schluessel: 'seo' | 'aeo' | 'geo' | 'serp'; label: strin
 export function BereichsLinien({ punkte }: { punkte: Messpunkt[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {BEREICHE.map(({ schluessel, label }) => {
+      {BEREICHE.map(({ schluessel, label, kuerzel, was }) => {
         const reihe = punkte.map((p) => p[schluessel])
         const vorhanden = reihe.filter((w): w is number => w !== null)
         const erste = vorhanden[0] ?? null
@@ -206,20 +297,50 @@ export function BereichsLinien({ punkte }: { punkte: Messpunkt[] }) {
 
         return (
           <figure key={schluessel} className="m-0 rounded-2xl border-2 border-border bg-surface-muted p-4">
-            <figcaption className="flex items-baseline justify-between gap-2">
-              <span className="font-display text-[12px] uppercase text-ink">{label}</span>
-              <span className="text-[13px] font-bold tabular-nums text-ink">
-                {letzte === null ? '–' : letzte.toLocaleString('de-DE', { maximumFractionDigits: 1 })}
-              </span>
+            <figcaption>
+              <div className="flex items-start justify-between gap-2">
+                {/*
+                  Bewusst nicht die Anzeigeschrift in Versalien wie sonst bei
+                  Überschriften: Das hier ist eine Frage über zwei bis drei
+                  Zeilen, und Archivo Black in Versalien wird über drei Zeilen
+                  zur Mauer. Eine Überschrift, die man buchstabieren muss, ist
+                  keine.
+                */}
+                <span className="text-[13px] font-bold leading-snug text-ink">{label}</span>
+                <span className="shrink-0 text-[15px] font-bold leading-none text-ink">
+                  {letzte === null ? (
+                    '–'
+                  ) : (
+                    <>
+                      {letzte.toLocaleString('de-DE', { maximumFractionDigits: 1 })}
+                      <span className="text-[11px] font-medium text-ink-subtle"> /10</span>
+                    </>
+                  )}
+                </span>
+              </div>
+              <p className="mt-1 text-[12px] font-medium leading-snug text-ink-subtle">{was}</p>
             </figcaption>
             <MiniLinie werte={reihe} />
             <p className="mt-1.5 text-[12px] font-medium text-ink-subtle">
+              {/*
+                „Keine Vergleichswerte" sagt nicht, warum. Bei diesen vier
+                Bereichen gibt es fast immer denselben Grund: Der Baustein
+                war beim Start nicht angekreuzt oder brauchte Daten, die
+                nicht vorlagen. Das gehört hier hin, sonst sucht jemand den
+                Fehler bei sich.
+              */}
               {delta === null
-                ? 'keine Vergleichswerte'
+                ? letzte === null
+                  ? 'Dieser Baustein lief bei deinen Analysen nicht mit.'
+                  : 'Erst ab der zweiten Messung vergleichbar.'
                 : delta === 0
-                  ? 'unverändert'
+                  ? 'unverändert seit der ersten Messung'
                   : `${delta > 0 ? '+' : '−'}${Math.abs(delta).toLocaleString('de-DE', { maximumFractionDigits: 1 })} seit der ersten Messung`}
             </p>
+            <p className="sr-only">Kürzel im Bericht: {kuerzel}</p>
+            <span className="mt-2 inline-block rounded-full border-2 border-border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-subtle">
+              {kuerzel}
+            </span>
           </figure>
         )
       })}

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ScanSearch, KeyRound, AlertTriangle, FileText, FolderKanban, Globe, Coins, Repeat } from 'lucide-react'
+import { ScanSearch, KeyRound, AlertTriangle, FileText, FolderKanban, Globe, Coins, Repeat, ArrowRight } from 'lucide-react'
 import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { availableProviders } from '@/lib/connectors/credentials'
@@ -215,23 +215,49 @@ export default async function DashboardPage() {
             <Tacho
               wert={neuester.scoreOverall}
               titel="Deine Gesamtnote"
-              hinweis={`${kurzeAdresse(neuester.targetUrl)} · ${neuester.createdAt.toLocaleDateString('de-DE')}`}
+              hinweis={`${kurzeAdresse(neuester.targetUrl)} · gemessen am ${neuester.createdAt.toLocaleDateString('de-DE')}`}
             />
             {tempo ? (
               <div>
-                <p className="mb-3 font-display text-[13px] uppercase text-ink">
-                  Wie schnell und sauber die Seite lädt
+                <p className="font-display text-[13px] uppercase text-ink">
+                  Der technische Zustand deiner Seite
+                </p>
+                <p className="mb-3 mt-1 max-w-prose text-[13px] font-medium text-ink-muted">
+                  Vier Werte von 0 bis 100, direkt von Google gemessen.
                 </p>
                 <TempoBalken werte={tempo} />
               </div>
             ) : (
               <div className="rounded-2xl border-2 border-dashed border-border/40 p-5">
                 <p className="text-[13px] font-medium text-ink-muted">
-                  Für diesen Lauf liegen keine Tempo-Werte vor. Sie entstehen mit dem Baustein
-                  „SEO“, sobald ein PageSpeed-Zugang hinterlegt ist.
+                  Für diesen Lauf liegen keine Werte zum technischen Zustand vor. Sie entstehen
+                  mit dem Baustein „SEO“, sobald ein PageSpeed-Zugang hinterlegt ist.
                 </p>
               </div>
             )}
+          </div>
+
+          {/*
+            Die zwei Skalen nebeneinander sind die Stelle, an der jemand
+            aussteigt: links 7,6 von 10, rechts 93 von 100. Ohne diesen
+            Absatz sieht das aus wie ein Widerspruch oder ein Fehler.
+          */}
+          <div className="mt-5 border-t-2 border-border pt-4">
+            <p className="max-w-prose text-[13px] font-medium leading-relaxed text-ink-muted">
+              <strong className="text-ink">Warum zwei verschiedene Skalen?</strong> Die Gesamtnote
+              links ist unsere Bewertung deiner Seite und läuft von 0 bis 10 — sie ist der
+              Durchschnitt aus den Bereichen weiter unten. Die vier Werte rechts kommen von Google
+              selbst und laufen von 0 bis 100. Beide messen etwas anderes: Eine technisch perfekte
+              Seite kann trotzdem eine mittlere Gesamtnote haben, wenn der Inhalt nicht zu dem
+              passt, wonach deine Kundinnen suchen.
+            </p>
+            <Link
+              href={`/analyses/${neuester.id}`}
+              className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-bold text-brand hover:underline"
+            >
+              Was du konkret tun kannst, steht im Bericht
+              <ArrowRight size={14} />
+            </Link>
           </div>
         </Card>
       )}
@@ -247,7 +273,11 @@ export default async function DashboardPage() {
               <p className="font-display text-[13px] uppercase text-ink">
                 Deine Entwicklung
               </p>
-              <p className="mt-0.5 text-[12px] font-medium text-ink-subtle">
+              <p className="mt-1 max-w-prose text-[13px] font-medium text-ink-muted">
+                Wie sich deine Gesamtnote verändert hat, seit du diese Seite zum ersten Mal
+                gemessen hast. Je höher die Linie, desto besser.
+              </p>
+              <p className="mt-1 text-[12px] font-medium text-ink-subtle">
                 {kurzeAdresse(reihe.adresse)} · {reihe.punkte.length} Messungen
                 {reihe.spanne > 0 && ` über ${reihe.spanne} Tage`}
               </p>
@@ -256,10 +286,12 @@ export default async function DashboardPage() {
               <p className="text-[13px] font-bold text-ink">
                 {reihe.delta === 0
                   ? 'Unverändert seit der ersten Messung'
-                  : `${reihe.delta > 0 ? 'Aufwärts' : 'Abwärts'}: ${reihe.delta > 0 ? '+' : '−'}${Math.abs(reihe.delta).toLocaleString('de-DE', { maximumFractionDigits: 1 })} Punkte`}
+                  : reihe.delta > 0
+                    ? 'Es geht aufwärts'
+                    : 'Es ging abwärts'}
                 <span className="ml-1 font-medium text-ink-subtle">
-                  (von {reihe.erste.gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 1 })} auf{' '}
-                  {reihe.letzte.gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 1 })})
+                  — von {reihe.erste.gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 1 })} auf{' '}
+                  {reihe.letzte.gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 1 })} von 10
                 </span>
               </p>
             )}
@@ -273,8 +305,13 @@ export default async function DashboardPage() {
             }))}
           />
 
-          <p className="mb-3 mt-6 font-display text-[13px] uppercase text-ink">
-            Die vier Bereiche einzeln
+          <p className="mt-6 font-display text-[13px] uppercase text-ink">
+            Woraus sich die Note zusammensetzt
+          </p>
+          <p className="mb-3 mt-1 max-w-prose text-[13px] font-medium text-ink-muted">
+            Vier Fragen, jede einzeln bewertet von 0 bis 10. Die Gesamtnote oben ist der
+            Durchschnitt daraus. Eine Seite kann bei einer Frage stark und bei einer anderen
+            schwach sein — deshalb steht jede für sich.
           </p>
           <BereichsLinien punkte={reihe.punkte} />
         </Card>

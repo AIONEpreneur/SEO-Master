@@ -2391,6 +2391,72 @@ async function main() {
     'sonst zeigt die Probe genau die Sperre, die eine zahlende Kundin nie sieht',
   )
 
+  section('Auf der Übersicht erklärt sich jede Zahl selbst')
+
+  /*
+    Eine Zahl ohne Einheit ist keine Auskunft. Auf der Übersicht stehen zwei
+    verschiedene Skalen nebeneinander — unsere Note von 0 bis 10 und die
+    Lighthouse-Werte von 0 bis 100 —, und das ist genau die Stelle, an der
+    eine Kundin aussteigt, wenn es niemand sagt. Ebenso „SEO, AEO, GEO,
+    SERP": vier Kürzel, von denen sie höchstens das erste kennt.
+  */
+  const diagrammQuelle = readFileSync(
+    join(dir, '..', '..', 'src', 'components', 'diagramme.tsx'),
+    'utf8',
+  )
+  const uebersichtSeite2 = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'dashboard', 'page.tsx'),
+    'utf8',
+  )
+
+  check(
+    'Die Lighthouse-Werte nennen ihre Skala',
+    /von 100/.test(diagrammQuelle),
+    '„93" allein beantwortet nicht, ob das gut ist',
+  )
+  check(
+    'Die Bereichsnoten nennen ihre Skala',
+    /\/10/.test(diagrammQuelle),
+  )
+  check(
+    'Die Übersicht erklärt, warum es zwei Skalen gibt',
+    /Warum zwei verschiedene Skalen/.test(uebersichtSeite2),
+    'nebeneinander sehen 7,6 und 93 aus wie ein Widerspruch',
+  )
+  check(
+    'Die Lighthouse-Werte sagen, dass sie von Google kommen',
+    /Lighthouse/.test(diagrammQuelle) && /PageSpeed Insights/.test(diagrammQuelle),
+    'sonst sucht niemand die Verbindung zu dem Werkzeug, das er schon kennt',
+  )
+
+  // Jedes Kürzel braucht einen Satz in normaler Sprache. Weglassen darf man
+  // es nicht — im Bericht und in der Hilfe steht es weiter so, und wer beides
+  // nebeneinanderlegt, muss zuordnen können.
+  for (const kuerzel of ['SEO', 'AEO', 'GEO', 'SERP']) {
+    check(
+      `${kuerzel} steht nicht allein da`,
+      new RegExp(`kuerzel: '${kuerzel}'`).test(diagrammQuelle),
+      'Kürzel als Zusatz, nicht als Überschrift',
+    )
+  }
+  check(
+    'Jeder Bereich stellt seine Frage in normaler Sprache',
+    (diagrammQuelle.match(/was: '/g) ?? []).length >= 8,
+    'vier Bereiche und vier Lighthouse-Zeilen',
+  )
+  check(
+    'Kein Bereich heisst nur nach seinem Kürzel',
+    !/label: '(SEO|AEO|GEO|SERP)'/.test(diagrammQuelle),
+  )
+
+  // Leere Stellen müssen sagen, warum sie leer sind. Ein Strich ohne Grund
+  // lässt jemanden den Fehler bei sich suchen.
+  check(
+    'Ein fehlender Baustein erklärt sich',
+    /lief bei deinen Analysen nicht mit/.test(diagrammQuelle),
+    '„keine Vergleichswerte" nennt keinen Grund',
+  )
+
   section('Neuigkeiten stehen in der Sprache der Kundin')
 
   /*
