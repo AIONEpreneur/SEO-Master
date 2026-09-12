@@ -8,6 +8,7 @@
  */
 
 import { plaetzeLeistung } from './plaetze'
+import { websitesLeistung } from './websites'
 
 export type Tarif = {
   kennung: 'FREE' | 'STARTER' | 'PRO'
@@ -36,6 +37,7 @@ export const TARIFE: Tarif[] = [
     preisHinweis: 'für immer',
     beschreibung: 'In Ruhe ansehen, wie ehrliche Sichtbarkeitsmessung aussieht.',
     leistungen: [
+      websitesLeistung('FREE'),
       plaetzeLeistung('FREE'),
       'Eigener Arbeitsbereich mit Login',
       'Schnell-Check ohne Grenzen',
@@ -53,6 +55,7 @@ export const TARIFE: Tarif[] = [
     preisHinweis: 'im Monat, jederzeit kündbar',
     beschreibung: 'Für die eigene Website: messen, nacharbeiten, mitnehmen.',
     leistungen: [
+      websitesLeistung('STARTER'),
       plaetzeLeistung('STARTER'),
       'Monatliches Kontingent an Recherchen und Analysen',
       'Alle Exporte: CSV, „Für KI kopieren“, Berichte',
@@ -70,10 +73,10 @@ export const TARIFE: Tarif[] = [
     preisHinweis: 'im Monat, jederzeit kündbar',
     beschreibung: 'Für alle, die mehrere Websites oder Kundinnen betreuen.',
     leistungen: [
-      'Grosses Monatskontingent',
-      'Alles aus Starter',
-      'Wettbewerbs-Vergleiche und Verlauf',
+      websitesLeistung('PRO'),
+      'Vergleich mit deinen Wettbewerbern',
       plaetzeLeistung('PRO'),
+      'Grösseres Monatskontingent — sonst alles wie im Starter',
     ],
     monatsguthaben: 4000,
     farbe: 'limette',

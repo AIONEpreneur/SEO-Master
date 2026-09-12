@@ -35,6 +35,14 @@ import {
   platzVollHinweis,
   plaetzeLeistung,
 } from '../src/lib/billing/plaetze'
+import {
+  WEBSITES,
+  websitesGrenze,
+  passtNochEineWebsite,
+  websiteVollHinweis,
+  websitesLeistung,
+  traegtWettbewerb,
+} from '../src/lib/billing/websites'
 import { aussenzugang, zugangsHinweis } from '../src/lib/billing/zugang'
 import {
   MARKTGRUPPEN,
@@ -3027,6 +3035,96 @@ async function main() {
     'Das Formular erinnert beim Schreiben daran',
     /Für Kundinnen schreiben/.test(eintragsFormular),
     'ein Leitfaden, den man aufschlagen muesste, wird nicht aufgeschlagen',
+  )
+
+  section('Die Leiter steht auf Websites, nicht auf Personen')
+
+  /*
+    Plaetze zaehlen Personen — und die meisten Kundinnen hier arbeiten
+    allein. Eine Grenze, die sie nie erreichen, ist keine Leiter: Fuer eine
+    Solo-Kundin gab es bis hierher keinen einzigen Grund, den groesseren
+    Tarif zu nehmen. Was bei ihr waechst, sind Websites.
+  */
+  check('Der kleine Tarif traegt eine Website', websitesGrenze('STARTER') === 1)
+  check('Der grosse fuenf', websitesGrenze('PRO') === 5)
+  check('Zum Umschauen eine', websitesGrenze('FREE') === 1)
+  check('Intern unbegrenzt', !Number.isFinite(websitesGrenze('INTERNAL')))
+  check(
+    'Jeder Tarif im Datenmodell hat eine Zahl',
+    Object.values(WEBSITES).every((n) => n >= 1),
+  )
+  check(
+    'Bei einer von einer passt keine mehr',
+    !passtNochEineWebsite({ plan: 'STARTER', angelegt: 1 }) &&
+      passtNochEineWebsite({ plan: 'STARTER', angelegt: 0 }),
+  )
+
+  // Der haeufigste Umstiegsmoment ueberhaupt — und er passiert im Formular,
+  // nicht auf der Preisseite.
+  const websiteVoll = websiteVollHinweis('STARTER')
+  check(
+    'Die Absage nennt die Zahl, den groesseren Tarif und den Wettbewerbsvergleich',
+    websiteVoll.includes('eine Website') &&
+      websiteVoll.includes('5') &&
+      /Wettbewerber/.test(websiteVoll),
+    websiteVoll,
+  )
+  check(
+    'Sie nennt auch den Weg ohne Geld',
+    /Projekt zu löschen/.test(websiteVoll),
+  )
+  check(
+    'Im groessten Tarif wird nicht weiterverkauft',
+    !websiteVollHinweis('PRO').includes('grossen Tarif'),
+  )
+
+  // Die einzige Funktionsgrenze — und bewusst die teuerste Abfrage.
+  check(
+    'Der Wettbewerbsvergleich gehoert zum grossen Tarif',
+    !traegtWettbewerb('STARTER') && !traegtWettbewerb('FREE') && traegtWettbewerb('PRO'),
+  )
+  check('Intern und Agentur tragen ihn auch', traegtWettbewerb('INTERNAL') && traegtWettbewerb('AGENCY'))
+
+  const analyseAktionen = readFileSync(
+    join(dir, '..', '..', 'src', 'lib', 'analysis', 'actions.ts'),
+    'utf8',
+  )
+  check(
+    'Die Website-Grenze wird beim Anlegen geprueft',
+    /passtNochEineWebsite\(/.test(analyseAktionen),
+  )
+  check(
+    'Der Wettbewerbsbaustein wird serverseitig geprueft, nicht nur ausgegraut',
+    /traegtWettbewerb\(bereich\.plan\)/.test(analyseAktionen),
+    'eine Server-Aktion ist ein oeffentlicher Endpunkt',
+  )
+
+  const analyseFormular = readFileSync(
+    join(dir, '..', '..', 'src', 'app', '(app)', 'analyses', 'new', 'form.tsx'),
+    'utf8',
+  )
+  check(
+    'Der gesperrte Baustein wird gezeigt, nicht versteckt',
+    /Gehört zum grossen Tarif/.test(analyseFormular) && /aria-disabled=\{gesperrt\}/.test(analyseFormular),
+    'wer ihn nie sieht, weiss auch nicht, was ihm fehlt',
+  )
+
+  // Preisliste und Code muessen dasselbe sagen — die faule Zeile ist raus.
+  const tarifQuelle = readFileSync(join(dir, '..', '..', 'src', 'lib', 'billing', 'tarife.ts'), 'utf8')
+  check(
+    'Die Preisliste nennt die Websites aus derselben Quelle',
+    /websitesLeistung\(/.test(tarifQuelle),
+  )
+  check(
+    '„Alles aus Starter" steht nicht mehr da',
+    !tarifQuelle.includes("'Alles aus Starter'"),
+    'eine Aufzaehlung, die nichts aufzaehlt, verkauft nichts',
+  )
+  check(
+    'Und sie liest sich fuer Menschen',
+    websitesLeistung('STARTER') === 'Eine Website, vollständig gemessen' &&
+      websitesLeistung('PRO') === 'Bis zu 5 Websites',
+    websitesLeistung('PRO'),
   )
 
   section('Ein Arbeitsbereich traegt so viele Personen wie der Tarif')

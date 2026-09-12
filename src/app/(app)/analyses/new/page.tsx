@@ -5,18 +5,23 @@ import { verwaltetEigeneZugaenge } from '@/lib/billing/zugaenge'
 import { Card } from '@/components/ui'
 import { Eye } from 'lucide-react'
 import { NewAnalysisForm } from './form'
+import { traegtWettbewerb } from '@/lib/billing/websites'
 
 export const dynamic = 'force-dynamic'
 
 export default async function NewAnalysisPage() {
   const session = await requireSession()
-  const [projects, providers] = await Promise.all([
+  const [projects, providers, bereich] = await Promise.all([
     db.project.findMany({
       where: { organizationId: session.organizationId, isArchived: false },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, url: true, locationCode: true, locationCodes: true, languageCode: true },
     }),
     availableProviders(session.organizationId),
+    db.organization.findUniqueOrThrow({
+      where: { id: session.organizationId },
+      select: { plan: true },
+    }),
   ])
 
   return (
@@ -42,7 +47,12 @@ export default async function NewAnalysisPage() {
           </div>
         </Card>
       ) : (
-        <NewAnalysisForm projects={projects} providers={providers} eigeneZugaenge={verwaltetEigeneZugaenge(session)} />
+        <NewAnalysisForm
+          projects={projects}
+          providers={providers}
+          eigeneZugaenge={verwaltetEigeneZugaenge(session)}
+          wettbewerbImTarif={traegtWettbewerb(bereich.plan)}
+        />
       )}
     </div>
   )

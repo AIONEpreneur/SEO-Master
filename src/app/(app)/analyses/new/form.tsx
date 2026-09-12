@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
-import { Globe, Search, Bot, Sparkles, Swords, Info } from 'lucide-react'
+import { Globe, Search, Bot, Sparkles, Swords, Info, Lock } from 'lucide-react'
 import { startAnalysisAction, type StartState } from '@/lib/analysis/actions'
 import { Button, Card, CardHeader, Input, Label, Select } from '@/components/ui'
 import { cn } from '@/lib/utils/cn'
@@ -65,8 +65,10 @@ export function NewAnalysisForm({
   projects,
   providers,
   eigeneZugaenge,
+  wettbewerbImTarif = true,
 }: {
   projects: Project[]
+  wettbewerbImTarif?: boolean
   providers: Record<VerwendeterAnbieter, boolean>
   /**
    * Verwaltet dieser Arbeitsbereich eigene Anbieter-Zugänge? Entscheidet nur
@@ -272,24 +274,50 @@ export function NewAnalysisForm({
               {MODULES.map((module) => {
                 const missing = module.requires.filter((p) => !providers[p])
                 const active = selected.includes(module.key)
+                /*
+                  Gesperrte Bausteine werden gezeigt, nicht versteckt.
+
+                  Das ist der beste Verkaufsmoment, den es gibt: Sie steht im
+                  Formular, sie will diesen Baustein, und sie ist einen Klick
+                  entfernt. Ihn wegzulassen verschenkt genau diesen Moment —
+                  und wer ihn nie sieht, weiss auch nicht, was ihm fehlt.
+                */
+                const gesperrt = module.key === 'COMPETITORS' && !wettbewerbImTarif
                 return (
                   <button
                     key={module.key}
                     type="button"
-                    onClick={() => toggle(module.key)}
+                    onClick={() => !gesperrt && toggle(module.key)}
+                    aria-disabled={gesperrt}
                     className={cn(
                       'flex items-start gap-3 rounded-lg border p-3 text-left transition-colors',
-                      active ? 'border-brand bg-brand-subtle' : 'border-border hover:bg-surface-muted',
+                      gesperrt
+                        ? 'cursor-not-allowed border-border bg-surface-muted opacity-70'
+                        : active
+                          ? 'border-brand bg-brand-subtle'
+                          : 'border-border hover:bg-surface-muted',
                     )}
                   >
-                    <module.icon size={17} className={cn('mt-0.5 shrink-0', active ? 'text-brand' : 'text-ink-subtle')} />
+                    <module.icon
+                      size={17}
+                      className={cn('mt-0.5 shrink-0', active && !gesperrt ? 'text-brand' : 'text-ink-subtle')}
+                    />
                     <div className="min-w-0">
-                      <p className="text-[13px] font-medium">{module.label}</p>
+                      <p className="flex items-center gap-1.5 text-[13px] font-medium">
+                        {module.label}
+                        {gesperrt && <Lock size={12} className="shrink-0 text-ink-subtle" />}
+                      </p>
                       <p className="mt-0.5 text-[12px] text-ink-muted">{module.description}</p>
-                      {missing.length > 0 && (
-                        <p className="mt-1 text-[12px] font-medium text-warn">
-                          {eigeneZugaenge ? `Braucht ${missing.join(', ')}` : 'Derzeit nicht verfügbar'}
+                      {gesperrt ? (
+                        <p className="mt-1 text-[12px] font-bold text-brand">
+                          Gehört zum grossen Tarif
                         </p>
+                      ) : (
+                        missing.length > 0 && (
+                          <p className="mt-1 text-[12px] font-medium text-warn">
+                            {eigeneZugaenge ? `Braucht ${missing.join(', ')}` : 'Derzeit nicht verfügbar'}
+                          </p>
+                        )
                       )}
                     </div>
                   </button>

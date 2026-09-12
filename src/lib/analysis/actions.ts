@@ -10,6 +10,12 @@ import { availableProviders } from '@/lib/connectors/credentials'
 import { reichtGuthaben, guthabenHinweis } from '@/lib/billing/guthaben'
 import { WEBSITE_UMFANG } from '@/lib/analysis/seiten'
 import { siehtAbrechnung } from '@/lib/billing/zugaenge'
+import {
+  passtNochEineWebsite,
+  websiteVollHinweis,
+  traegtWettbewerb,
+  WETTBEWERB_HINWEIS,
+} from '@/lib/billing/websites'
 import { detectPlatform } from '@/lib/connectors/apify'
 import { istMarkt, projektMaerkte, maerkteInWorten } from './maerkte'
 import type { ModuleKey } from './run'
@@ -59,6 +65,28 @@ export async function startAnalysisAction(_prev: StartState, formData: FormData)
   if (targetKind === 'SOCIAL_PROFILE' && !providers.APIFY) {
     return { error: 'Für Social-Profile werden Apify-Zugangsdaten benötigt. Bitte im Datentresor hinterlegen.' }
   }
+  /*
+    Der Wettbewerbsvergleich gehört zum grossen Tarif.
+
+    Die einzige Funktionsgrenze zwischen den Tarifen, und bewusst diese: Sie
+    ist mit Abstand die teuerste Abfrage der Anwendung — Wettbewerber
+    ermitteln, dann je Wettbewerber Keyword-Überschneidung und
+    Verlinkungsprofil. Und sie ist ein Reifezeichen: Wer sich mit anderen
+    vergleicht, ist über den Anfang hinaus.
+
+    Serverseitig geprüft, nicht nur im Formular ausgegraut: Eine
+    Server-Aktion ist ein öffentlicher Endpunkt.
+  */
+  if (modules.includes('COMPETITORS')) {
+    const bereich = await db.organization.findUniqueOrThrow({
+      where: { id: session.organizationId },
+      select: { plan: true },
+    })
+    if (!traegtWettbewerb(bereich.plan)) {
+      return { error: WETTBEWERB_HINWEIS }
+    }
+  }
+
   if (targetKind === 'WEBSITE' && (modules.includes('SERP') || modules.includes('COMPETITORS')) && !providers.DATAFORSEO) {
     return {
       error:
@@ -284,6 +312,24 @@ export async function createProjectAction(_prev: StartState, formData: FormData)
 
   if (gewaehlt.length === 0) {
     return { error: 'Bitte mindestens einen Markt auswählen.' }
+  }
+
+  /*
+    Passt noch eine Website in diesen Tarif?
+
+    Der häufigste Umstiegsmoment überhaupt — und er passiert genau hier,
+    nicht auf der Preisseite. Deshalb steht hier kein Fehler, sondern der
+    Grund und der Weg.
+  */
+  const bereich = await db.organization.findUniqueOrThrow({
+    where: { id: session.organizationId },
+    select: { plan: true },
+  })
+  const angelegt = await db.project.count({
+    where: { organizationId: session.organizationId, isArchived: false },
+  })
+  if (!passtNochEineWebsite({ plan: bereich.plan, angelegt })) {
+    return { error: websiteVollHinweis(bereich.plan) }
   }
 
   const platform = detectPlatform(url)
