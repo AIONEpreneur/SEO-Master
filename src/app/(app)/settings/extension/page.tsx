@@ -2,6 +2,8 @@ import { requireSession } from '@/lib/auth/session'
 import { db } from '@/lib/db'
 import { env } from '@/lib/env'
 import { Card, CardHeader, Button } from '@/components/ui'
+import { Lock } from 'lucide-react'
+import { aussenzugang, zugangsHinweis } from '@/lib/billing/zugang'
 import { TokenVerwaltung } from './token-verwaltung'
 import { widerrufeTokenAction } from './actions'
 
@@ -17,6 +19,15 @@ export const dynamic = 'force-dynamic'
  */
 export default async function ExtensionPage() {
   const session = await requireSession()
+
+  // Trägt das Abo den Zugang von aussen gerade? Die Antwort gehört auf diese
+  // Seite, denn hier entstehen die Schlüssel — und ein Schlüssel, der nicht
+  // funktioniert, ohne dass irgendwo steht warum, kostet eine Support-Mail.
+  const organisation = await db.organization.findUniqueOrThrow({
+    where: { id: session.organizationId },
+    select: { plan: true, aboStatus: true, aboLaeuftBis: true },
+  })
+  const urteil = aussenzugang(organisation)
 
   const tokens = await db.apiToken.findMany({
     where: { userId: session.id, organizationId: session.organizationId, revokedAt: null },
@@ -60,6 +71,23 @@ export default async function ExtensionPage() {
           text="Jede Abfrage aus Ebene 1 liegt auch hier — mit Verlauf, Projekten und vollständigen Berichten."
         />
       </div>
+
+      {!urteil.erlaubt && (
+        <Card className="flex items-start gap-3 border-2 border-border bg-orange p-5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-tinte bg-creme">
+            <Lock size={16} className="text-tinte" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold text-tinte">
+              Extension und KI-Anbindung ruhen gerade
+            </p>
+            <p className="mt-1 max-w-2xl text-[13px] font-medium leading-relaxed text-tinte">
+              {zugangsHinweis(urteil)} Innerhalb der App ändert sich nichts — Analysen, Recherchen
+              und Berichte bleiben da, wo sie sind.
+            </p>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <CardHeader

@@ -17,8 +17,9 @@ export function OPTIONS() {
  * Lauf wird gespeichert und taucht in der App unter Keyword-Recherche auf.
  */
 export async function POST(request: Request) {
-  const kontext = await resolveApiToken(request)
-  if (!kontext) return tokenFehler()
+  const zugang = await resolveApiToken(request)
+  if (!zugang.ok) return tokenFehler(zugang)
+  const kontext = zugang.kontext
 
   let seed: string
   try {

@@ -20,6 +20,7 @@ import { analyzeGeo, parseRobots } from '../src/lib/analysis/geo'
 import { analyzeSerp, extractPeopleAlsoAsk } from '../src/lib/analysis/serp'
 import { keywordKandidaten } from '../src/lib/analysis/run'
 import { begruessung, vorname } from '../src/lib/begruessung'
+import { aussenzugang, zugangsHinweis } from '../src/lib/billing/zugang'
 import {
   MARKTGRUPPEN,
   MAERKTE,
@@ -929,6 +930,98 @@ async function main() {
     'Bei geschlossener Registrierung sagt die Startseite das auch',
     startseite.includes('inErprobung') && startseite.includes('geschlossene'),
     'kein "Kostenlos starten" vor einer verschlossenen Tür',
+  )
+
+  // --- Zugang von aussen endet mit dem Abo ----------------------------------
+  //
+  // Die Frage aus der Praxis: Wenn jemand kündigt — funktionieren Extension
+  // und KI-Anbindung dann weiter? Sie taten es. Der Schlüssel wurde nur auf
+  // Widerruf und Kontosperre geprüft, das Abo kam darin nicht vor. Beim MCP
+  // war es am deutlichsten: Die lesenden Werkzeuge kosten nichts, also lief
+  // der Zugriff auf die eigenen Daten unbegrenzt weiter.
+  //
+  // Zwei Dinge müssen dabei stimmen, und beide sind leicht falsch zu machen:
+  // Wer noch bezahlt hat, darf nicht ausgesperrt werden, und wer nicht mehr
+  // bezahlt, darf nicht durchkommen.
+  section('Extension und KI-Anbindung hängen am Abo')
+
+  const jetztPlus = (tage: number) => new Date(Date.now() + tage * 24 * 60 * 60 * 1000)
+  const jetztMinus = (tage: number) => new Date(Date.now() - tage * 24 * 60 * 60 * 1000)
+
+  check(
+    'Ein laufendes Abo trägt',
+    aussenzugang({ plan: 'STARTER', aboStatus: 'active', aboLaeuftBis: jetztPlus(20) }).erlaubt,
+  )
+  check(
+    'Eine Probezeit auch',
+    aussenzugang({ plan: 'STARTER', aboStatus: 'trialing', aboLaeuftBis: jetztPlus(10) }).erlaubt,
+  )
+  check(
+    'Eine hakende Zahlung sperrt nicht sofort aus',
+    aussenzugang({ plan: 'STARTER', aboStatus: 'past_due', aboLaeuftBis: jetztPlus(3) }).erlaubt,
+    'eine geplatzte Lastschrift ist keine Kündigung',
+  )
+  check(
+    'Gekündigt, aber noch bezahlt: trägt bis zum Ende',
+    aussenzugang({ plan: 'STARTER', aboStatus: 'canceled', aboLaeuftBis: jetztPlus(12) }).erlaubt,
+    'bezahlt ist bezahlt',
+  )
+  check(
+    'Gekündigt und abgelaufen: Schluss',
+    !aussenzugang({ plan: 'FREE', aboStatus: 'canceled', aboLaeuftBis: jetztMinus(1) }).erlaubt,
+  )
+  check(
+    'Nie ein Abo gehabt: kein Zugang von aussen',
+    !aussenzugang({ plan: 'FREE', aboStatus: null, aboLaeuftBis: null }).erlaubt,
+  )
+  check(
+    'Interne Bereiche bleiben aussen vor',
+    aussenzugang({ plan: 'INTERNAL', aboStatus: null, aboLaeuftBis: null }).erlaubt,
+    'sie zahlen nicht und sind nicht gemeint',
+  )
+
+  // Der Hinweistext darf nie zum Erzeugen eines neuen Schlüssels raten: Der
+  // alte ist in Ordnung. Wer dem Rat folgt, hat danach zwei, die beide nicht
+  // gehen — und schreibt zu Recht eine verärgerte Mail.
+  const abgelaufen = aussenzugang({ plan: 'FREE', aboStatus: 'canceled', aboLaeuftBis: jetztMinus(1) })
+  check(
+    'Der Hinweis rät nicht zu einem neuen Schlüssel',
+    !/neuen? (Schlüssel|erzeugen)/i.test(zugangsHinweis(abgelaufen)) &&
+      zugangsHinweis(abgelaufen).includes('bleibt bestehen'),
+    zugangsHinweis(abgelaufen).slice(0, 70),
+  )
+
+  // Die Prüfung sitzt in der Token-Auflösung, nicht in den Endpunkten. Nur so
+  // kann ein neuer Endpunkt sie nicht vergessen.
+  const tokenQuelle = readFileSync(join(dir, '..', '..', 'src', 'lib', 'auth', 'api-token.ts'), 'utf8')
+  check(
+    'Der Abo-Test steht in der Token-Auflösung',
+    tokenQuelle.includes('aussenzugang('),
+    'ein neuer Endpunkt kann ihn damit nicht übersehen',
+  )
+  check(
+    'Fehlendes Abo und falscher Schlüssel sind zwei Antworten',
+    tokenQuelle.includes("grund: 'kein-zugang'") && tokenQuelle.includes("error: 'kein_zugang'"),
+    '402 statt 401 — die Anfrage stimmt, es fehlt die Bezahlung',
+  )
+
+  // Jede Aufrufstelle muss beide Fälle behandeln. Der Typ erzwingt es; diese
+  // Prüfung fängt den Fall ab, dass jemand ihn wieder aufweicht.
+  const aufrufer = [
+    'src/app/api/ext/rankings/route.ts',
+    'src/app/api/ext/research/route.ts',
+    'src/app/api/ext/status/route.ts',
+    'src/app/api/mcp/route.ts',
+    'src/app/api/mcp/[token]/route.ts',
+  ]
+  const ohnePruefung = aufrufer.filter((datei) => {
+    const quelle = readFileSync(join(dir, '..', '..', datei), 'utf8')
+    return !/\.ok\b/.test(quelle)
+  })
+  check(
+    'Alle Endpunkte werten das Urteil aus',
+    ohnePruefung.length === 0,
+    ohnePruefung.length ? ohnePruefung.join(', ') : `${aufrufer.length} Endpunkte`,
   )
 
   // --- Webhook --------------------------------------------------------------

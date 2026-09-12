@@ -18,8 +18,15 @@ export const maxDuration = 120
  */
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const kontext = (await resolveApiToken(request)) ?? (await resolveApiTokenWert(decodeURIComponent(token)))
-  if (!kontext) {
+  // Erst der Header, dann der Schlüssel aus der Adresse. Der zweite Versuch
+  // lohnt nur, wenn der erste am fehlenden Schlüssel scheiterte — steht das
+  // Abo im Weg, steht es auf beiden Wegen im Weg.
+  const ausHeader = await resolveApiToken(request)
+  const zugang = ausHeader.ok || ausHeader.grund === 'kein-zugang'
+    ? ausHeader
+    : await resolveApiTokenWert(decodeURIComponent(token))
+
+  if (!zugang.ok) {
     return Response.json(
       {
         jsonrpc: '2.0',
@@ -27,12 +34,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         error: {
           code: -32001,
           message:
-            'Der Zugangsschlüssel in der Adresse ist unbekannt oder widerrufen. In SEO-Master unter Einstellungen → Extension einen neuen erzeugen.',
+            zugang.grund === 'kein-zugang'
+              ? zugang.hinweis
+              : 'Der Zugangsschlüssel in der Adresse ist unbekannt oder widerrufen. In SEO-Master unter Einstellungen → Extension einen neuen erzeugen.',
         },
       },
-      { status: 401 },
+      // 402 statt 401: Der Schlüssel stimmt, es fehlt das Abo.
+      { status: zugang.grund === 'kein-zugang' ? 402 : 401 },
     )
   }
+  const kontext = zugang.kontext
 
   let body: unknown
   try {

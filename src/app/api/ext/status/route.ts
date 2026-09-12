@@ -16,8 +16,9 @@ export function OPTIONS() {
  * "Zugang testen" in der Extension darf beliebig oft gedrückt werden.
  */
 export async function GET(request: Request) {
-  const kontext = await resolveApiToken(request)
-  if (!kontext) return tokenFehler()
+  const ergebnis = await resolveApiToken(request)
+  if (!ergebnis.ok) return tokenFehler(ergebnis)
+  const kontext = ergebnis.kontext
 
   return extAntwort({
     ok: true,

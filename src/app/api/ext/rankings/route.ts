@@ -18,8 +18,9 @@ export function OPTIONS() {
  * unter Ranking-Abfragen.
  */
 export async function POST(request: Request) {
-  const kontext = await resolveApiToken(request)
-  if (!kontext) return tokenFehler()
+  const zugang = await resolveApiToken(request)
+  if (!zugang.ok) return tokenFehler(zugang)
+  const kontext = zugang.kontext
 
   let target: string
   try {

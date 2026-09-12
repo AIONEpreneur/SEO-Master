@@ -20,8 +20,9 @@ export const maxDuration = 120
  * OAuth-Unterstützung bestehen – auch dort ist der Schlüssel die Anmeldung.
  */
 export async function POST(request: Request) {
-  const kontext = await resolveApiToken(request)
-  if (!kontext) return nichtAngemeldet(request)
+  const zugang = await resolveApiToken(request)
+  if (!zugang.ok) return mcpAbweisung(request, zugang)
+  const kontext = zugang.kontext
 
   let body: unknown
   try {
@@ -53,9 +54,31 @@ export function GET(request: Request) {
 }
 
 async function nichtAngemeldetOder405(request: Request): Promise<Response> {
-  const kontext = await resolveApiToken(request)
-  if (!kontext) return nichtAngemeldet(request)
+  const zugang = await resolveApiToken(request)
+  if (!zugang.ok) return mcpAbweisung(request, zugang)
   return new Response(null, { status: 405, headers: { allow: 'POST' } })
+}
+
+/**
+ * Zwei Gründe, zwei Antworten.
+ *
+ * Bei einem unbekannten Schlüssel gehört der Wegweiser zum Anmelde-Fluss in
+ * die Antwort — dann verbindet sich der Client neu. Bei fehlendem Abo wäre
+ * das falsch: Die Anmeldung ist in Ordnung, und ein erneuter Anmelde-Fluss
+ * würde nur dieselbe Sperre noch einmal erreichen. Deshalb 402 und ein Satz,
+ * den der Mensch am anderen Ende lesen kann.
+ */
+function mcpAbweisung(
+  request: Request,
+  zugang: Extract<Awaited<ReturnType<typeof resolveApiToken>>, { ok: false }>,
+): Response {
+  if (zugang.grund === 'kein-zugang') {
+    return Response.json(
+      { jsonrpc: '2.0', id: null, error: { code: -32001, message: zugang.hinweis } },
+      { status: 402 },
+    )
+  }
+  return nichtAngemeldet(request)
 }
 
 export function OPTIONS() {
