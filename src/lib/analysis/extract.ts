@@ -24,6 +24,12 @@ export type PageSignals = {
    * nicht gezählt wurden. Null ist der Normalfall.
    */
   ueberschriftenAusRahmen: number
+  /**
+   * Wurde die Struktur aus einer aufbereiteten Fassung gelesen statt aus dem
+   * HTML des Servers? Dann sind Aussagen über Überschriften nicht belastbar —
+   * aufbereitete Fassungen ziehen Fremdinhalt ins Dokument hinein.
+   */
+  strukturAusZweiterHand: boolean
   /** Fremde Adressen, aus denen die Seite Inhalt einbettet. */
   fremdeHosts: string[]
   statusCode: number | null
@@ -175,6 +181,7 @@ export function extractSignals(input: {
   statusCode?: number | null
   finalUrl?: string | null
   weiterleitung?: Weiterleitung | null
+  strukturAusZweiterHand?: boolean
 }): PageSignals {
   const $ = cheerio.load(input.html)
   const url = input.url
@@ -280,6 +287,7 @@ export function extractSignals(input: {
     finalUrl: input.finalUrl ?? null,
     weiterleitung: input.weiterleitung ?? null,
     ueberschriftenAusRahmen,
+    strukturAusZweiterHand: input.strukturAusZweiterHand ?? false,
     fremdeHosts,
     statusCode: input.statusCode ?? null,
     isHttps: parsedUrl?.protocol === 'https:',

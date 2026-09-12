@@ -15,10 +15,65 @@ export function analyzeGeo(input: {
   llmMentions?: LlmTopDomainsResult | null
   robotsTxt?: { content: string | null; blocksAiCrawlers: string[] } | null
   hasSitemap?: boolean | null
+  /**
+   * Was ein einfacher Abruf ohne Browser bekommt — genau das, was ChatGPT,
+   * Perplexity und die übrigen KI-Crawler sehen.
+   */
+  einfacherAbruf?: { status: number | null; erreichbar: boolean } | null
 }): ModuleResult {
   const { signals: s, backlinks, llmMentions, robotsTxt } = input
   const findings: Finding[] = []
   const criteria: Criterion[] = []
+
+  /*
+    Die Probe, die bisher fehlte.
+
+    Der Bericht hat "keine KI-Crawler blockiert — gut crawlbar" geschrieben
+    und dafür eine gute Note vergeben, während das Werkzeug selbst nur mit
+    einem Browserdienst an einem 403 vorbeigekommen war. Das ist derselbe
+    Widerspruch wie bei der Weiterleitung, nur folgenreicher: Genau die
+    Crawlbarkeit, die hier bewertet wird, war nachweislich nicht gegeben.
+
+    robots.txt sagt, was erlaubt *wäre*. Dieser Abruf sagt, was tatsächlich
+    herauskommt. Nur das zweite zählt für eine Maschine, die keine Augen hat.
+  */
+  const abruf = input.einfacherAbruf
+  if (abruf && !abruf.erreichbar) {
+    findings.push({
+      id: 'geo-einfacher-abruf-gesperrt',
+      severity: 'critical',
+      title: `Ein einfacher Abruf bekommt HTTP ${abruf.status ?? 'keine Antwort'}`,
+      why:
+        'ChatGPT, Perplexity und die übrigen KI-Dienste holen Seiten ohne Browser — genau so, wie es ' +
+        'hier probiert wurde. Was dabei abgewiesen wird, kann in keiner KI-Antwort zitiert werden. ' +
+        'Die robots.txt erlaubt es zwar; abgewiesen wird trotzdem, meist durch einen Schutz davor ' +
+        '(Firewall, Bot-Sperre, Hoster-Voreinstellung).',
+      action:
+        'Beim Hoster oder im Schutzdienst nachsehen, welche Regel einfache Abrufe abweist, und die ' +
+        'bekannten KI-Crawler ausnehmen: GPTBot, PerplexityBot, ClaudeBot, Google-Extended.',
+      effort: 'mittel',
+      impact: 'hoch',
+      konfidenz: 'gemessen',
+      evidence: `Abruf ohne Browser: HTTP ${abruf.status ?? 'Zeitablauf'}`,
+    })
+    criteria.push({
+      key: 'einfacher-abruf',
+      label: 'Erreichbar ohne Browser',
+      score: 0,
+      weight: 0.25,
+      detail: `Ein einfacher Abruf wurde mit HTTP ${abruf.status ?? 'keiner Antwort'} abgewiesen.`,
+      status: 'fail',
+    })
+  } else if (abruf?.erreichbar) {
+    criteria.push({
+      key: 'einfacher-abruf',
+      label: 'Erreichbar ohne Browser',
+      score: 10,
+      weight: 0.25,
+      detail: 'Ein einfacher Abruf ohne Browser liefert die Seite aus — so lesen KI-Dienste sie.',
+      status: 'ok',
+    })
+  }
 
   // Allgemeine Plattformen aus der Quellenliste nehmen.
   //

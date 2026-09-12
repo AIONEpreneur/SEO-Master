@@ -116,7 +116,22 @@ export function kanonischerHinweis(urteil: KanonischUrteil): string {
  *   langfristig  Vorhanden, gültig, zeigt auf eine erreichbare Variante.
  *                Das kann genau richtig sein — nachsehen lohnt, mehr nicht.
  */
-export function kanonischerBefund(urteil: KanonischUrteil): Finding | null {
+export function kanonischerBefund(
+  urteil: KanonischUrteil,
+  /**
+   * Was beim Abruf tatsächlich gemessen wurde.
+   *
+   * Ohne das schrieb der Befund „Beide Adressen antworten" — eine Behauptung,
+   * die das Werkzeug nie geprüft hatte. Im gemeldeten Fall stimmte sie nicht:
+   * Die eine Adresse leitete seit Wochen auf die andere um. Wer dem Rat
+   * folgte, erzeugte genau den Schaden, den der Bericht beschrieb.
+   */
+  kontext?: { angefragt: string; ausgeliefert: string; weitergeleitet: boolean },
+): Finding | null {
+  const belege = kontext
+    ? `angefragt: ${kontext.angefragt} · ausgeliefert: ${kontext.ausgeliefert} · Canonical: ${'wert' in urteil ? urteil.wert : '—'}`
+    : undefined
+
   switch (urteil.art) {
     case 'stimmig':
       return null
@@ -139,13 +154,21 @@ export function kanonischerBefund(urteil: KanonischUrteil): Finding | null {
         title: urteil.nurWww
           ? 'Canonical zeigt auf die andere www-Variante'
           : 'Canonical zeigt auf eine andere Domain',
-        why: `Ausgeliefert wurde ${urteil.eigener}, das Canonical benennt aber ${urteil.ziel}. Beide Adressen antworten – Google sieht dieselbe Seite zweimal und verteilt die Signale auf beide.`,
+        why:
+          `Ausgeliefert wurde ${urteil.eigener}, das Canonical benennt aber ${urteil.ziel}.` +
+          // Nur behaupten, was gemessen wurde. Ob beide Adressen antworten,
+          // weiss dieser Lauf nicht — er hat genau eine abgerufen.
+          ' Ob beide Adressen eigenständig antworten oder eine auf die andere umleitet, wurde nicht geprüft.' +
+          ' Antworten beide, sieht Google dieselbe Seite zweimal.',
         action: urteil.nurWww
-          ? `Eine Variante festlegen und die andere per 301 dorthin umleiten: entweder alles auf ${urteil.ziel} oder alles auf ${urteil.eigener}. Das Canonical muss danach auf die Adresse zeigen, die auch wirklich ausgeliefert wird.`
+          ? `Zuerst im Browser prüfen, ob ${urteil.eigener} bereits auf ${urteil.ziel} umleitet. Wenn ja, ist alles in Ordnung — dann bitte nichts ändern. Wenn nein: eine Variante festlegen und die andere per 301 dorthin umleiten, und das Canonical auf die Adresse setzen, die ausgeliefert wird.`
           : `Prüfen, ob der Verweis auf ${urteil.ziel} gewollt ist. Wenn nicht, das Canonical auf die eigene Adresse ${urteil.eigener} setzen – sonst gibt diese Seite ihre Rankings an eine fremde Domain ab.`,
         effort: 'gering',
         impact: 'hoch',
-        evidence: urteil.wert,
+        // Ohne gemessene Abrufkette ist das eine Ableitung, keine Messung —
+        // und darf damit nicht als Sofortmassnahme oben stehen.
+        konfidenz: kontext ? 'gemessen' : 'abgeleitet',
+        evidence: belege ?? urteil.wert,
       }
 
     case 'anderes-protokoll':
@@ -157,7 +180,7 @@ export function kanonischerBefund(urteil: KanonischUrteil): Finding | null {
         action: 'Das Canonical auf die https-Adresse dieser Seite setzen und alle http-Aufrufe per 301 auf https umleiten.',
         effort: 'gering',
         impact: 'hoch',
-        evidence: urteil.wert,
+        evidence: belege ?? urteil.wert,
       }
 
     case 'andere-seite':
@@ -169,7 +192,7 @@ export function kanonischerBefund(urteil: KanonischUrteil): Finding | null {
         action: `Prüfen, ob ${urteil.ziel} tatsächlich die maßgebliche Fassung ist. Wenn diese Seite eigenständig ranken soll, das Canonical auf sie selbst setzen.`,
         effort: 'gering',
         impact: 'gering',
-        evidence: urteil.wert,
+        evidence: belege ?? urteil.wert,
       }
 
     case 'ungueltig':

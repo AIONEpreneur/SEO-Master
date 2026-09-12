@@ -31,6 +31,8 @@ Fachliche Festlegungen, die du nicht überschreiben darfst:
 - Unter meta.abruf steht, welche Adresse angefragt und welche tatsächlich ausgeliefert wurde. Das ist die einzige Quelle dazu. Steht dort weitergeleitet: true, dann gibt es diese Weiterleitung — schreibe an keiner Stelle des Berichts, beide Varianten seien erreichbar oder es gebe keine Weiterleitung. Beurteilt wurde die ausgelieferte Adresse, nicht die angefragte.
 - Unter meta.fremdinhalt stehen fremde Adressen, aus denen die Seite Inhalt einbettet. Dieser Inhalt gehört nicht zur Seite: Google wertet ihn nicht als ihren Inhalt, und die Betreiberin kann ihn über ihre Seite weder ändern noch "direkt einbinden". Empfiehl niemals, den Inhalt eines fremden Rahmens zu übernehmen, umzuschreiben oder auszuzeichnen.
 - Jede Massnahme muss ausführbar sein von jemandem, der ausschliesslich Zugriff auf diese Website hat. Was fremde Server, fremde Inhalte oder das Verhalten von Google selbst betrifft, ist keine Massnahme, sondern eine Beobachtung — und darf nicht als Priorität erscheinen.
+- Zahlen von Datenanbietern (Keywords in den Top 100, geschätzte Zugriffe, verweisende Domains, Spam-Score) sind Schätzwerte mit eigenem Aktualisierungsrhythmus. Sie springen zwischen zwei Läufen, ohne dass sich an der Website etwas geändert hat. Deute eine Veränderung gegenüber einem früheren Lauf NIEMALS als Wachstum oder Einbruch — nenne sie als Schätzwert und verweise für belastbare Zahlen auf die Search Console.
+- Was nicht gemessen wurde, wird nicht behauptet. Steht unter meta.abruf oder in skipped, dass etwas nicht geprüft werden konnte, dann schreibe das — und leite daraus keinen Mangel der Website ab. Ein Abruf, der bei uns scheiterte, ist unser Problem, nicht ihres.
 - Datumsangaben: Als Datum der Seite gelten ausschliesslich die Werte unter dates. Ein Datum, das irgendwo im Fliesstext vorkommt, ist Inhalt und kein Seitendatum — leite daraus nichts ab.`
 
 /**
@@ -226,6 +228,18 @@ export function buildDeterministicReport(result: AnalysisResult): string {
     )
   }
   lines.push(`**Geprüftes Hauptkeyword:** ${keywordZeile(result)}`)
+  // Schätzwerte als Schätzwerte kennzeichnen. Zwischen zwei Läufen sprangen
+  // dieselben Kennzahlen um die Hälfte, ohne dass sich an der Website etwas
+  // geändert hätte — ohne diesen Satz liest sich das wie ein Erfolg.
+  if (result.meta.providersUsed.includes('DataForSEO')) {
+    lines.push(
+      '**Zu den Marktzahlen:** Keywords, geschätzte Zugriffe, verweisende Domains und Spam-Score sind ' +
+        'Schätzwerte von DataForSEO, abgerufen am ' +
+        `${new Date(result.meta.analyzedAt).toLocaleDateString('de-DE')}. Sie werden beim Anbieter in ` +
+        'eigenen Abständen aktualisiert und springen deshalb zwischen zwei Läufen, ohne dass sich an der ' +
+        'Website etwas geändert hat. Belastbar sind allein die Zahlen der Search Console.',
+    )
+  }
   lines.push(
     `**Datenquellen:** ${
       result.meta.providersUsed.length

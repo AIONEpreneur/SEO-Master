@@ -135,3 +135,29 @@ export function widersprueche(markdown: string, result: AnalysisResult): string[
 
   return gefunden
 }
+
+/**
+ * Nur Gemessenes darf sofort sein.
+ *
+ * Die härteste Regel aus der Praxis-Rückmeldung, und die einzige, die
+ * verhindert, dass eine Vermutung jemandem die Website kaputtmacht. Ein
+ * Befund, der nicht selbst gemessen wurde, kann trotzdem richtig und
+ * wichtig sein — er darf nur nicht an die Spitze einer Liste, der man
+ * ungeprüft folgt.
+ *
+ * Herabgestuft, nicht gelöscht: Der Hinweis bleibt, er trägt nur die
+ * Bitte, vorher nachzusehen.
+ */
+export function nurGemessenesIstSofort(findings: Finding[]): Finding[] {
+  return findings.map((befund) => {
+    const konfidenz = befund.konfidenz ?? 'gemessen'
+    if (konfidenz === 'gemessen' || befund.severity !== 'critical') return befund
+    return {
+      ...befund,
+      severity: 'longterm',
+      action:
+        `${befund.action} Dieser Befund ist ${konfidenz}, nicht gemessen — bitte im Browser ` +
+        'gegenprüfen, bevor du etwas änderst.',
+    }
+  })
+}

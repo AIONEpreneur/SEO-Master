@@ -142,6 +142,20 @@ export function analyzeSeo(input: {
         effort: 'gering',
         impact: 'hoch',
       })
+    } else if (s.h1.length > 1 && s.strukturAusZweiterHand) {
+      /*
+        Mehrere H1 — aber die Struktur stammt aus zweiter Hand.
+
+        Aufbereitete Fassungen ziehen Inhalt aus eingebetteten Rahmen ins
+        Dokument. Genau so entstand der Befund "zwei H1", dessen zweite in
+        Wahrheit im Newsletter-Formular eines fremden Anbieters stand. Aus
+        dieser Quelle darf kein Mangel behauptet werden: Die Betreiberin
+        sucht sonst in ihrem Quelltext nach etwas, das dort nicht steht.
+      */
+      score = 6
+      detail =
+        `${s.h1.length} H1 gezählt — allerdings in einer aufbereiteten Fassung, die Inhalt aus ` +
+        'eingebetteten Rahmen mitführen kann. Nicht als Mangel gewertet.'
     } else if (s.h1.length > 1) {
       score = 4
       detail = `${s.h1.length} H1-Überschriften – die Hierarchie ist unklar.`
@@ -210,7 +224,19 @@ export function analyzeSeo(input: {
   // Canonical
   {
     const urteil = beurteileKanonisch({ canonical: s.canonical, url: s.url, finalUrl: s.finalUrl })
-    const befund = kanonischerBefund(urteil)
+    // Die gemessene Abrufkette mitgeben: Sie macht aus einer Vermutung eine
+    // Messung — und schreibt die drei Werte in den Befund, an denen der
+    // Fehler in der Praxis von selbst aufgefallen wäre.
+    const befund = kanonischerBefund(
+      urteil,
+      s.weiterleitung
+        ? {
+            angefragt: s.weiterleitung.angefragt,
+            ausgeliefert: s.weiterleitung.ausgeliefert,
+            weitergeleitet: s.weiterleitung.gefolgt,
+          }
+        : undefined,
+    )
     if (befund) findings.push(befund)
     const score = kanonischeNote(urteil)
     technical.push({

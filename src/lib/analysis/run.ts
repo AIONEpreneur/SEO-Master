@@ -22,7 +22,7 @@ import { waehleSeiten, seitenErgebnis, type SeitenErgebnis } from './seiten'
 import { wiederkehrendeBefunde } from './wiederkehrend'
 import { tragenderBegriff, wortfolge } from './begriffe'
 import { marktName } from './maerkte'
-import { rahmenBefund, entschaerfeUnmoegliche } from './machbar'
+import { rahmenBefund, entschaerfeUnmoegliche, nurGemessenesIstSofort } from './machbar'
 import { beurteile, messbare, begriffsBefund, beurteileSerpUmfeld, VOLUMEN_SCHWELLE, type BegriffsUrteil } from './keyword-pruefung'
 import { generateReport, sortFindings } from './report'
 import type { AnalysisResult, ModuleResult } from './types'
@@ -65,6 +65,13 @@ function leseEndAdresse(meta: Record<string, unknown> | null | undefined): strin
     if (typeof wert === 'string' && /^https?:\/\//i.test(wert)) return wert
   }
   return null
+}
+
+/** Eine Adressliste für den Bericht: benennen, nicht nur zählen. */
+function liste(einleitung: string, adressen: string[]): string {
+  const gezeigt = adressen.slice(0, 5).join(', ')
+  const rest = adressen.length > 5 ? ` und ${adressen.length - 5} weitere` : ''
+  return `${einleitung}: ${gezeigt}${rest}`
 }
 
 const GRUNDGEBUEHR = 3
@@ -184,6 +191,10 @@ export async function runAnalysis(params: {
     // Die ausgelieferte Adresse. Solange nichts anderes gemessen wurde, ist
     // sie die angefragte — sobald ein Abruf etwas anderes meldet, gilt das.
     let endAdresse: string | null = null
+    /** Firecrawls aufbereitete Fassung — nur als letzte Rückfallebene. */
+    let gerenderteFassung: string | null = null
+    /** Stammt die Struktur aus der aufbereiteten Fassung statt vom Server? */
+    let strukturAusZweiterHand = false
 
     if (firecrawl) {
       try {
@@ -192,10 +203,23 @@ export async function runAnalysis(params: {
         // Nur das rohe HTML enthält verlässlich den <head>. Fehlt es, ist
         // die aufbereitete Fassung unbrauchbar für die Kopfbereich-Prüfung –
         // dann lieber direkt abrufen als Fehlendes zu melden, das da ist.
+        /*
+          Die Struktur kommt aus dem HTML des Servers — nie aus der
+          gerenderten Fassung.
+
+          Firecrawls `html` ist aufbereitet und zieht Inhalte aus
+          eingebetteten Rahmen in das Dokument hinein. Genau daraus entstand
+          der Befund "zwei H1", von denen die zweite in Wahrheit im
+          Newsletter-Formular eines fremden Anbieters stand — im Quelltext
+          der Website kommt sie kein einziges Mal vor. Für Google ist ein
+          iframe ein eigenes Dokument; für uns muss es das auch sein.
+
+          Fehlt `rawHtml`, wird unten direkt nachgeladen. Erst wenn auch das
+          scheitert, greifen wir zur gerenderten Fassung — und merken uns,
+          dass die Struktur aus zweiter Hand stammt.
+        */
         html = scraped?.rawHtml ?? null
-        if (!html && scraped?.html && /<head[\s>]/i.test(scraped.html)) {
-          html = scraped.html
-        }
+        gerenderteFassung = scraped?.html ?? null
         // Der gerenderte Text kommt aus dem gerenderten HTML, nicht aus dem
         // Markdown: Markdown liest eingebettete Frames (Newsletter-Formulare,
         // Buchungs-Widgets) mit, und deren Text ist nicht der Inhalt der
@@ -233,6 +257,19 @@ export async function runAnalysis(params: {
           reason: 'Keine Firecrawl-Zugangsdaten – gemessen wurde nur das ausgelieferte HTML',
         })
       }
+    }
+
+    // Letzte Rückfallebene: Ohne Server-HTML ist die aufbereitete Fassung
+    // besser als gar nichts — aber sie wird als solche gekennzeichnet.
+    if (!html && gerenderteFassung && /<head[\s>]/i.test(gerenderteFassung)) {
+      html = gerenderteFassung
+      strukturAusZweiterHand = true
+      skipped.push({
+        module: 'Seitenaufbau',
+        reason:
+          'Der Quelltext des Servers war nicht abrufbar; ausgewertet wurde die aufbereitete Fassung. ' +
+          'Aussagen über die Überschriften-Struktur sind dadurch weniger belastbar.',
+      })
     }
 
     /*
@@ -334,6 +371,7 @@ export async function runAnalysis(params: {
       statusCode,
       finalUrl: ausgeliefert,
       weiterleitung,
+      strukturAusZweiterHand,
     })
 
     // Letzte Rückfallebene: Firecrawl liefert Title und Description getrennt
@@ -357,6 +395,29 @@ export async function runAnalysis(params: {
 
     raw.signals = { ...signals, text: signals.text.slice(0, 2000) }
   }
+
+  /*
+    Was sieht ein KI-Crawler wirklich?
+
+    Ein eigener, bewusst schlichter Abruf: kein Browser, kein Rendern, ein
+    Bot-Kennzeichen im User-Agent. Genau so holen ChatGPT und Perplexity
+    eine Seite. Die robots.txt sagt nur, was erlaubt wäre — dieser Abruf
+    sagt, was tatsächlich herauskommt.
+  */
+  let einfacherAbruf: { status: number | null; erreichbar: boolean } | null = null
+  try {
+    const probe = await fetch(signals.finalUrl ?? targetUrl, {
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; SEO-Master-Crawlertest/1.0; +Sichtbarkeitsanalyse)' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(20_000),
+    })
+    einfacherAbruf = { status: probe.status, erreichbar: probe.status < 400 }
+  } catch {
+    // Kein Ergebnis ist kein Befund: Ein Zeitablauf bei uns darf keine
+    // Sperre der Seite behaupten.
+    einfacherAbruf = null
+  }
+  raw.einfacherAbruf = einfacherAbruf
 
   // robots.txt: entscheidet darüber, ob KI-Crawler überhaupt lesen dürfen.
   await step('robots.txt wird geprüft', 18)
@@ -600,14 +661,35 @@ export async function runAnalysis(params: {
   // ohne die Domain-Daten, die schon erhoben sind.
   const seitenLimit = Math.max(1, params.pageLimit ?? 1)
   let seiten: SeitenErgebnis[] = []
-  const nichtLadbar: string[] = []
+  /*
+    Zwei verschiedene Listen, und das ist der Kern.
+
+    "nicht ladbar" war bisher ein Topf für alles, was schiefging — ein echter
+    404 ebenso wie ein Zeitablauf bei unserem Dienstleister. Im Bericht stand
+    dann "diese Seiten sind nicht erreichbar", und die Betreiberin suchte auf
+    ihrer Website nach einem Fehler, den es nicht gab. Der Beleg dafür stand
+    in der Praxis-Rückmeldung: Zwei Läufe derselben Domain am selben Tag
+    nannten elf Seiten, von denen nur zwei in beiden Listen standen. So
+    verhält sich kein 404 — so verhält sich ein Zeitablauf.
+
+    Also getrennt: `fehlend` sind Seiten, die auf beiden Schreibweisen mit
+    einem Fehlerstatus antworteten — das ist ein Befund über die Website.
+    `ungeprueft` sind Seiten, bei denen unser Abruf scheiterte — das ist ein
+    Befund über uns und gehört nicht als Mangel in den Bericht.
+  */
+  const fehlend: string[] = []
+  const ungeprueft: string[] = []
+
+  type Ladeergebnis =
+    | { ok: true; geladen: Awaited<ReturnType<FirecrawlClient['scrape']>>; seitenHtml: string }
+    | { ok: false; grund: 'nicht-vorhanden' | 'nicht-geprueft' }
 
   if (seitenLimit > 1 && firecrawl) {
     await step('Weitere Seiten werden gelesen', 55)
     try {
       const gefunden = await firecrawl.map(targetUrl, 200)
       const adressen = waehleSeiten({ startUrl: targetUrl, gefunden, limit: seitenLimit })
-      raw.seitenauswahl = { gefunden: gefunden.length, gewaehlt: adressen.length, nichtLadbar }
+      raw.seitenauswahl = { gefunden: gefunden.length, gewaehlt: adressen.length, fehlend, ungeprueft }
 
       // Eine Unterseite laden – mit zweitem Versuch über den Schrägstrich.
       //
@@ -617,7 +699,7 @@ export async function runAnalysis(params: {
       // mit einer Weiterleitung oder direkt mit 404. Deshalb gilt: Ein
       // Fehlerstatus wird nie ausgewertet (eine 404-Seite ist kein Inhalt),
       // sondern löst genau einen Versuch mit der anderen Fassung aus.
-      const ladeSeite = async (adresse: string) => {
+      const ladeSeite = async (adresse: string): Promise<Ladeergebnis> => {
         const versuche = [adresse]
         const mitSchraegstrich = adresse.includes('?')
           ? null
@@ -626,19 +708,33 @@ export async function runAnalysis(params: {
             : `${adresse}/`
         if (mitSchraegstrich) versuche.push(mitSchraegstrich)
 
+        // Warum ein Fehlschlag passierte, entscheidet, was im Bericht steht.
+        // Ein 404 auf beiden Schreibweisen ist ein Befund über die Website.
+        // Ein Zeitablauf ist ein Befund über uns.
+        let grund: 'nicht-vorhanden' | 'nicht-geprueft' = 'nicht-vorhanden'
+
         for (const versuch of versuche) {
           try {
             const geladen = await firecrawl.scrape(versuch)
             const status = geladen?.metadata?.statusCode ?? null
-            if (status !== null && status >= 400) continue
+            if (status !== null && status >= 400) {
+              // 401/403 sind Sperren, keine fehlenden Seiten.
+              if (status === 401 || status === 403 || status >= 500) grund = 'nicht-geprueft'
+              continue
+            }
             const seitenHtml = geladen?.rawHtml ?? geladen?.html
-            if (!seitenHtml) continue
-            return { geladen, seitenHtml }
+            if (!seitenHtml) {
+              grund = 'nicht-geprueft'
+              continue
+            }
+            return { ok: true, geladen, seitenHtml }
           } catch {
+            // Zeitablauf, Netzfehler, Anbieterlimit — alles unsere Seite.
+            grund = 'nicht-geprueft'
             continue
           }
         }
-        return null
+        return { ok: false, grund }
       }
 
       // Gebündelt zu vieren: schnell genug, ohne die Zielseite zu fluten.
@@ -647,7 +743,10 @@ export async function runAnalysis(params: {
         const ergebnisse = await Promise.all(
           gruppe.map(async (adresse): Promise<SeitenErgebnis | null> => {
             const ergebnis = await ladeSeite(adresse)
-            if (!ergebnis) return null
+            if (!ergebnis.ok) {
+              ;(ergebnis.grund === 'nicht-vorhanden' ? fehlend : ungeprueft).push(adresse)
+              return null
+            }
             const { geladen, seitenHtml } = ergebnis
             const s = extractSignals({
               url: adresse,
@@ -663,11 +762,6 @@ export async function runAnalysis(params: {
             })
           }),
         )
-        // Ein blosser Zähler ("3 Seiten liessen sich nicht laden") ist nicht
-        // verwertbar – erst der Name macht den Hinweis prüfbar.
-        ergebnisse.forEach((e, i) => {
-          if (e === null) nichtLadbar.push(gruppe[i])
-        })
         seiten.push(...ergebnisse.filter((e): e is SeitenErgebnis => e !== null))
         await step('Weitere Seiten werden gelesen', 55 + Math.round(((i + 4) / adressen.length) * 4))
       }
@@ -698,11 +792,42 @@ export async function runAnalysis(params: {
     moduleResults.push(analyzeAeo({ signals, serp: serps[0]?.result ?? null, peopleAlsoAsk: [...new Set(paa)] }))
   }
   if (modules.includes('GEO')) {
-    moduleResults.push(analyzeGeo({ signals, backlinks, llmMentions, robotsTxt: robots }))
+    moduleResults.push(analyzeGeo({ signals, backlinks, llmMentions, robotsTxt: robots, einfacherAbruf }))
   }
   if (modules.includes('SERP')) {
+    /*
+      Keine Platzierungsnote auf einem Begriff, den niemand sucht.
+
+      Der Fall aus der Praxis: Ohne vorgegebenes Keyword leitete die Analyse
+      "zeige systeme denen" aus der Seite ab — ein Satzfragment ohne
+      messbares Suchvolumen. Daraus wurde eine SERP-Note von 3,8, und die
+      floss in die Gesamtnote ein. Benotet wurde damit nichts als die eigene
+      Vermutung; die Seite war daran unschuldig.
+
+      Die Regel: Wurde der Begriff abgeleitet statt vorgegeben und hat er
+      kein messbares Volumen, entsteht keine Note. Nicht null, nicht
+      geschätzt — gar keine. Die Gesamtnote rechnet dann über die übrigen
+      Bausteine, und der Bericht sagt, was zu tun wäre.
+
+      Vorgegebene Begriffe bleiben unangetastet: Wer einen Begriff eintippt,
+      hat entschieden, und bekommt auch für einen seltenen Begriff seine
+      Messung.
+    */
+    const keinBelastbarerBegriff =
+      keywordQuelle !== 'vorgegeben' &&
+      (messbare(begriffsUrteile).length === 0 || rankedKeywords === null) &&
+      serps.length === 0
+
     if (!dfs || !domain) {
       skipped.push({ module: 'SERP', reason: 'Ohne DataForSEO-Zugangsdaten nicht möglich' })
+    } else if (keinBelastbarerBegriff) {
+      skipped.push({
+        module: 'SERP',
+        reason:
+          'Kein Suchbegriff hinterlegt, und der aus der Seite abgeleitete hat kein messbares ' +
+          'Suchvolumen. Eine Platzierungsnote darauf wäre eine Note auf eine Vermutung — für eine ' +
+          'Bewertung bitte beim nächsten Lauf eigene Suchbegriffe angeben.',
+      })
     } else {
       moduleResults.push(
         analyzeSerp({ domain, serps, rankedKeywords, domainRank, begriffsUrteile, begriffsAlternativen }),
@@ -824,7 +949,7 @@ export async function runAnalysis(params: {
     if (seoModul) seoModul.findings = [...seoModul.findings, rahmen]
   }
   for (const modul of moduleResults) {
-    modul.findings = entschaerfeUnmoegliche(modul.findings, signals)
+    modul.findings = nurGemessenesIstSofort(entschaerfeUnmoegliche(modul.findings, signals))
   }
 
   const result = assemble({
@@ -860,14 +985,33 @@ export async function runAnalysis(params: {
         `${1 + seiten.length} Seiten derselben Domain. Die Bausteine im Detail beziehen sich auf die ` +
         `eingegebene Seite; jede weitere Seite wurde nach denselben Regeln bewertet (ohne Markt-Daten, ` +
         `die je Domain einmal erhoben werden).` +
-        (nichtLadbar.length > 0
-          ? ` Nicht ladbar: ${nichtLadbar.slice(0, 5).join(', ')}${nichtLadbar.length > 5 ? ` und ${nichtLadbar.length - 5} weitere` : ''}.`
+        (fehlend.length > 0 ? ` ${liste('Antwortete mit einem Fehler', fehlend)}.` : '') +
+        (ungeprueft.length > 0
+          ? ` ${ungeprueft.length === 1 ? 'Eine Seite' : `${ungeprueft.length} Seiten`} konnten wir nicht abrufen — das sagt nichts über die Seite aus.`
           : ''),
     }
-    if (nichtLadbar.length > 0) {
+
+    /*
+      Zwei verschiedene Sätze, und der Unterschied ist der ganze Punkt.
+
+      Was auf beiden Schreibweisen mit einem Fehler antwortet, ist ein Befund
+      über die Website. Was an unserem Abruf scheiterte, ist ein Befund über
+      uns — und darf nicht so klingen, als sei mit der Seite etwas nicht in
+      Ordnung. Wer dafür Geld verlangt, darf Kundinnen keinen Mangel melden,
+      den sie nicht haben.
+    */
+    if (fehlend.length > 0) {
       skipped.push({
         module: 'Seitenabruf',
-        reason: `Nicht ladbar: ${nichtLadbar.slice(0, 5).join(', ')}${nichtLadbar.length > 5 ? ` und ${nichtLadbar.length - 5} weitere` : ''}`,
+        reason: `${liste('Antwortete mit einem Fehlerstatus (beide Schreibweisen probiert)', fehlend)}`,
+      })
+    }
+    if (ungeprueft.length > 0) {
+      skipped.push({
+        module: 'Seitenabruf',
+        reason:
+          `${liste('Von uns nicht abrufbar — Zeitablauf oder Sperre beim Abruf, nicht notwendig ein Mangel der Seite', ungeprueft)}. ` +
+          'Diese Seiten sind in der Bewertung nicht enthalten.',
       })
     }
   }

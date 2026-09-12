@@ -19,6 +19,23 @@ export type Finding = {
   effort: 'gering' | 'mittel' | 'hoch'
   impact: 'gering' | 'mittel' | 'hoch'
   evidence?: string
+  /**
+   * Wie sicher ist dieser Befund?
+   *
+   * - `gemessen`: direkt aus dem Quelltext oder einer Anbieterzahl abgelesen.
+   * - `abgeleitet`: aus Gemessenem geschlossen, aber nicht selbst gemessen.
+   * - `vermutet`: plausibel, aber von aussen nicht entscheidbar.
+   *
+   * Der Grund für dieses Feld steht in der Praxis-Rückmeldung: Alle Befunde
+   * standen gleichrangig nebeneinander, im selben Ton der Gewissheit — auch
+   * die, bei denen das Werkzeug die Seite nur von aussen sah. Wer dem
+   * stärksten Alarm folgt und dabei seine Website beschädigt, kommt nicht
+   * wieder. Deshalb gilt: **Nur Gemessenes darf "sofort" heissen.**
+   *
+   * Fehlt die Angabe, gilt `gemessen` — die allermeisten Befunde lesen
+   * tatsächlich einen Wert ab.
+   */
+  konfidenz?: 'gemessen' | 'abgeleitet' | 'vermutet'
 }
 
 export type Criterion = {

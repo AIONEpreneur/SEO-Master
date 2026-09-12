@@ -27,7 +27,7 @@ import {
   lohntZweiterVersuch,
   beschreibeWeiterleitung,
 } from '../src/lib/analysis/abruf'
-import { rahmenBefund, entschaerfeUnmoegliche, widersprueche } from '../src/lib/analysis/machbar'
+import { rahmenBefund, entschaerfeUnmoegliche, widersprueche, nurGemessenesIstSofort } from '../src/lib/analysis/machbar'
 import {
   PLAETZE,
   plaetzeGrenze,
@@ -2557,6 +2557,179 @@ async function main() {
     /kein Seitendatum/.test(prompt),
   )
 
+  section('Kein Mangel gemeldet, der keiner ist')
+
+  /*
+    Die schärfste Anforderung überhaupt, und sie kommt aus dem Verkauf:
+    Solange Kirsten ihre eigenen Seiten prüft, ist ein Falschbefund ärgerlich.
+    Sobald jemand dafür bezahlt, ist er ein Vertrauensbruch — besonders, wenn
+    er zu einer Änderung rät, die die Website beschädigt.
+
+    Jede Prüfung hier steht für einen Befund, den das Werkzeug gemeldet hat,
+    obwohl er nicht existierte.
+  */
+
+  // Der schlimmste Fall: Das Canonical zeigt auf www, die Seite leitet
+  // dorthin um — und der Bericht nannte das mit höchster Priorität einen
+  // Konflikt. Wer dem Rat folgte, baute den Schaden erst ein.
+  const mitUmleitung = beurteileKanonisch({
+    canonical: 'https://www.beispiel.de/',
+    url: 'https://beispiel.de/',
+    finalUrl: 'https://www.beispiel.de/',
+  })
+  check(
+    'Canonical auf www ist kein Konflikt, wenn die Seite dorthin umleitet',
+    mitUmleitung.art === 'stimmig' && kanonischerBefund(mitUmleitung) === null,
+    'genau dieser Befund stand als Sofortmassnahme im Bericht — und war keiner',
+  )
+
+  // Entsteht der Befund doch, darf er nicht behaupten, was er nicht geprüft hat.
+  const ohneKontext = kanonischerBefund(
+    beurteileKanonisch({ canonical: 'https://www.beispiel.de/', url: 'https://beispiel.de/' }),
+  )
+  check(
+    'Der Befund behauptet nicht mehr, beide Adressen würden antworten',
+    !!ohneKontext && !/Beide Adressen antworten/i.test(ohneKontext.why),
+    ohneKontext?.why.slice(0, 80),
+  )
+  check(
+    'Er rät erst zum Nachsehen, dann zum Ändern',
+    !!ohneKontext && /zuerst im Browser prüfen/i.test(ohneKontext.action),
+    'sonst erzeugt die Massnahme den Zustand, den sie beschreibt',
+  )
+  check(
+    'Ohne gemessene Abrufkette gilt er als abgeleitet',
+    ohneKontext?.konfidenz === 'abgeleitet',
+  )
+  const mitKontext = kanonischerBefund(
+    beurteileKanonisch({ canonical: 'https://fremd.de/', url: 'https://beispiel.de/' }),
+    { angefragt: 'https://beispiel.de/', ausgeliefert: 'https://beispiel.de/', weitergeleitet: false },
+  )
+  check(
+    'Mit Abrufkette führt er die drei Werte mit',
+    !!mitKontext?.evidence &&
+      mitKontext.evidence.includes('angefragt:') &&
+      mitKontext.evidence.includes('ausgeliefert:') &&
+      mitKontext.evidence.includes('Canonical:'),
+    mitKontext?.evidence,
+    )
+
+  // Nur Gemessenes darf sofort sein.
+  const vermutet = nurGemessenesIstSofort([
+    {
+      id: 'a', severity: 'critical', title: 'Etwas Vermutetes', why: 'x', action: 'Tu dies.',
+      effort: 'gering', impact: 'hoch', konfidenz: 'vermutet',
+    },
+    {
+      id: 'b', severity: 'critical', title: 'Etwas Gemessenes', why: 'x', action: 'Tu das.',
+      effort: 'gering', impact: 'hoch', konfidenz: 'gemessen',
+    },
+    {
+      id: 'c', severity: 'critical', title: 'Ohne Angabe', why: 'x', action: 'Tu jenes.',
+      effort: 'gering', impact: 'hoch',
+    },
+  ])
+  check('Ein vermuteter Befund ist nicht mehr sofort', vermutet[0].severity === 'longterm')
+  check('Er bittet ums Gegenprüfen', /im Browser.*gegenprüfen/i.test(vermutet[0].action))
+  check('Ein gemessener bleibt sofort', vermutet[1].severity === 'critical')
+  check(
+    'Ohne Angabe gilt gemessen',
+    vermutet[2].severity === 'critical',
+    'die allermeisten Befunde lesen tatsächlich einen Wert ab',
+  )
+
+  // Struktur aus zweiter Hand darf keinen Mangel behaupten.
+  const zweiteHand = extractSignals({
+    url: 'https://beispiel.de/',
+    strukturAusZweiterHand: true,
+    html: `<html><head><title>Seite</title></head><body>
+      <h1>Meine Überschrift</h1><h1>Trage dich in meinen Newsletter ein</h1>
+      <p>${'Wort '.repeat(100)}</p></body></html>`,
+  })
+  check(
+    'Zwei H1 aus einer aufbereiteten Fassung sind kein Befund',
+    !analyzeSeo({ signals: zweiteHand }).findings.some((f) => f.id === 'seo-h1-multiple'),
+    'die zweite stand im Newsletter-Formular eines fremden Anbieters',
+  )
+  const ersterHand = extractSignals({
+    url: 'https://beispiel.de/',
+    html: `<html><head><title>Seite</title></head><body>
+      <h1>Eins</h1><h1>Zwei</h1><p>${'Wort '.repeat(100)}</p></body></html>`,
+  })
+  check(
+    'Aus dem Quelltext des Servers schon',
+    analyzeSeo({ signals: ersterHand }).findings.some((f) => f.id === 'seo-h1-multiple'),
+    'sonst wäre die Prüfung zahnlos',
+  )
+
+  // Was ein einfacher Abruf bekommt, gehört in die KI-Bewertung.
+  const gesperrt = analyzeGeo({
+    signals: ersterHand,
+    robotsTxt: parseRobots('User-agent: *\nAllow: /'),
+    einfacherAbruf: { status: 403, erreichbar: false },
+  })
+  check(
+    'Ein 403 beim einfachen Abruf steht in der KI-Bewertung',
+    gesperrt.findings.some((f) => f.id === 'geo-einfacher-abruf-gesperrt'),
+    'die robots.txt erlaubt es — abgewiesen wird trotzdem',
+  )
+  check(
+    'Und drückt die Note dort, wo sie es soll',
+    gesperrt.score < analyzeGeo({
+      signals: ersterHand,
+      robotsTxt: parseRobots('User-agent: *\nAllow: /'),
+      einfacherAbruf: { status: 200, erreichbar: true },
+    }).score,
+  )
+  check(
+    'Ohne Probe wird nichts behauptet',
+    !analyzeGeo({ signals: ersterHand, robotsTxt: parseRobots('User-agent: *\nAllow: /') }).findings.some(
+      (f) => f.id === 'geo-einfacher-abruf-gesperrt',
+    ),
+    'ein Zeitablauf bei uns ist keine Sperre der Seite',
+  )
+
+  // Unser Abruffehler ist kein Mangel der Website.
+  const laufQuelle = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'run.ts'), 'utf8')
+  check(
+    'Fehlende und ungeprüfte Seiten sind zwei verschiedene Listen',
+    /const fehlend: string\[\]/.test(laufQuelle) && /const ungeprueft: string\[\]/.test(laufQuelle),
+    'zwei Läufe nannten elf Seiten, von denen nur zwei in beiden Listen standen — so verhält sich kein 404',
+  )
+  check(
+    'Ein Zeitablauf sagt nichts über die Seite aus',
+    /sagt nichts über die Seite aus/.test(laufQuelle),
+  )
+  check(
+    'Eine Sperre gilt nicht als fehlende Seite',
+    /status === 401 \|\| status === 403/.test(laufQuelle),
+  )
+
+  // Keine Note auf einem Begriff, den niemand sucht.
+  check(
+    'Ohne belastbaren Suchbegriff entsteht keine Platzierungsnote',
+    /keinBelastbarerBegriff/.test(laufQuelle) && /Kein Suchbegriff hinterlegt/.test(laufQuelle),
+    'eine Note auf eine Vermutung zog die Gesamtnote mit',
+  )
+
+  // Struktur kommt vom Server, nicht aus der Aufbereitung.
+  check(
+    'Die Struktur wird nicht mehr aus der aufbereiteten Fassung gelesen',
+    !/if \(!html && scraped\?\.html/.test(laufQuelle),
+    'Firecrawls aufbereitete Fassung zieht Fremdinhalt ins Dokument',
+  )
+
+  const berichtQuelle = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'report.ts'), 'utf8')
+  check(
+    'Anbieterzahlen werden nicht als Wachstum gedeutet',
+    /NIEMALS als Wachstum/.test(berichtQuelle),
+    'dieselben Kennzahlen sprangen in 24 Stunden um die Hälfte',
+  )
+  check(
+    'Was nicht gemessen wurde, wird nicht behauptet',
+    /ist unser Problem, nicht ihres/.test(berichtQuelle),
+  )
+
   section('Die Übersicht zeigt Entwicklung, wo es eine gibt')
 
   const tag = (n: number) => new Date(2026, 0, n)
@@ -3535,15 +3708,19 @@ async function main() {
     `gezaehlt: ${listenSeite.lists.itemsTotal} — die alte Pauschale schluckte die Liste im Abschnittskopf`,
   )
 
-  section('Nicht ladbare Seiten werden benannt')
+  section('Nicht abrufbare Seiten werden benannt — und richtig zugeordnet')
 
   const runQuelle2 = readFileSync(join(dir, '..', '..', 'src', 'lib', 'analysis', 'run.ts'), 'utf8')
   check(
     'Der Hinweis nennt die Adressen, nicht nur die Anzahl',
-    /Nicht ladbar: \$\{nichtLadbar/.test(runQuelle2),
+    /function liste\(einleitung: string, adressen: string\[\]\)/.test(runQuelle2) &&
+      /liste\('Antwortete mit einem Fehler/.test(runQuelle2),
     'ein blosser Zaehler ist nicht pruefbar',
   )
-  check('Die Adressen stehen auch in den Rohdaten', /nichtLadbar/.test(runQuelle2) && /raw\.seitenauswahl/.test(runQuelle2))
+  check(
+    'Die Adressen stehen auch in den Rohdaten',
+    /raw\.seitenauswahl = \{[^}]*fehlend, ungeprueft/.test(runQuelle2),
+  )
 
   section('Bericht')
   const result: AnalysisResult = {
